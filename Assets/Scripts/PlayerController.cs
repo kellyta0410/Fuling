@@ -2,12 +2,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
     // ==================== 组件引用 ====================
     private CharacterController controller;
     private Animator animator;
+    private UIManager uiManager;
 
     // ==================== 移动参数 ====================
     [Header("移动参数")]
@@ -19,9 +21,18 @@ public class PlayerController : MonoBehaviour
 
     // ==================== 台阶/斜坡参数 ====================
     [Header("台阶/斜坡参数")]
-    public float stepOffset = 0.3f;      // 台阶高度
-    public float slopeLimit = 45f;        // 最大斜坡角度
-    public float skinWidth = 0.08f;       // 皮肤宽度
+    public float stepOffset = 0.3f;
+    public float slopeLimit = 45f;
+    public float skinWidth = 0.08f;
+
+    // ==================== 战斗参数 ====================
+    [Header("战斗参数")]
+    public float maxHealth = 100f;
+    private float currentHealth;
+    public float attackRange = 2f;
+    public float attackCooldown = 1f;
+    public int attackDamage = 20;
+    public float attackDuration = 0.5f;
 
     // ==================== 地面检测 ====================
     [Header("地面检测")]
@@ -53,16 +64,33 @@ public class PlayerController : MonoBehaviour
     private float jumpCooldownTimer = 0f;
     private bool isGrounded = false;
 
-    // 🔥 用于平滑下台阶
+    private float attackTimer = 0f;
+    private bool isAttacking = false;
+    private float attackCooldownTimer = 0f;
+    private bool canAttack = true;
+
+    private int coins = 0;
+    private int kills = 0;              // ⭐ 击杀数
+    private bool isDead = false;
+
     private Vector3 lastGroundPosition = Vector3.zero;
     private bool wasGrounded = false;
+
+    // ==================== 属性（供外部访问） ====================
+    public float GetHealthPercent() => currentHealth / maxHealth;
+    public int GetCoins() => coins;
+    public int GetKills() => kills;     // ⭐ 获取击杀数
+    public bool IsDead() => isDead;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
+        uiManager = FindObjectOfType<UIManager>();
 
-        // 🔥 CharacterController 优化 - 关键设置
+        currentHealth = maxHealth;
+
+        // CharacterController 设置
         if (controller != null)
         {
             controller.skinWidth = skinWidth;
@@ -70,28 +98,20 @@ public class PlayerController : MonoBehaviour
             controller.enableOverlapRecovery = true;
             controller.stepOffset = stepOffset;
             controller.slopeLimit = slopeLimit;
-
-            Vector3 pos = transform.position;
-            pos.y = 0;
-            transform.position = pos;
-            Debug.Log($"✅ 角色已贴地: {transform.position}");
-            Debug.Log($"✅ Step Offset: {stepOffset}, Slope Limit: {slopeLimit}");
         }
 
-        // 🔥 地面检测设置
+        // 地面检测设置
         int groundLayerIndex = LayerMask.NameToLayer("Ground");
         if (groundLayerIndex != -1)
         {
             groundLayer = 1 << groundLayerIndex;
-            Debug.Log($"✅ 地面检测: Ground 层 (Index: {groundLayerIndex})");
         }
         else
         {
             groundLayer = ~0;
-            Debug.LogWarning("⚠️ 切换到 'Everything' 模式");
         }
 
-        // 🔥 平台适配
+        // 平台适配
 #if UNITY_ANDROID || UNITY_IOS
         if (jumpButton != null) jumpButton.onClick.AddListener(PerformJump);
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
@@ -101,14 +121,13 @@ public class PlayerController : MonoBehaviour
         if (jumpButton != null) jumpButton.gameObject.SetActive(false);
         if (actionButton != null) actionButton.gameObject.SetActive(false);
 #endif
-
-        Debug.Log("✅ PlayerController 已启动！");
-        Debug.Log($"🏃 Speed: {speed}, Jump: {jumpSpeed}, Gravity: {gravity}, AirControl: {airControl}");
     }
 
     void Update()
     {
-        // ===== 1. 输入 =====
+        if (isDead) return;
+
+        // ===== 输入 =====
 #if UNITY_ANDROID || UNITY_IOS
         HandleTouchInput();
         inputVector = joystickInput;
@@ -117,50 +136,68 @@ public class PlayerController : MonoBehaviour
         inputVector = keyboardInput;
 #endif
 
-        // ===== 2. 移动方向 =====
+        // ===== 攻击冷却 =====
+        if (!canAttack)
+        {
+            attackCooldownTimer += Time.deltaTime;
+            if (attackCooldownTimer >= attackCooldown)
+            {
+                canAttack = true;
+                attackCooldownTimer = 0f;
+            }
+        }
+
+        // ===== 攻击状态 =====
+        if (isAttacking)
+        {
+            attackTimer += Time.deltaTime;
+            if (attackTimer >= attackDuration)
+            {
+                isAttacking = false;
+                attackTimer = 0f;
+                animator.SetBool("IsAttacking", false);
+            }
+        }
+
+        // ===== 移动逻辑 =====
         Vector3 moveDir = GetMoveDirection(inputVector);
         float inputMagnitude = Mathf.Clamp01(inputVector.magnitude);
 
-        // ===== 3. 旋转 =====
-        if (moveDir.magnitude > 0.1f)
+        // 旋转
+        if (moveDir.magnitude > 0.1f && !isAttacking)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
         }
 
-        // ===== 4. 地面检测 =====
+        // 地面检测
         isGrounded = IsGrounded();
 
-        // 🔥 平滑下台阶 - 检测是否从高处落下
+        // 下落检测
         if (isGrounded && !wasGrounded)
         {
-            // 刚刚落地，检查是否有高度差
             float heightDifference = transform.position.y - lastGroundPosition.y;
-            if (heightDifference > 0.5f) // 如果高度差大于0.5米
+            if (heightDifference > 0.5f)
             {
-                Debug.Log($"🔽 从 {heightDifference:F2} 米高处落下");
-                // 触发落地动画
                 animator.SetTrigger("Land");
             }
         }
 
-        // 更新地面位置记录
         if (isGrounded)
         {
             lastGroundPosition = transform.position;
         }
         wasGrounded = isGrounded;
 
-        // 🔥 落地时重置跳跃状态
+        // 跳跃重置
         if (isGrounded && isJumping)
         {
             isJumping = false;
             canJump = true;
             jumpCooldownTimer = 0f;
-            Debug.Log("✅ 落地，可以再次跳跃");
         }
 
-        // 🔥 跳跃冷却计时
+        // 跳跃冷却
         if (!canJump)
         {
             jumpCooldownTimer += Time.deltaTime;
@@ -168,17 +205,17 @@ public class PlayerController : MonoBehaviour
             {
                 canJump = true;
                 jumpCooldownTimer = 0f;
-                Debug.Log("✅ 跳跃冷却结束");
             }
         }
 
-        // ===== 5. 水平速度计算 =====
+        // 水平速度计算
+        float currentSpeed = isAttacking ? speed * 0.3f : speed;
         if (isGrounded && !isJumping)
         {
             if (inputMagnitude > 0.1f)
             {
-                velocity.x = moveDir.x * speed;
-                velocity.z = moveDir.z * speed;
+                velocity.x = moveDir.x * currentSpeed;
+                velocity.z = moveDir.z * currentSpeed;
             }
             else
             {
@@ -190,14 +227,14 @@ public class PlayerController : MonoBehaviour
         {
             if (inputMagnitude > 0.1f)
             {
-                Vector3 targetVelocity = moveDir * speed * airControl;
+                Vector3 targetVelocity = moveDir * currentSpeed * airControl;
                 velocity.x = Mathf.Lerp(velocity.x, targetVelocity.x, Time.deltaTime * 5f);
                 velocity.z = Mathf.Lerp(velocity.z, targetVelocity.z, Time.deltaTime * 5f);
 
                 Vector3 horizontalVelocity = new Vector3(velocity.x, 0, velocity.z);
-                if (horizontalVelocity.magnitude > speed * airControl)
+                if (horizontalVelocity.magnitude > currentSpeed * airControl)
                 {
-                    horizontalVelocity = horizontalVelocity.normalized * speed * airControl;
+                    horizontalVelocity = horizontalVelocity.normalized * currentSpeed * airControl;
                     velocity.x = horizontalVelocity.x;
                     velocity.z = horizontalVelocity.z;
                 }
@@ -209,31 +246,130 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // ===== 6. 重力（始终应用） =====
+        // 重力
         velocity.y -= gravity * Time.deltaTime;
 
-        // 🔥 7. 移动 - 使用 CharacterController 的 Move 方法
-        // CharacterController 会自动处理台阶和斜坡
+        // 移动
         controller.Move(velocity * Time.deltaTime);
 
-        // 🔥 8. 强制贴地（当在斜坡上时）
+        // 强制贴地
         if (isGrounded && !isJumping && velocity.y <= 0)
         {
-            // 检测地面并保持接触
             if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, 1.5f, groundLayer))
             {
                 float distanceToGround = hit.distance - 0.1f;
                 if (distanceToGround > 0.01f && distanceToGround < 0.5f)
                 {
-                    // 轻微下拉，保持贴地
                     Vector3 snapDown = Vector3.down * distanceToGround * 0.5f;
                     controller.Move(snapDown);
                 }
             }
         }
 
-        // ===== 9. 动画 =====
+        // 动画
         UpdateAnimations();
+    }
+
+    // ==================== 攻击（原 Action）====================
+    void PerformAction()
+    {
+        PerformAttack();
+    }
+
+    // ==================== 攻击逻辑 ====================
+    void PerformAttack()
+    {
+        if (!canAttack || isAttacking || isDead) return;
+
+        isAttacking = true;
+        canAttack = false;
+        attackTimer = 0f;
+        attackCooldownTimer = 0f;
+        animator.SetBool("IsAttacking", true);
+        animator.SetTrigger("Action");
+
+        // 检测攻击范围内的敌人
+        Collider[] hitEnemies = Physics.OverlapSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
+        foreach (Collider hit in hitEnemies)
+        {
+            EnemyAI enemy = hit.GetComponent<EnemyAI>();
+            if (enemy != null)
+            {
+                enemy.TakeDamage(attackDamage);
+                Debug.Log($"⚔️ 攻击敌人 {enemy.name}，造成 {attackDamage} 伤害");
+            }
+        }
+
+        StartCoroutine(AttackEffect());
+    }
+
+    IEnumerator AttackEffect()
+    {
+        yield return new WaitForSeconds(attackDuration);
+        isAttacking = false;
+        animator.SetBool("IsAttacking", false);
+    }
+
+    // ==================== 受伤 ====================
+    public void TakeDamage(float damage)
+    {
+        if (isDead) return;
+
+        currentHealth -= damage;
+        currentHealth = Mathf.Max(currentHealth, 0);
+
+        // 通知 UI 更新
+        if (uiManager != null)
+        {
+            uiManager.OnPlayerDamaged();
+        }
+
+        animator.SetTrigger("Hit");
+
+        if (currentHealth <= 0)
+        {
+            Die();
+        }
+    }
+
+    // ==================== 死亡 ====================
+    void Die()
+    {
+        isDead = true;
+        animator.SetTrigger("Die");
+
+        // 通知 UI 显示 GameOver
+        if (uiManager != null)
+        {
+            uiManager.OnPlayerDied();
+        }
+
+        Debug.Log("💀 玩家死亡！");
+    }
+
+    // ==================== 金币收集 ====================
+    public void AddCoin(int amount)
+    {
+        coins += amount;
+
+        // 通知 UI 更新
+        if (uiManager != null)
+        {
+            uiManager.OnPlayerCoinChanged();
+        }
+    }
+
+    // ==================== ⭐ 击杀统计 ====================
+    public void AddKill()
+    {
+        kills++;
+        Debug.Log($"💀 击杀数: {kills}");
+
+        // 通知 UI 更新（如果有击杀数显示）
+        if (uiManager != null)
+        {
+            uiManager.OnPlayerKillChanged();
+        }
     }
 
     // ==================== 动画更新 ====================
@@ -242,21 +378,17 @@ public class PlayerController : MonoBehaviour
         Vector3 horizontalVelocity = new Vector3(velocity.x, 0, velocity.z);
         float currentSpeed = horizontalVelocity.magnitude;
 
-        bool isMoving = currentSpeed > 0.05f;
-        animator.SetBool("IsMoving", isMoving);
+        animator.SetBool("IsMoving", currentSpeed > 0.05f);
         animator.SetBool("IsGrounded", isGrounded);
         animator.SetBool("IsJumping", isJumping);
         animator.SetFloat("Speed", currentSpeed);
-
-        // 🔥 传递垂直速度给动画（用于下落检测）
         animator.SetFloat("VerticalSpeed", velocity.y);
     }
 
-    // ==================== 键盘输入 ====================
+    // ==================== 输入处理 ====================
     void HandleKeyboardInput()
     {
-        float h = 0f;
-        float v = 0f;
+        float h = 0f, v = 0f;
 
         if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) h = 1f;
         if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) h = -1f;
@@ -266,10 +398,9 @@ public class PlayerController : MonoBehaviour
         keyboardInput = new Vector2(h, v);
 
         if (Input.GetKeyDown(KeyCode.Space)) PerformJump();
-        if (Input.GetKeyDown(KeyCode.E)) PerformAction();
+        if (Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0)) PerformAction();
     }
 
-    // ==================== 触摸输入 ====================
     void HandleTouchInput()
     {
         if (Input.touchCount == 0)
@@ -335,10 +466,19 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ==================== 地面检测 ====================
+    void PerformJump()
+    {
+        if (!isGrounded || !canJump || isJumping || isDead) return;
+
+        velocity.y = jumpSpeed;
+        isJumping = true;
+        canJump = false;
+        jumpCooldownTimer = 0f;
+        animator.SetTrigger("Jump");
+    }
+
     bool IsGrounded()
     {
-        // 🔥 使用 SphereCast 更准确，特别是对于台阶边缘
         float radius = controller.radius * 0.9f;
         float checkDistance = groundCheckDistance + 0.1f;
         Vector3 origin = transform.position + Vector3.up * (radius + 0.05f);
@@ -353,34 +493,6 @@ public class PlayerController : MonoBehaviour
         return false;
     }
 
-    // ==================== 跳跃 ====================
-    void PerformJump()
-    {
-        if (!isGrounded || !canJump || isJumping)
-        {
-            if (!isGrounded) Debug.Log("⚠️ 不在地面，无法跳跃！");
-            if (!canJump) Debug.Log($"⚠️ 跳跃冷却中，等待 {jumpCooldownTimer}/{jumpCooldown} 秒");
-            if (isJumping) Debug.Log("⚠️ 正在跳跃中，无法再次跳跃！");
-            return;
-        }
-
-        velocity.y = jumpSpeed;
-        isJumping = true;
-        canJump = false;
-        jumpCooldownTimer = 0f;
-        animator.SetTrigger("Jump");
-
-        Debug.Log($"✅ 跳跃！速度: {jumpSpeed}，状态: isJumping={isJumping}, canJump={canJump}");
-    }
-
-    // ==================== Action ====================
-    void PerformAction()
-    {
-        Debug.Log("✅ Action！");
-        animator.SetTrigger("Action");
-    }
-
-    // ==================== 计算移动方向 ====================
     Vector3 GetMoveDirection(Vector2 input)
     {
         if (input.magnitude < 0.1f)
@@ -396,19 +508,38 @@ public class PlayerController : MonoBehaviour
         return (forward * input.y + right * input.x).normalized;
     }
 
+    // ==================== 公共方法 ====================
+    public void Respawn()
+    {
+        isDead = false;
+        currentHealth = maxHealth;
+        transform.position = Vector3.zero;
+        velocity = Vector3.zero;
+        animator.SetTrigger("Respawn");
+
+        if (uiManager != null)
+        {
+            uiManager.HideGameOver();
+            uiManager.UpdateHealthUI();
+        }
+    }
+
+    public void RestartGame()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
     void OnDrawGizmosSelected()
     {
-        // 🔥 绘制地面检测
+        // 地面检测可视化
         Gizmos.color = Color.yellow;
-        float radius = 0.3f; // 假设半径
+        float radius = 0.3f;
         if (controller != null) radius = controller.radius * 0.9f;
         Vector3 sphereOrigin = transform.position + Vector3.up * (radius + 0.05f);
         Gizmos.DrawWireSphere(sphereOrigin - Vector3.up * (groundCheckDistance + 0.1f), radius);
-        Gizmos.DrawLine(sphereOrigin, sphereOrigin - Vector3.up * (groundCheckDistance + 0.1f));
 
-        // 🔥 绘制台阶高度
-        Gizmos.color = Color.cyan;
-        Vector3 stepPos = transform.position + Vector3.up * stepOffset;
-        Gizmos.DrawWireCube(stepPos, new Vector3(0.5f, 0.02f, 0.5f));
+        // 攻击范围可视化
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
     }
 }
