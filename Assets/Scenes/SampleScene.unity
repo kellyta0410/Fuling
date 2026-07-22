@@ -1383,26 +1383,40 @@ MonoBehaviour:
     isActive: 0
     spawnTimer: 0
     totalSpawned: 0
+    isOnCooldown: 0
+    cooldownTimer: 0
+    hasSpawnedOnce: 0
   - point: {fileID: 1209950256}
     activationRadius: 20
     deactivationRadius: 30
     isActive: 0
     spawnTimer: 0
     totalSpawned: 0
+    isOnCooldown: 0
+    cooldownTimer: 0
+    hasSpawnedOnce: 0
   - point: {fileID: 1588655664}
     activationRadius: 20
     deactivationRadius: 30
     isActive: 0
     spawnTimer: 0
     totalSpawned: 0
+    isOnCooldown: 0
+    cooldownTimer: 0
+    hasSpawnedOnce: 0
   - point: {fileID: 388979514}
     activationRadius: 20
     deactivationRadius: 30
     isActive: 0
     spawnTimer: 0
     totalSpawned: 0
+    isOnCooldown: 0
+    cooldownTimer: 0
+    hasSpawnedOnce: 0
   spawnInterval: 10
   spawnPerInterval: 3
+  cooldownTime: 10
+  enableCooldown: 1
   showDebugLogs: 1
 --- !u!1 &793121113
 GameObject:
@@ -3848,6 +3862,11 @@ PrefabInstance:
       propertyPath: gameOverPanel
       value: 
       objectReference: {fileID: 1641074816}
+    - target: {fileID: 1352866623355140562, guid: 14705a27e3517de45a7a45fe31f4d9ef,
+        type: 3}
+      propertyPath: attackDuration
+      value: 0.1
+      objectReference: {fileID: 0}
     - target: {fileID: 1352866623355140562, guid: 14705a27e3517de45a7a45fe31f4d9ef,
         type: 3}
       propertyPath: enemyCountText

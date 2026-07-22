@@ -17,7 +17,7 @@ public class EnemyAI : MonoBehaviour
         Heavy
     }
 
-    [Header("敌人类型 (切换后自动填充数值)")]
+    [Header("敌人类型 (切换后不会自动填充，需右键手动应用)")]
     public EnemyType enemyType = EnemyType.Basic;
 
     [Header("⭐ 当前数值 (可手动调整)")]
@@ -59,17 +59,8 @@ public class EnemyAI : MonoBehaviour
     private float attackTimer = 0f;
     private bool canAttack = true;
 
-    // ==================== ⭐ 编辑器自动更新 ====================
-#if UNITY_EDITOR
-    void OnValidate()
-    {
-        // 只在编辑模式下生效，切换类型时自动填充数值
-        if (!Application.isPlaying)
-        {
-            ApplyTypeValues();
-        }
-    }
-#endif
+    // ⭐ 标记是否等待闪红后死亡
+    private bool pendingDeath = false;
 
     void Start()
     {
@@ -239,7 +230,7 @@ public class EnemyAI : MonoBehaviour
         status = "Idle";
     }
 
-    // ==================== Take Damage ====================
+    // ==================== 原有的 TakeDamage（保留兼容性） ====================
     public void TakeDamage(float damage)
     {
         if (isDead) return;
@@ -263,6 +254,60 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    // ==================== ⭐ 只造成伤害（不闪红，不立即死亡） ====================
+    public void TakeDamageImmediate(float damage)
+    {
+        if (isDead) return;
+
+        // ⭐ 伤害立即生效
+        currentHealth -= damage;
+        currentHealth = Mathf.Max(currentHealth, 0);
+
+        if (animator != null) animator.SetTrigger("Hit");
+
+        // Push back
+        if (agent != null)
+        {
+            agent.velocity = Vector3.zero;
+        }
+
+        // ⭐ 如果血量归零，标记等待闪红，但不立即死亡
+        if (currentHealth <= 0 && !pendingDeath)
+        {
+            pendingDeath = true;
+            Debug.Log($"💀 {name} 血量归零，等待玩家攻击动画结束闪红后死亡");
+        }
+    }
+
+    // ==================== ⭐ 只闪红（不造成伤害） ====================
+    public void FlashRedOnly()
+    {
+        if (isDead) return;
+
+        // ⭐ 如果有等待死亡的标记，闪红后死亡
+        if (pendingDeath)
+        {
+            StartCoroutine(FlashRedAndDie());
+        }
+        else
+        {
+            StartCoroutine(FlashRed());
+        }
+    }
+
+    // ==================== ⭐ 闪红然后死亡 ====================
+    IEnumerator FlashRedAndDie()
+    {
+        // ⭐ 先闪红
+        yield return StartCoroutine(FlashRed());
+
+        // ⭐ 闪红结束后再死亡
+        pendingDeath = false;
+        Die();
+
+        Debug.Log($"💀 {name} 闪红结束，死亡！");
+    }
+
     // ==================== Flash Red Effect ====================
     IEnumerator FlashRed()
     {
@@ -280,6 +325,8 @@ public class EnemyAI : MonoBehaviour
     // ==================== Death ====================
     protected virtual void Die()
     {
+        if (isDead) return;
+
         isDead = true;
         status = "Dead";
         if (animator != null) animator.SetTrigger("Die");
@@ -305,8 +352,33 @@ public class EnemyAI : MonoBehaviour
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = false;
 
-        // Destroy after delay
-        Destroy(gameObject, 2f);
+        // ⭐ 延迟销毁，让死亡动画播放完
+        float deathAnimLength = GetDeathAnimationLength();
+        Destroy(gameObject, Mathf.Max(deathAnimLength, 1.5f));
+    }
+
+    // ==================== ⭐ 获取死亡动画长度 ====================
+    float GetDeathAnimationLength()
+    {
+        if (animator != null)
+        {
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+            if (stateInfo.IsName("Die") || stateInfo.IsName("Death"))
+            {
+                return stateInfo.length;
+            }
+
+            AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
+            foreach (AnimationClip clip in clips)
+            {
+                string clipName = clip.name.ToLower();
+                if (clipName.Contains("die") || clipName.Contains("death"))
+                {
+                    return clip.length;
+                }
+            }
+        }
+        return 1.5f;
     }
 
     // ==================== Drop Coins ====================
@@ -362,13 +434,13 @@ public class EnemyAI : MonoBehaviour
         Gizmos.DrawWireSphere(transform.position, detectionRange);
     }
 
-    // ==================== ⭐ 右键菜单：手动刷新数值 ====================
+    // ==================== 右键菜单 ====================
 #if UNITY_EDITOR
-    [ContextMenu("刷新数值 (Refresh Values)")]
-    void RefreshValues()
+    [ContextMenu("应用类型数值 (Apply Type Values)")]
+    void ApplyTypeValuesManually()
     {
         ApplyTypeValues();
-        Debug.Log($"✅ {enemyType} 数值已刷新！");
+        Debug.Log($"✅ 已应用 {enemyType} 的默认数值！");
     }
 #endif
 }

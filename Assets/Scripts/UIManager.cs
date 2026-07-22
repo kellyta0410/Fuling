@@ -18,7 +18,7 @@ public class UIManager : MonoBehaviour
 
     [Header("游戏引用")]
     public PlayerController player;
-    public EnemySpawner_NavMesh enemySpawner;
+    public EnemySpawner enemySpawner;
 
     private void Start()
     {
@@ -30,7 +30,7 @@ public class UIManager : MonoBehaviour
 
         if (enemySpawner == null)
         {
-            enemySpawner = FindObjectOfType<EnemySpawner_NavMesh>();
+            enemySpawner = FindObjectOfType<EnemySpawner>();
         }
 
         // 绑定按钮事件

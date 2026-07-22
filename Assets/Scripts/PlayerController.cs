@@ -70,16 +70,22 @@ public class PlayerController : MonoBehaviour
     private bool canAttack = true;
 
     private int coins = 0;
-    private int kills = 0;              // ⭐ 击杀数
+    private int kills = 0;
     private bool isDead = false;
 
     private Vector3 lastGroundPosition = Vector3.zero;
     private bool wasGrounded = false;
 
+    // ⭐ 存储攻击命中的敌人列表（用于延迟闪红）
+    private List<EnemyAI> hitEnemies = new List<EnemyAI>();
+
+    // ⭐ 标记是否正在等待闪红
+    private bool isWaitingForFlash = false;
+
     // ==================== 属性（供外部访问） ====================
     public float GetHealthPercent() => currentHealth / maxHealth;
     public int GetCoins() => coins;
-    public int GetKills() => kills;     // ⭐ 获取击杀数
+    public int GetKills() => kills;
     public bool IsDead() => isDead;
 
     void Start()
@@ -276,7 +282,7 @@ public class PlayerController : MonoBehaviour
         PerformAttack();
     }
 
-    // ==================== 攻击逻辑 ====================
+    // ==================== ⭐ 攻击逻辑 ====================
     void PerformAttack()
     {
         if (!canAttack || isAttacking || isDead) return;
@@ -288,24 +294,70 @@ public class PlayerController : MonoBehaviour
         animator.SetBool("IsAttacking", true);
         animator.SetTrigger("Action");
 
-        // 检测攻击范围内的敌人
-        Collider[] hitEnemies = Physics.OverlapSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
-        foreach (Collider hit in hitEnemies)
+        // ⭐ 清空上次攻击的敌人列表
+        hitEnemies.Clear();
+        isWaitingForFlash = true;
+
+        // ⭐ 步骤1：检测攻击范围内的敌人，伤害立即生效
+        Collider[] hitColliders = Physics.OverlapSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
+        foreach (Collider hit in hitColliders)
         {
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
-            if (enemy != null)
+            if (enemy != null && !enemy.isDead)
             {
-                enemy.TakeDamage(attackDamage);
-                Debug.Log($"⚔️ 攻击敌人 {enemy.name}，造成 {attackDamage} 伤害");
+                // ⭐ 伤害立即生效（不闪红）
+                enemy.TakeDamageImmediate(attackDamage);
+                hitEnemies.Add(enemy);
+                Debug.Log($"⚔️ 攻击敌人 {enemy.name}，造成 {attackDamage} 伤害（立即）");
             }
         }
 
-        StartCoroutine(AttackEffect());
+        // ⭐ 步骤2：启动协程检测动画播放完成，然后触发闪红
+        StartCoroutine(WaitForAttackAnimationEnd());
     }
 
-    IEnumerator AttackEffect()
+    // ==================== ⭐ 检测攻击动画播放完成 ====================
+    IEnumerator WaitForAttackAnimationEnd()
     {
-        yield return new WaitForSeconds(attackDuration);
+        // 等待动画播放完成
+        while (true)
+        {
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+
+            // 检查是否在 Action 动画状态，且播放进度接近结束 (0.95 = 95%)
+            if (stateInfo.IsName("Action") || stateInfo.IsName("Attack") || stateInfo.IsName("Attacking"))
+            {
+                if (stateInfo.normalizedTime >= 0.95f)
+                {
+                    Debug.Log($"💥 攻击动画播放完成！(进度: {stateInfo.normalizedTime:F2})");
+                    break;
+                }
+            }
+            else
+            {
+                // 如果不在攻击动画状态，可能是动画已经切换了，退出循环
+                Debug.LogWarning("⚠️ 动画状态已切换，触发闪红");
+                break;
+            }
+
+            yield return null;
+        }
+
+        // ⭐ 触发闪红
+        if (isWaitingForFlash)
+        {
+            foreach (EnemyAI enemy in hitEnemies)
+            {
+                if (enemy != null)
+                {
+                    enemy.FlashRedOnly();
+                    Debug.Log($"💥 {enemy.name} 闪红！（攻击动画结束）");
+                }
+            }
+            isWaitingForFlash = false;
+        }
+
+        // 重置攻击状态
         isAttacking = false;
         animator.SetBool("IsAttacking", false);
     }
@@ -318,7 +370,6 @@ public class PlayerController : MonoBehaviour
         currentHealth -= damage;
         currentHealth = Mathf.Max(currentHealth, 0);
 
-        // 通知 UI 更新
         if (uiManager != null)
         {
             uiManager.OnPlayerDamaged();
@@ -338,7 +389,6 @@ public class PlayerController : MonoBehaviour
         isDead = true;
         animator.SetTrigger("Die");
 
-        // 通知 UI 显示 GameOver
         if (uiManager != null)
         {
             uiManager.OnPlayerDied();
@@ -352,20 +402,18 @@ public class PlayerController : MonoBehaviour
     {
         coins += amount;
 
-        // 通知 UI 更新
         if (uiManager != null)
         {
             uiManager.OnPlayerCoinChanged();
         }
     }
 
-    // ==================== ⭐ 击杀统计 ====================
+    // ==================== 击杀统计 ====================
     public void AddKill()
     {
         kills++;
         Debug.Log($"💀 击杀数: {kills}");
 
-        // 通知 UI 更新（如果有击杀数显示）
         if (uiManager != null)
         {
             uiManager.OnPlayerKillChanged();
@@ -531,14 +579,12 @@ public class PlayerController : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
-        // 地面检测可视化
         Gizmos.color = Color.yellow;
         float radius = 0.3f;
         if (controller != null) radius = controller.radius * 0.9f;
         Vector3 sphereOrigin = transform.position + Vector3.up * (radius + 0.05f);
         Gizmos.DrawWireSphere(sphereOrigin - Vector3.up * (groundCheckDistance + 0.1f), radius);
 
-        // 攻击范围可视化
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
     }
