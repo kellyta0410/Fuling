@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   icon: {fileID: 2800000, guid: 407619c5c19a54982b3880b5a085c597, type: 3}
   iconMaxWidth: 192
-  title: Mini Simple Characters | Free Demo
+  title: Mini Simple Characters | Skeleton | Free Demo
   sections:
   - heading: About
-    text: Thank you for downloading the Mini Simple Characters | Free Demo asset.This demo base character is intended to you to test and see if it fit your needs before you buy the other characters or packs derived from this basemesh.
+    text: Thank you for downloading the Mini Simple Characters | Skeleton | Free Demo asset.This demo base character is intended to you to test and see if it fit your needs before you buy the other characters or packs derived from this basemesh.
     linkText: 
     url: 
   - heading: ✓ Optimization
@@ -32,28 +32,16 @@ MonoBehaviour:
     url: 
   - heading: ✓ Polycount
     text: "
-- beard_01 | 76 Tris\n
-- beard_02 | 96 Tris\n
-- body_arms | 768 Tris\n
-- body_head | 296 Tris\n
-- body_legs | 640 Tris\n
-- body_torso | 256 Tris\n
-- eyebrows | 80 Tris\n
-- eyes_01 | 192 Tris\n
-- eyes_02 | 80 Tris\n
-- glasses_01 | 260 Tris\n
-- glasses_02 | 332 Tris\n
-- hair_01 | 192 Tris\n
-- hair_02 | 208 Tris\n
-- pants_01 | 640 Tris\n
-- shirt_01 | 576 Tris\n
-- shirt_02 | 196 Tris\n
-- shoes_01 | 344 Tris\n
-- shorts_01 | 512 Tris\n"
+- body_arms | 1496 Tris\n
+- body_head | 614 Tris\n
+- body_legs | 2160 Tris\n
+- body_torso | 1552 Tris\n
+- shield_wood | 268 Tris\n
+- sword_wood | 204 Tris"
     linkText: 
     url: 
   - heading: ✓ Blendshapes
-    text:  "Eyebrows:\nFemale\nUp Left\nUp Right\nDown Left\nDown Right\nAngry Left\nAngry Right\nSad Left\nSad Right\n\nEyes 02:\nHappy\nClosed\n\n⚠*Make sure that the <Blend Shape Normals>is set to <Import> in [ Inspector > Import Settings > Model Tab ] to avoid artifacts when using the blendshapes"
+    text:  "Body_Head:\n- Angry\n- Sad\n\n⚠*Make sure that the <Blend Shape Normals>is set to <Import> in [ Inspector > Import Settings > Model Tab ] to avoid artifacts when using the blendshapes"
     linkText:
     url:
   - heading: ✓ Animations
