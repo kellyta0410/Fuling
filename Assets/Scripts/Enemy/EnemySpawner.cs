@@ -8,27 +8,28 @@ public class EnemySpawner : MonoBehaviour
     public List<GameObject> enemyPrefabs;
     public Transform playerTarget;
 
-    [Header("⭐ 生成限制（可选择）")]
-    public bool enableMaxLimit = false;
-    public int maxEnemyCount = 30;
-
     [Header("生成点设置")]
     public List<SpawnPointData> spawnPoints = new List<SpawnPointData>();
 
-    [Header("全局生成设置")]
-    public float spawnInterval = 2f;
-    public int spawnPerInterval = 1;
-
-    [Header("⭐ 冷却设置")]
-    public float cooldownTime = 10f;
-    public bool enableCooldown = true;
-
-    [Header("🎯 难度系统")]
+    [Header("难度系统")]
     public DifficultySettings currentDifficulty;
     public bool useDifficultySettings = true;
 
     [Header("调试")]
     public bool showDebugLogs = true;
+
+    // 当前生成参数（由 GameManager 更新）
+    private float currentSpawnInterval = 2f;
+    private int currentSpawnPerInterval = 1;
+    private bool enableMaxLimit = false;
+    private int maxEnemyCount = 30;
+    private bool enableCooldown = true;
+    private float cooldownTime = 10f;
+
+    // 当前倍率（由 GameManager 更新）
+    private float currentSpeedMultiplier = 1f;
+    private float currentHealthMultiplier = 1f;
+    private float currentDamageMultiplier = 1f;
 
     [System.Serializable]
     public class SpawnPointData
@@ -50,14 +51,6 @@ public class EnemySpawner : MonoBehaviour
     private List<GameObject> allActiveEnemies = new List<GameObject>();
     private int globalTotalSpawned = 0;
 
-    // ⭐ 保存基准值
-    private float baseSpawnInterval;
-    private int baseSpawnPerInterval;
-    private bool baseEnableMaxLimit;
-    private int baseMaxEnemyCount;
-    private bool baseEnableCooldown;
-    private float baseCooldownTime;
-
     void Start()
     {
         InitializeSpawner();
@@ -69,7 +62,7 @@ public class EnemySpawner : MonoBehaviour
         {
             GameObject player = GameObject.FindGameObjectWithTag("Player");
             if (player != null) playerTarget = player.transform;
-            else Debug.LogWarning("⚠️ 未找到 Player！");
+            else Debug.LogWarning("未找到 Player");
         }
 
         if (spawnPoints.Count == 0)
@@ -79,84 +72,63 @@ public class EnemySpawner : MonoBehaviour
 
         if (enemyPrefabs.Count == 0)
         {
-            Debug.LogError("❌ 没有敌人预制体！");
+            Debug.LogError("没有敌人预制体");
         }
 
-        // ⭐ 保存基准值并应用难度
-        SaveBaseSettings();
         if (useDifficultySettings && currentDifficulty != null)
         {
-            ApplyDifficulty(currentDifficulty);
+            // 使用默认值初始化
+            currentSpawnInterval = currentDifficulty.spawnInterval;
+            currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
+            enableMaxLimit = currentDifficulty.enableMaxLimit;
+            maxEnemyCount = currentDifficulty.maxEnemyCount;
+            enableCooldown = currentDifficulty.enableCooldown;
+            cooldownTime = currentDifficulty.cooldownTime;
+
+            if (currentDifficulty.allowedEnemyPrefabs != null && currentDifficulty.allowedEnemyPrefabs.Count > 0)
+            {
+                enemyPrefabs = new List<GameObject>(currentDifficulty.allowedEnemyPrefabs);
+            }
         }
 
-        string limitText = enableMaxLimit ? $"上限: {maxEnemyCount}" : "♾️ 无限生成";
-        string cooldownText = enableCooldown ? $"冷却: {cooldownTime}秒" : "无冷却";
-        Debug.Log($"✅ 找到 {spawnPoints.Count} 个生成点 | {limitText} | {cooldownText}");
+        string limitText = enableMaxLimit ? "上限: " + maxEnemyCount : "无限生成";
+        string cooldownText = enableCooldown ? "冷却: " + cooldownTime + "秒" : "无冷却";
+        Debug.Log("找到 " + spawnPoints.Count + " 个生成点 | " + limitText + " | " + cooldownText);
     }
 
-    // ⭐ 新增：保存默认值
-    void SaveBaseSettings()
+    // 由 GameManager 调用，更新生成参数和倍率
+    public void ApplyScalingParameters(
+        float spawnInterval,
+        int spawnPerInterval,
+        float speedMultiplier,
+        float healthMultiplier,
+        float damageMultiplier,
+        bool maxLimit,
+        int maxCount,
+        bool cooldown,
+        float cooldownTimeValue,
+        List<GameObject> allowedPrefabs)
     {
-        baseSpawnInterval = spawnInterval;
-        baseSpawnPerInterval = spawnPerInterval;
-        baseEnableMaxLimit = enableMaxLimit;
-        baseMaxEnemyCount = maxEnemyCount;
-        baseEnableCooldown = enableCooldown;
-        baseCooldownTime = cooldownTime;
-    }
+        currentSpawnInterval = spawnInterval;
+        currentSpawnPerInterval = spawnPerInterval;
+        currentSpeedMultiplier = speedMultiplier;
+        currentHealthMultiplier = healthMultiplier;
+        currentDamageMultiplier = damageMultiplier;
+        enableMaxLimit = maxLimit;
+        maxEnemyCount = maxCount;
+        enableCooldown = cooldown;
+        cooldownTime = cooldownTimeValue;
 
-    // ⭐ 新增：应用难度设置
-    public void ApplyDifficulty(DifficultySettings difficulty)
-    {
-        if (difficulty == null)
+        if (allowedPrefabs != null && allowedPrefabs.Count > 0)
         {
-            Debug.LogWarning("⚠️ 难度配置为空，使用默认值");
-            return;
+            enemyPrefabs = new List<GameObject>(allowedPrefabs);
         }
 
-        currentDifficulty = difficulty;
-
-        // 应用生成参数
-        spawnInterval = difficulty.spawnInterval;
-        spawnPerInterval = difficulty.spawnPerInterval;
-        enableMaxLimit = difficulty.enableMaxLimit;
-        maxEnemyCount = difficulty.maxEnemyCount;
-        enableCooldown = difficulty.enableCooldown;
-        cooldownTime = difficulty.cooldownTime;
-
-        // 如果配置指定了敌人列表，使用它
-        if (difficulty.allowedEnemyPrefabs != null && difficulty.allowedEnemyPrefabs.Count > 0)
+        if (showDebugLogs)
         {
-            enemyPrefabs = new List<GameObject>(difficulty.allowedEnemyPrefabs);
+            Debug.Log("生成器参数已更新: 间隔=" + currentSpawnInterval + ", 每次=" + currentSpawnPerInterval);
+            Debug.Log("  倍率: 速度=" + currentSpeedMultiplier + ", 血量=" + currentHealthMultiplier + ", 攻击=" + currentDamageMultiplier);
         }
-
-        // 清空现有敌人，重新开始
-        ClearAllEnemies();
-        ResetSpawner();
-
-        Debug.Log($"🎯 切换到难度: {difficulty.difficultyName}");
-        Debug.Log($"   ⏱️ 时间: {(difficulty.isInfiniteMode ? "∞ (无限)" : difficulty.timeLimit + "秒")}");
-        Debug.Log($"   🧟 间隔: {spawnInterval}秒, 每次生成: {spawnPerInterval}个");
-        Debug.Log($"   📊 上限: {(enableMaxLimit ? maxEnemyCount.ToString() : "♾️")}");
-        Debug.Log($"   🚀 速度倍率: {difficulty.enemySpeedMultiplier}x");
-
-        // 通知 GameManager 更新计时器
-        GameManager gameManager = FindObjectOfType<GameManager>();
-        if (gameManager != null)
-        {
-            gameManager.OnDifficultyChanged(difficulty);
-        }
-    }
-
-    // ⭐ 新增：重置回默认值
-    public void ResetToBaseSettings()
-    {
-        spawnInterval = baseSpawnInterval;
-        spawnPerInterval = baseSpawnPerInterval;
-        enableMaxLimit = baseEnableMaxLimit;
-        maxEnemyCount = baseMaxEnemyCount;
-        enableCooldown = baseEnableCooldown;
-        cooldownTime = baseCooldownTime;
     }
 
     void AutoFindSpawnPoints()
@@ -188,7 +160,7 @@ public class EnemySpawner : MonoBehaviour
             SpawnPointData data = new SpawnPointData();
             data.point = transform;
             spawnPoints.Add(data);
-            Debug.LogWarning("⚠️ 没有生成点，使用自身位置");
+            Debug.LogWarning("没有生成点，使用自身位置");
         }
     }
 
@@ -204,7 +176,6 @@ public class EnemySpawner : MonoBehaviour
 
             float distance = Vector3.Distance(spawnData.point.position, playerTarget.position);
 
-            // ---- 更新冷却计时器 ----
             if (spawnData.isOnCooldown)
             {
                 spawnData.cooldownTimer -= Time.deltaTime;
@@ -214,12 +185,11 @@ public class EnemySpawner : MonoBehaviour
                     spawnData.hasSpawnedOnce = false;
                     if (showDebugLogs)
                     {
-                        Debug.Log($"⏰ {spawnData.point.name} 冷却结束，可以再次生成");
+                        Debug.Log(spawnData.point.name + " 冷却结束");
                     }
                 }
             }
 
-            // ---- 激活检测 ----
             if (distance <= spawnData.activationRadius && !spawnData.isActive)
             {
                 spawnData.isActive = true;
@@ -235,7 +205,7 @@ public class EnemySpawner : MonoBehaviour
                         if (showDebugLogs)
                         {
                             string reason = spawnData.isOnCooldown ? "冷却中" : "已生成过";
-                            Debug.Log($"⏳ {spawnData.point.name} 激活，但处于{reason}，等待定时生成");
+                            Debug.Log(spawnData.point.name + " 激活，但处于" + reason);
                         }
                     }
                 }
@@ -250,14 +220,14 @@ public class EnemySpawner : MonoBehaviour
                         spawnData.cooldownTimer = cooldownTime;
                         if (showDebugLogs)
                         {
-                            Debug.Log($"🟢 {spawnData.point.name} 已激活并立即生成！冷却 {cooldownTime}秒");
+                            Debug.Log(spawnData.point.name + " 已激活并立即生成，冷却 " + cooldownTime + "秒");
                         }
                     }
                     else
                     {
                         if (showDebugLogs)
                         {
-                            Debug.Log($"🟢 {spawnData.point.name} 已激活！立即生成敌人");
+                            Debug.Log(spawnData.point.name + " 已激活，立即生成敌人");
                         }
                     }
                 }
@@ -269,11 +239,10 @@ public class EnemySpawner : MonoBehaviour
                 spawnData.spawnTimer = 0f;
                 if (showDebugLogs)
                 {
-                    Debug.Log($"🔴 {spawnData.point.name} 已停用");
+                    Debug.Log(spawnData.point.name + " 已停用");
                 }
             }
 
-            // ---- 后续定时生成逻辑 ----
             if (spawnData.isActive)
             {
                 if (enableCooldown && spawnData.isOnCooldown)
@@ -287,17 +256,17 @@ public class EnemySpawner : MonoBehaviour
                 }
 
                 spawnData.spawnTimer += Time.deltaTime;
-                if (spawnData.spawnTimer >= spawnInterval)
+                if (spawnData.spawnTimer >= currentSpawnInterval)
                 {
                     spawnData.spawnTimer = 0f;
 
-                    int toSpawn = spawnPerInterval;
+                    int toSpawn = currentSpawnPerInterval;
 
                     if (enableMaxLimit)
                     {
                         int currentCount = allActiveEnemies.Count;
                         int maxSpawn = maxEnemyCount - currentCount;
-                        toSpawn = Mathf.Min(spawnPerInterval, maxSpawn);
+                        toSpawn = Mathf.Min(currentSpawnPerInterval, maxSpawn);
                     }
 
                     if (toSpawn > 0)
@@ -310,7 +279,7 @@ public class EnemySpawner : MonoBehaviour
                             spawnData.cooldownTimer = cooldownTime;
                             if (showDebugLogs)
                             {
-                                Debug.Log($"⏳ {spawnData.point.name} 定时生成后进入冷却 {cooldownTime}秒");
+                                Debug.Log(spawnData.point.name + " 定时生成后进入冷却 " + cooldownTime + "秒");
                             }
                         }
                     }
@@ -321,13 +290,13 @@ public class EnemySpawner : MonoBehaviour
 
     void SpawnEnemyImmediately(SpawnPointData spawnData)
     {
-        int toSpawn = spawnPerInterval;
+        int toSpawn = currentSpawnPerInterval;
 
         if (enableMaxLimit)
         {
             int currentCount = allActiveEnemies.Count;
             int maxSpawn = maxEnemyCount - currentCount;
-            toSpawn = Mathf.Min(spawnPerInterval, maxSpawn);
+            toSpawn = Mathf.Min(currentSpawnPerInterval, maxSpawn);
         }
 
         if (toSpawn > 0)
@@ -357,24 +326,23 @@ public class EnemySpawner : MonoBehaviour
             GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
             enemy.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
-            // ⭐ 获取 EnemyAI 并应用速度倍率
             EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
             if (enemyScript != null)
             {
-                // 应用速度倍率
-                if (currentDifficulty != null)
-                {
-                    enemyScript.speedMultiplier = currentDifficulty.enemySpeedMultiplier;
-                }
+                // 应用当前倍率
+                enemyScript.ApplyScalingMultipliers(
+                    currentSpeedMultiplier,
+                    currentHealthMultiplier,
+                    currentDamageMultiplier
+                );
 
                 if (enemyScript.enemyData != null)
                 {
-                    Debug.Log($"✅ 生成 {enemyScript.enemyData.enemyName} (速度: {enemyScript.speedMultiplier}x)");
+                    Debug.Log("生成 " + enemyScript.enemyData.enemyName +
+                        " (速度x" + currentSpeedMultiplier +
+                        ", 血量x" + currentHealthMultiplier +
+                        ", 攻击x" + currentDamageMultiplier + ")");
                 }
-            }
-            else
-            {
-                Debug.LogWarning("⚠️ 敌人没有 EnemyAI 组件");
             }
 
             spawnData.activeEnemies.Add(enemy);
@@ -386,9 +354,8 @@ public class EnemySpawner : MonoBehaviour
             {
                 string type = enemyScript != null && enemyScript.enemyData != null ?
                     enemyScript.enemyData.enemyName : "Unknown";
-                string limitInfo = enableMaxLimit ? $"({allActiveEnemies.Count}/{maxEnemyCount})" : "(♾️)";
-                string cooldownInfo = enableCooldown && spawnData.isOnCooldown ? " [冷却中]" : "";
-                Debug.Log($"📦 {spawnData.point.name}: {type} {limitInfo}{cooldownInfo}");
+                string limitInfo = enableMaxLimit ? "(" + allActiveEnemies.Count + "/" + maxEnemyCount + ")" : "";
+                Debug.Log(spawnData.point.name + ": " + type + " " + limitInfo);
             }
         }
     }
@@ -432,7 +399,7 @@ public class EnemySpawner : MonoBehaviour
             spawnData.activeEnemies.Clear();
         }
 
-        Debug.Log("🧹 所有敌人已清除");
+        Debug.Log("所有敌人已清除");
     }
 
     public void ResetSpawner()
@@ -450,29 +417,7 @@ public class EnemySpawner : MonoBehaviour
             spawnData.hasSpawnedOnce = false;
         }
 
-        Debug.Log("🔄 生成器已重置");
-    }
-
-    public void ForceSpawnAtPoint(int pointIndex)
-    {
-        if (pointIndex < 0 || pointIndex >= spawnPoints.Count)
-        {
-            Debug.LogWarning("⚠️ 无效的生成点索引");
-            return;
-        }
-
-        SpawnPointData spawnData = spawnPoints[pointIndex];
-        spawnData.isOnCooldown = false;
-        spawnData.hasSpawnedOnce = false;
-        SpawnEnemyImmediately(spawnData);
-
-        if (enableCooldown)
-        {
-            spawnData.isOnCooldown = true;
-            spawnData.cooldownTimer = cooldownTime;
-        }
-
-        Debug.Log($"⚡ 强制生成 {spawnData.point.name}");
+        Debug.Log("生成器已重置");
     }
 
     public string GetStats()
@@ -485,9 +430,9 @@ public class EnemySpawner : MonoBehaviour
             if (spawnData.isOnCooldown) coolingCount++;
         }
 
-        string limitInfo = enableMaxLimit ? $"{allActiveEnemies.Count}/{maxEnemyCount}" : $"♾️ {allActiveEnemies.Count}";
-        string cooldownInfo = enableCooldown ? $" | 冷却中: {coolingCount}" : "";
-        return $"活跃: {activeCount}/{spawnPoints.Count} | 敌人: {limitInfo}{cooldownInfo}";
+        string limitInfo = enableMaxLimit ? allActiveEnemies.Count + "/" + maxEnemyCount : "无限 " + allActiveEnemies.Count;
+        string cooldownInfo = enableCooldown ? " | 冷却中: " + coolingCount : "";
+        return "活跃: " + activeCount + "/" + spawnPoints.Count + " | 敌人: " + limitInfo + cooldownInfo;
     }
 
     void OnDrawGizmosSelected()
@@ -520,23 +465,23 @@ public class EnemySpawner : MonoBehaviour
 
 #if UNITY_EDITOR
             string status = spawnData.isOnCooldown ?
-                $"🟡 冷却中 ({spawnData.cooldownTimer:F1}s)" :
-                (spawnData.isActive ? "🟢 激活" : "🔴 停用");
+                "冷却中 (" + spawnData.cooldownTimer.ToString("F1") + "s)" :
+                (spawnData.isActive ? "激活" : "停用");
 
             UnityEditor.Handles.Label(
                 spawnData.point.position + Vector3.up * 2.5f,
-                $"{spawnData.point.name}\n{status}\n激活: {spawnData.activationRadius}\n停用: {spawnData.deactivationRadius}"
+                spawnData.point.name + "\n" + status + "\n激活: " + spawnData.activationRadius + "\n停用: " + spawnData.deactivationRadius
             );
 #endif
         }
 
 #if UNITY_EDITOR
-        string limitText = enableMaxLimit ? $"上限: {maxEnemyCount}" : "♾️ 无限";
-        string cooldownText = enableCooldown ? $"冷却: {cooldownTime}s" : "无冷却";
-        string difficultyText = currentDifficulty != null ? $"难度: {currentDifficulty.difficultyName}" : "未设置";
+        string limitText = enableMaxLimit ? "上限: " + maxEnemyCount : "无限";
+        string cooldownText = enableCooldown ? "冷却: " + cooldownTime + "s" : "无冷却";
+        string difficultyText = currentDifficulty != null ? "难度: " + currentDifficulty.difficultyName : "未设置";
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 5f,
-            $"{difficultyText}\n{limitText} | {cooldownText} | 当前: {allActiveEnemies.Count}"
+            difficultyText + "\n" + limitText + " | " + cooldownText + " | 当前: " + allActiveEnemies.Count
         );
 #endif
     }

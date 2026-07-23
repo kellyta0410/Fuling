@@ -11,10 +11,28 @@ public class DifficultySettings : ScriptableObject
     [Header("无限模式")]
     public bool isInfiniteMode = false;
 
-    [Header("时间限制")]
+    [Header("无限模式 - 成长设置")]
+    public bool enableScaling = true;
+    public float scalingInterval = 30f;
+
+    // 上限值
+    public float spawnIntervalMin = 0.3f;
+    public int spawnPerIntervalMax = 5;
+    public float speedMultiplierMax = 2.5f;
+    public float healthMultiplierMax = 3f;
+    public float damageMultiplierMax = 2f;
+
+    // 每级增加值（固定值方式）
+    public float spawnIntervalStep = 0.05f;
+    public float spawnPerIntervalStep = 0.1f;
+    public float speedMultiplierStep = 0.03f;
+    public float healthMultiplierStep = 0.04f;
+    public float damageMultiplierStep = 0.02f;
+
+    [Header("普通模式 - 时间限制")]
     public float timeLimit = 90f;
 
-    [Header("生成参数")]
+    [Header("生成参数（基础值）")]
     public float spawnInterval = 2f;
     public int spawnPerInterval = 1;
     public float enemySpeedMultiplier = 1f;
@@ -29,6 +47,4 @@ public class DifficultySettings : ScriptableObject
 
     [Header("敌人类型")]
     public List<GameObject> allowedEnemyPrefabs;
-
-    // ❌ 删除 timerColor
 }

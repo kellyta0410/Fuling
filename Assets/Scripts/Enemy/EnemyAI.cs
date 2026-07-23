@@ -1,25 +1,20 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AI;
 using UnityEngine.UI;
+using UnityEngine.AI;
 
 public class EnemyAI : MonoBehaviour
 {
-    // ==================== 组件引用 ====================
     private Animator animator;
     private PlayerController player;
     private NavMeshAgent agent;
 
-    // ==================== 敌人数据 ====================
     [Header("敌人数据")]
     public EnemyData enemyData;
 
-    // ==================== 金币 ====================
     [Header("金币")]
     public GameObject coinPrefab;
 
-    // ==================== 血条 ====================
     [Header("血条")]
     public GameObject healthBarPrefab;
     public Vector3 healthBarOffset = new Vector3(0, 1.5f, 0);
@@ -28,17 +23,14 @@ public class EnemyAI : MonoBehaviour
     private Image healthFillImage;
     private float currentHealth;
 
-    // ==================== 血条颜色 ====================
     [Header("血条颜色")]
     public Color fullHealthColor = Color.green;
     public Color midHealthColor = Color.yellow;
     public Color lowHealthColor = Color.red;
 
-    // ==================== 状态 ====================
     [Header("状态")]
     public bool isDead = false;
 
-    // ==================== 攻击 ====================
     [Header("攻击")]
     private float attackCooldownTimer = 0f;
     public bool canAttack = true;
@@ -48,26 +40,36 @@ public class EnemyAI : MonoBehaviour
     public float attackDamageDelay = 0.3f;
     private Coroutine attackCoroutine;
 
-    // ==================== 面向角度检测 ====================
     [Header("面向检测")]
-    public float facingAngleThreshold = 45f; // 允许的攻击角度偏差
+    public float facingAngleThreshold = 45f;
 
-    [Header("难度影响")]
-    [HideInInspector] public float speedMultiplier = 1f;
+    // 当前倍率（由 EnemySpawner 设置）
+    private float currentSpeedMultiplier = 1f;
+    private float currentHealthMultiplier = 1f;
+    private float currentDamageMultiplier = 1f;
+
+    // 存储基础值
+    private float baseSpeed;
+    private float baseHealth;
+    private float baseAttackDamage;
 
     void Start()
     {
         animator = GetComponent<Animator>();
         player = FindObjectOfType<PlayerController>();
-        agent = GetComponent<NavMeshAgent>(); // ⭐ 这里直接赋值，不加类型声明
+        agent = GetComponent<NavMeshAgent>();
 
         if (enemyData != null)
         {
-            currentHealth = enemyData.health;
+            baseSpeed = enemyData.speed;
+            baseHealth = enemyData.health;
+            baseAttackDamage = enemyData.attackDamage;
+
+            currentHealth = baseHealth;
 
             if (agent != null)
             {
-                agent.speed = enemyData.speed;
+                agent.speed = baseSpeed;
                 agent.stoppingDistance = enemyData.attackRange * 0.85f;
                 agent.autoBraking = true;
                 agent.radius = 0.4f;
@@ -81,6 +83,9 @@ public class EnemyAI : MonoBehaviour
         else
         {
             Debug.LogWarning("EnemyData 未赋值！使用默认值");
+            baseSpeed = 2f;
+            baseHealth = 50f;
+            baseAttackDamage = 10f;
             currentHealth = 50f;
 
             if (agent != null)
@@ -95,13 +100,35 @@ public class EnemyAI : MonoBehaviour
         }
 
         CreateHealthBar();
+        ApplyCurrentMultipliers();
+    }
 
-        // ⭐ 应用速度倍率（删除原来的错误代码，用这个）
-        if (agent != null && enemyData != null)
+    // 由 EnemySpawner 调用，设置倍率
+    public void ApplyScalingMultipliers(float speedMult, float healthMult, float damageMult)
+    {
+        currentSpeedMultiplier = speedMult;
+        currentHealthMultiplier = healthMult;
+        currentDamageMultiplier = damageMult;
+
+        ApplyCurrentMultipliers();
+    }
+
+    void ApplyCurrentMultipliers()
+    {
+        if (enemyData == null) return;
+
+        // 应用血量
+        currentHealth = baseHealth * currentHealthMultiplier;
+        UpdateHealthBar();
+
+        // 应用速度
+        if (agent != null)
         {
-            agent.speed = enemyData.speed * speedMultiplier;
-            Debug.Log($"🏃 {gameObject.name} 速度: {enemyData.speed} × {speedMultiplier} = {agent.speed}");
+            agent.speed = baseSpeed * currentSpeedMultiplier;
         }
+
+        // 攻击力在攻击时动态计算，存储在 enemyData 中不修改
+        // 攻击时会用 baseAttackDamage * currentDamageMultiplier
     }
 
     void Update()
@@ -113,7 +140,6 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 攻击状态计时
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -128,9 +154,8 @@ public class EnemyAI : MonoBehaviour
                     attackCoroutine = null;
                 }
             }
-            // 攻击动画期间停止移动
             if (agent != null) agent.isStopped = true;
-            return; // 攻击期间不执行其他逻辑
+            return;
         }
 
         if (player == null || player.IsDead())
@@ -140,7 +165,6 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 冷却计时
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -153,13 +177,10 @@ public class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
-        // ============ 攻击范围内 ============
         if (distance <= enemyData.attackRange)
         {
-            // 停止移动
             if (agent != null) agent.isStopped = true;
 
-            // 转向玩家
             Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
             directionToPlayer.y = 0;
 
@@ -169,23 +190,18 @@ public class EnemyAI : MonoBehaviour
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
             }
 
-            // 检查是否面向玩家
             if (IsFacingPlayer())
             {
-                // 面向玩家且冷却完成，执行攻击
                 if (canAttack && !isAttacking && !isDead)
                 {
                     PerformAttack();
                 }
             }
 
-            // 不播放移动动画（因为已经停止）
             UpdateAnimations(0f, false);
         }
-        // ============ 攻击范围外 ============
         else
         {
-            // 只有在非攻击状态下才能移动
             if (!isAttacking)
             {
                 if (agent != null)
@@ -199,7 +215,6 @@ public class EnemyAI : MonoBehaviour
             }
             else
             {
-                // 攻击时停止移动
                 if (agent != null) agent.isStopped = true;
                 UpdateAnimations(0f, false);
             }
@@ -208,7 +223,6 @@ public class EnemyAI : MonoBehaviour
         UpdateHealthBarPosition();
     }
 
-    // ==================== 检测是否面向玩家 ====================
     bool IsFacingPlayer()
     {
         if (player == null) return false;
@@ -216,17 +230,14 @@ public class EnemyAI : MonoBehaviour
         Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
         directionToPlayer.y = 0;
 
-        // 获取敌人的前方向（忽略Y轴）
         Vector3 forward = transform.forward;
         forward.y = 0;
 
-        // 计算夹角
         float angle = Vector3.Angle(forward, directionToPlayer);
 
         return angle <= facingAngleThreshold;
     }
 
-    // ==================== 攻击 ====================
     void PerformAttack()
     {
         if (!canAttack || isDead || isAttacking) return;
@@ -237,7 +248,6 @@ public class EnemyAI : MonoBehaviour
         isAttacking = true;
         attackTimer = 0f;
 
-        // 攻击时强制停止移动
         if (agent != null) agent.isStopped = true;
 
         animator.SetBool("IsAttacking", true);
@@ -255,20 +265,20 @@ public class EnemyAI : MonoBehaviour
         {
             float distance = Vector3.Distance(transform.position, player.transform.position);
 
-            // 再次检查距离和面向角度
             if (distance <= enemyData.attackRange && IsFacingPlayer())
             {
-                player.TakeDamage(enemyData.attackDamage);
-                Debug.Log($"👊 {gameObject.name} 攻击玩家，造成 {enemyData.attackDamage} 伤害");
+                // 应用攻击倍率
+                float finalDamage = baseAttackDamage * currentDamageMultiplier;
+                player.TakeDamage(Mathf.RoundToInt(finalDamage));
+                Debug.Log(gameObject.name + " 攻击玩家，造成 " + finalDamage + " 伤害");
             }
             else
             {
-                Debug.Log($"❌ {gameObject.name} 攻击失败：{(distance > enemyData.attackRange ? "距离过远" : "未面向玩家")}");
+                Debug.Log(gameObject.name + " 攻击失败");
             }
         }
     }
 
-    // ==================== 创建血条（Slider） ====================
     void CreateHealthBar()
     {
         if (healthBarPrefab == null)
@@ -280,14 +290,12 @@ public class EnemyAI : MonoBehaviour
         healthBarInstance = Instantiate(healthBarPrefab, transform.position + healthBarOffset, Quaternion.identity);
         healthBarInstance.transform.SetParent(transform);
 
-        // 获取 Slider
         healthSlider = healthBarInstance.GetComponent<Slider>();
         if (healthSlider == null)
         {
             healthSlider = healthBarInstance.GetComponentInChildren<Slider>();
         }
 
-        // 获取 Fill 图片
         if (healthSlider != null)
         {
             Transform fillTransform = healthSlider.transform.Find("Fill Area/Fill");
@@ -315,7 +323,6 @@ public class EnemyAI : MonoBehaviour
         UpdateHealthBar();
     }
 
-    // ==================== 更新血条位置 ====================
     void UpdateHealthBarPosition()
     {
         if (healthBarInstance != null)
@@ -330,19 +337,16 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    // ==================== 更新血条 ====================
     void UpdateHealthBar()
     {
         if (healthSlider == null || enemyData == null) return;
 
-        float healthPercent = currentHealth / enemyData.health;
+        float healthPercent = currentHealth / (baseHealth * currentHealthMultiplier);
         healthSlider.value = healthPercent;
 
-        // 颜色变化
         UpdateHealthBarColor(healthPercent);
     }
 
-    // ==================== 血条颜色 ====================
     void UpdateHealthBarColor(float healthPercent)
     {
         if (healthFillImage == null) return;
@@ -358,7 +362,6 @@ public class EnemyAI : MonoBehaviour
         healthFillImage.color = targetColor;
     }
 
-    // ==================== 动画 ====================
     void UpdateAnimations(float speed, bool isMoving)
     {
         if (animator == null || isAttacking) return;
@@ -366,7 +369,6 @@ public class EnemyAI : MonoBehaviour
         animator.SetBool("IsMoving", isMoving);
     }
 
-    // ==================== 受伤（平滑扣血） ====================
     public void TakeDamageImmediate(int damage)
     {
         if (isDead || enemyData == null) return;
@@ -395,12 +397,11 @@ public class EnemyAI : MonoBehaviour
         currentHealth = targetHealth;
         UpdateHealthBar();
 
-        Debug.Log($"敌人受到 {damage} 伤害，剩余血量: {currentHealth}");
+        Debug.Log("敌人受到 " + damage + " 伤害，剩余血量: " + currentHealth);
 
         if (currentHealth <= 0) Die();
     }
 
-    // ==================== 死亡 ====================
     void Die()
     {
         isDead = true;
@@ -415,14 +416,13 @@ public class EnemyAI : MonoBehaviour
         {
             player.AddKill();
             player.AddCoin(enemyData.coinReward);
-            Debug.Log($"击杀 {enemyData.enemyName}，获得 {enemyData.coinReward} 金币");
+            Debug.Log("击杀 " + enemyData.enemyName + "，获得 " + enemyData.coinReward + " 金币");
         }
 
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
         Destroy(gameObject, delay);
     }
 
-    // ==================== 生成金币 ====================
     void SpawnCoin()
     {
         if (coinPrefab == null) return;
@@ -432,7 +432,12 @@ public class EnemyAI : MonoBehaviour
         if (coinScript != null) coinScript.SetValue(enemyData.coinReward);
     }
 
-    // ==================== Gizmos ====================
+    public void SetMultipliersFromSpawner()
+    {
+        // 由 EnemySpawner 在生成后直接调用 ApplyScalingMultipliers
+        // 这个方法保留以防其他用途
+    }
+
     void OnDrawGizmosSelected()
     {
         if (enemyData == null || !enemyData.showGizmos) return;
@@ -443,7 +448,6 @@ public class EnemyAI : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
 
-        // 绘制面向角度检测范围
         Gizmos.color = Color.blue;
         Vector3 forward = transform.forward;
         Quaternion leftRotation = Quaternion.Euler(0, -facingAngleThreshold, 0);
@@ -456,8 +460,9 @@ public class EnemyAI : MonoBehaviour
 #if UNITY_EDITOR
         if (enemyData != null)
         {
+            float maxHealth = baseHealth * currentHealthMultiplier;
             UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
-                $"{enemyData.enemyName}\nHP: {currentHealth}/{enemyData.health}\nFacing: {IsFacingPlayer()}");
+                enemyData.enemyName + "\nHP: " + currentHealth + "/" + maxHealth + "\nFacing: " + IsFacingPlayer());
         }
 #endif
     }

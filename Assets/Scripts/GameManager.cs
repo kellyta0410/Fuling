@@ -1,32 +1,35 @@
 ﻿using UnityEngine;
-using UnityEngine.UI;
-using System.Collections;
 using TMPro;
-using UnityEngine.SceneManagement; // ⭐ 新增：用于场景管理
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
-    [Header("时间")]
+    [Header("UI 组件")]
     public TextMeshProUGUI timerText;
 
     [Header("游戏状态")]
     public DifficultySettings currentDifficulty;
     public EnemySpawner enemySpawner;
 
-    [Header("难度配置文件")]
+    [Header("所有难度配置")]
     public DifficultySettings easyConfig;
     public DifficultySettings normalConfig;
     public DifficultySettings hardConfig;
     public DifficultySettings infiniteConfig;
 
-    [Header("场景加载")]
-    public bool loadSceneOnDifficultyChange = true; // 是否切换场景
-    public GameObject loadingScreen; // 加载界面（可选）
+    [Header("无限模式 - 当前成长值")]
+    public int scalingLevel = 0;
+    public float currentSpawnInterval;
+    public int currentSpawnPerInterval;
+    public float currentSpeedMultiplier;
+    public float currentHealthMultiplier;
+    public float currentDamageMultiplier;
 
     private float timeLimit;
     private float remainingTime;
+    private float scalingTimer = 0f;
     private bool isGameRunning = false;
     private bool isGameOver = false;
 
@@ -48,24 +51,86 @@ public class GameManager : MonoBehaviour
         if (enemySpawner == null)
             enemySpawner = FindObjectOfType<EnemySpawner>();
 
+        string selectedDifficultyName = PlayerPrefs.GetString("SelectedDifficulty", "普通");
+        Debug.Log("读取到选中的难度: " + selectedDifficultyName);
+
+        DifficultySettings loadedDifficulty = GetDifficultyByName(selectedDifficultyName);
+
+        if (loadedDifficulty != null)
+        {
+            currentDifficulty = loadedDifficulty;
+            Debug.Log("加载难度配置: " + currentDifficulty.difficultyName);
+        }
+        else
+        {
+            Debug.LogWarning("未找到难度: " + selectedDifficultyName + "，使用默认（普通）");
+            currentDifficulty = normalConfig;
+        }
+
         if (currentDifficulty != null && enemySpawner != null)
         {
-            enemySpawner.ApplyDifficulty(currentDifficulty);
+            // 初始化生成参数
+            ApplyCurrentDifficultyToSpawner();
             StartGame();
         }
+        else
+        {
+            Debug.LogError("无法应用难度：currentDifficulty 或 enemySpawner 为空");
+        }
+    }
+
+    DifficultySettings GetDifficultyByName(string name)
+    {
+        DifficultySettings[] allConfigs = { easyConfig, normalConfig, hardConfig, infiniteConfig };
+
+        foreach (DifficultySettings config in allConfigs)
+        {
+            if (config != null && config.difficultyName == name)
+            {
+                return config;
+            }
+        }
+        return null;
     }
 
     public void StartGame()
     {
         isGameRunning = true;
         isGameOver = false;
+        scalingLevel = 0;
+        scalingTimer = 0f;
 
         if (currentDifficulty != null)
         {
             timeLimit = currentDifficulty.timeLimit;
             remainingTime = timeLimit;
 
+            if (currentDifficulty.isInfiniteMode)
+            {
+                // 无限模式：初始值 = 基础值
+                currentSpawnInterval = currentDifficulty.spawnInterval;
+                currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
+                currentSpeedMultiplier = 1f;
+                currentHealthMultiplier = 1f;
+                currentDamageMultiplier = 1f;
+
+                Debug.Log("无限模式启动，基础生成间隔: " + currentSpawnInterval);
+            }
+            else
+            {
+                // 普通模式：使用固定值
+                currentSpawnInterval = currentDifficulty.spawnInterval;
+                currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
+                currentSpeedMultiplier = 1f;
+                currentHealthMultiplier = 1f;
+                currentDamageMultiplier = 1f;
+            }
+
+            ApplyCurrentDifficultyToSpawner();
             UpdateTimerVisibility();
+
+            string timeDisplay = currentDifficulty.isInfiniteMode ? "无限" : timeLimit + "秒";
+            Debug.Log("游戏开始！难度: " + currentDifficulty.difficultyName + ", 时间: " + timeDisplay);
         }
     }
 
@@ -73,12 +138,19 @@ public class GameManager : MonoBehaviour
     {
         if (!isGameRunning || isGameOver) return;
 
+        // 无限模式
         if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
         {
             HideTimer();
+
+            if (currentDifficulty.enableScaling)
+            {
+                HandleScaling();
+            }
             return;
         }
 
+        // 普通模式
         ShowTimer();
         remainingTime -= Time.deltaTime;
         UpdateTimerUI();
@@ -90,9 +162,94 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    void HandleScaling()
+    {
+        scalingTimer += Time.deltaTime;
+
+        if (scalingTimer >= currentDifficulty.scalingInterval)
+        {
+            scalingTimer = 0f;
+            scalingLevel++;
+
+            // 计算当前值（固定值方式）
+            currentSpawnInterval = Mathf.Max(
+                currentDifficulty.spawnInterval - (scalingLevel * currentDifficulty.spawnIntervalStep),
+                currentDifficulty.spawnIntervalMin
+            );
+
+            currentSpawnPerInterval = Mathf.Min(
+                currentDifficulty.spawnPerInterval + Mathf.RoundToInt(scalingLevel * currentDifficulty.spawnPerIntervalStep),
+                currentDifficulty.spawnPerIntervalMax
+            );
+
+            currentSpeedMultiplier = Mathf.Min(
+                1f + (scalingLevel * currentDifficulty.speedMultiplierStep),
+                currentDifficulty.speedMultiplierMax
+            );
+
+            currentHealthMultiplier = Mathf.Min(
+                1f + (scalingLevel * currentDifficulty.healthMultiplierStep),
+                currentDifficulty.healthMultiplierMax
+            );
+
+            currentDamageMultiplier = Mathf.Min(
+                1f + (scalingLevel * currentDifficulty.damageMultiplierStep),
+                currentDifficulty.damageMultiplierMax
+            );
+
+            // 应用到生成器
+            ApplyCurrentDifficultyToSpawner();
+
+            Debug.Log("无限模式成长 - 等级: " + scalingLevel);
+            Debug.Log("  生成间隔: " + currentSpawnInterval + "秒");
+            Debug.Log("  每次生成: " + currentSpawnPerInterval + "个");
+            Debug.Log("  速度倍率: " + currentSpeedMultiplier);
+            Debug.Log("  血量倍率: " + currentHealthMultiplier);
+            Debug.Log("  攻击倍率: " + currentDamageMultiplier);
+        }
+    }
+
+    void ApplyCurrentDifficultyToSpawner()
+    {
+        if (enemySpawner == null) return;
+
+        // 根据是否无限模式，传递不同的值给生成器
+        if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
+        {
+            enemySpawner.ApplyScalingParameters(
+                currentSpawnInterval,
+                currentSpawnPerInterval,
+                currentSpeedMultiplier,
+                currentHealthMultiplier,
+                currentDamageMultiplier,
+                currentDifficulty.enableMaxLimit,
+                currentDifficulty.maxEnemyCount,
+                currentDifficulty.enableCooldown,
+                currentDifficulty.cooldownTime,
+                currentDifficulty.allowedEnemyPrefabs
+            );
+        }
+        else
+        {
+            // 普通模式：使用基础值
+            enemySpawner.ApplyScalingParameters(
+                currentDifficulty.spawnInterval,
+                currentDifficulty.spawnPerInterval,
+                1f,
+                1f,
+                1f,
+                currentDifficulty.enableMaxLimit,
+                currentDifficulty.maxEnemyCount,
+                currentDifficulty.enableCooldown,
+                currentDifficulty.cooldownTime,
+                currentDifficulty.allowedEnemyPrefabs
+            );
+        }
+    }
+
     void HideTimer()
     {
-        if(timerText != null && !timerText.gameObject.activeSelf)
+        if (timerText != null && timerText.gameObject.activeSelf)
         {
             timerText.gameObject.SetActive(false);
         }
@@ -131,14 +288,10 @@ public class GameManager : MonoBehaviour
 
             float percent = remainingTime / timeLimit;
 
-            // ⭐ 颜色逻辑
             if (percent < 0.1f)
             {
-                // 红色闪烁
-                float flash = Mathf.PingPong(Time.time * 8, 0.5f) + 0.5f;
                 timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
 
-                // ⭐ 震动效果
                 float shakeAmount = 3f;
                 float shakeX = Random.Range(-shakeAmount, shakeAmount);
                 float shakeY = Random.Range(-shakeAmount, shakeAmount);
@@ -147,7 +300,6 @@ public class GameManager : MonoBehaviour
             else if (percent < 0.3f)
             {
                 timerText.color = Color.yellow;
-                // 归位
                 timerText.rectTransform.anchoredPosition = Vector2.zero;
             }
             else
@@ -158,143 +310,123 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void OnDifficultyChanged(DifficultySettings newDifficulty)
-    {
-        if (newDifficulty == null) return;
-
-        currentDifficulty = newDifficulty;
-        timeLimit = newDifficulty.timeLimit;
-        remainingTime = timeLimit;
-        isGameRunning = true;
-        isGameOver = false;
-
-        UpdateTimerVisibility();
-
-        string timeDisplay = newDifficulty.isInfiniteMode ? "∞ (隐藏)" : timeLimit + "秒";
-        Debug.Log($"⏱️ 切换到: {newDifficulty.difficultyName} | 时间: {timeDisplay}");
-    }
-
     public void GameOver(bool isWin)
     {
+        if (isGameOver) return;
+
         isGameRunning = false;
         isGameOver = true;
 
-        if (isWin)
+        int coins = 0;
+        int kills = 0;
+
+        PlayerController player = FindObjectOfType<PlayerController>();
+        if (player != null)
         {
-            Debug.Log("🎉 胜利！");
+            coins = player.GetCoins();
+            kills = player.GetKills();
+            Debug.Log("从 Player 获取数据: 金币=" + coins + ", 击杀=" + kills);
         }
         else
         {
-            Debug.Log("💀 时间到！失败");
+            Debug.LogWarning("未找到 PlayerController");
         }
-    }
 
-    // ⭐⭐⭐ 核心方法：切换难度并加载场景 ⭐⭐⭐
-    public void SelectEasy()
-    {
-        if (easyConfig != null) ChangeDifficulty(easyConfig);
-        else Debug.LogWarning("⚠️ Easy Config 未设置！");
-    }
+        float timeToSave = 0f;
 
-    public void SelectNormal()
-    {
-        if (normalConfig != null) ChangeDifficulty(normalConfig);
-        else Debug.LogWarning("⚠️ Normal Config 未设置！");
-    }
-
-    public void SelectHard()
-    {
-        if (hardConfig != null) ChangeDifficulty(hardConfig);
-        else Debug.LogWarning("⚠️ Hard Config 未设置！");
-    }
-
-    public void SelectInfinite()
-    {
-        if (infiniteConfig != null) ChangeDifficulty(infiniteConfig);
-        else Debug.LogWarning("⚠️ Infinite Config 未设置！");
-    }
-
-    void ChangeDifficulty(DifficultySettings newDifficulty)
-    {
-        if (newDifficulty == null) return;
-
-        Debug.Log($"🔄 切换到难度: {newDifficulty.difficultyName}");
-
-        // ⭐ 检查是否需要加载场景
-        if (loadSceneOnDifficultyChange && !string.IsNullOrEmpty(newDifficulty.sceneName))
+        if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
         {
-            // 保存当前选中的难度（在场景加载后使用）
-            currentDifficulty = newDifficulty;
-
-            // 显示加载界面（如果有）
-            if (loadingScreen != null) loadingScreen.SetActive(true);
-
-            // 异步加载场景
-            StartCoroutine(LoadSceneAsync(newDifficulty.sceneName));
+            timeToSave = GetElapsedTime();
+            Debug.Log("无限模式游玩时长: " + timeToSave + "秒");
         }
         else
         {
-            // 不切换场景，直接应用难度
-            if (enemySpawner != null)
-            {
-                enemySpawner.ApplyDifficulty(newDifficulty);
-            }
-            else
-            {
-                currentDifficulty = newDifficulty;
-                StartGame();
-            }
+            timeToSave = timeLimit - remainingTime;
+            if (timeToSave < 0) timeToSave = 0;
+            Debug.Log("生存时间: " + timeToSave + "秒");
         }
+
+        SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+
+        Debug.Log("游戏结束！" + currentDifficulty.difficultyName + " 记录已保存");
     }
 
-    // ⭐ 协程：异步加载场景
-    IEnumerator LoadSceneAsync(string sceneName)
+    void SaveBestRecord(string difficultyName, int coins, int kills, float time)
     {
-        Debug.Log($"📂 加载场景: {sceneName}");
+        string coinsKey = difficultyName + "_BestCoins";
+        string killsKey = difficultyName + "_BestKills";
+        string timeKey = difficultyName + "_BestTime";
 
-        // 开始异步加载
-        AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneName);
-        asyncLoad.allowSceneActivation = false;
+        int bestCoins = PlayerPrefs.GetInt(coinsKey, 0);
+        int bestKills = PlayerPrefs.GetInt(killsKey, 0);
+        float bestTime = PlayerPrefs.GetFloat(timeKey, 0f);
 
-        // 等待加载完成（进度到 90%）
-        while (asyncLoad.progress < 0.9f)
+        bool updated = false;
+
+        if (coins > bestCoins)
         {
-            // 可以在这里更新加载进度条
-            // loadingProgressBar.fillAmount = asyncLoad.progress;
-            yield return null;
+            PlayerPrefs.SetInt(coinsKey, coins);
+            updated = true;
+            Debug.Log("新纪录！" + difficultyName + " 金币: " + coins + " (之前: " + bestCoins + ")");
         }
 
-        // 隐藏加载界面
-        if (loadingScreen != null) loadingScreen.SetActive(false);
-
-        // 激活场景
-        asyncLoad.allowSceneActivation = true;
-
-        // 等待场景完全加载
-        yield return asyncLoad;
-
-        // 场景加载完成后，重新查找组件并应用难度
-        yield return new WaitForEndOfFrame();
-
-        // 查找新场景中的 EnemySpawner
-        enemySpawner = FindObjectOfType<EnemySpawner>();
-        if (enemySpawner != null && currentDifficulty != null)
+        if (kills > bestKills)
         {
-            enemySpawner.ApplyDifficulty(currentDifficulty);
+            PlayerPrefs.SetInt(killsKey, kills);
+            updated = true;
+            Debug.Log("新纪录！" + difficultyName + " 击杀: " + kills + " (之前: " + bestKills + ")");
         }
 
-        // 查找新场景中的 Player
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null && enemySpawner != null)
+        if (time > bestTime)
         {
-            enemySpawner.playerTarget = player.transform;
+            PlayerPrefs.SetFloat(timeKey, time);
+            updated = true;
+            Debug.Log("新纪录！" + difficultyName + " 时间: " + time + "秒 (之前: " + bestTime + "秒)");
         }
 
-        StartGame();
-        Debug.Log($"✅ 场景 {sceneName} 加载完成，难度: {currentDifficulty.difficultyName}");
+        if (updated)
+        {
+            PlayerPrefs.Save();
+            Debug.Log(difficultyName + " 最高纪录已更新");
+        }
+        else
+        {
+            Debug.Log(difficultyName + " 本次未打破纪录");
+        }
     }
 
-    public float GetRemainingTime() { return remainingTime; }
-    public float GetTimePercent() { return remainingTime / timeLimit; }
-    public bool IsInfiniteMode() { return currentDifficulty != null && currentDifficulty.isInfiniteMode; }
+    public float GetRemainingTime()
+    {
+        return remainingTime;
+    }
+
+    public float GetTimePercent()
+    {
+        return remainingTime / timeLimit;
+    }
+
+    public bool IsInfiniteMode()
+    {
+        return currentDifficulty != null && currentDifficulty.isInfiniteMode;
+    }
+
+    public float GetElapsedTime()
+    {
+        return timeLimit - remainingTime;
+    }
+
+    public float GetCurrentSpeedMultiplier()
+    {
+        return currentSpeedMultiplier;
+    }
+
+    public float GetCurrentHealthMultiplier()
+    {
+        return currentHealthMultiplier;
+    }
+
+    public float GetCurrentDamageMultiplier()
+    {
+        return currentDamageMultiplier;
+    }
 }
