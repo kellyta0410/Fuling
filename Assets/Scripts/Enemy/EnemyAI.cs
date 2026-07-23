@@ -48,6 +48,10 @@ public class EnemyAI : MonoBehaviour
     public float attackDamageDelay = 0.3f;
     private Coroutine attackCoroutine;
 
+    // ==================== 面向角度检测 ====================
+    [Header("面向检测")]
+    public float facingAngleThreshold = 45f; // 允许的攻击角度偏差
+
     void Start()
     {
         animator = GetComponent<Animator>();
@@ -99,6 +103,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
+        // 攻击状态计时
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -113,6 +118,9 @@ public class EnemyAI : MonoBehaviour
                     attackCoroutine = null;
                 }
             }
+            // 攻击动画期间停止移动
+            if (agent != null) agent.isStopped = true;
+            return; // 攻击期间不执行其他逻辑
         }
 
         if (player == null || player.IsDead())
@@ -122,6 +130,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
+        // 冷却计时
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -134,41 +143,77 @@ public class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
+        // ============ 攻击范围内 ============
         if (distance <= enemyData.attackRange)
         {
+            // 停止移动
             if (agent != null) agent.isStopped = true;
 
-            Vector3 direction = (player.transform.position - transform.position).normalized;
-            direction.y = 0;
-            if (direction != Vector3.zero)
+            // 转向玩家
+            Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+            directionToPlayer.y = 0;
+
+            if (directionToPlayer != Vector3.zero)
             {
-                Quaternion targetRotation = Quaternion.LookRotation(direction);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * Time.deltaTime);
+                Quaternion targetRotation = Quaternion.LookRotation(directionToPlayer);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
             }
 
-            if (canAttack && !isAttacking)
+            // 检查是否面向玩家
+            if (IsFacingPlayer())
             {
-                PerformAttack();
+                // 面向玩家且冷却完成，执行攻击
+                if (canAttack && !isAttacking && !isDead)
+                {
+                    PerformAttack();
+                }
             }
 
+            // 不播放移动动画（因为已经停止）
+            UpdateAnimations(0f, false);
+        }
+        // ============ 攻击范围外 ============
+        else
+        {
+            // 只有在非攻击状态下才能移动
             if (!isAttacking)
             {
+                if (agent != null)
+                {
+                    agent.isStopped = false;
+                    agent.SetDestination(player.transform.position);
+                }
+
+                float currentSpeed = agent != null ? agent.velocity.magnitude : 0f;
+                UpdateAnimations(currentSpeed, true);
+            }
+            else
+            {
+                // 攻击时停止移动
+                if (agent != null) agent.isStopped = true;
                 UpdateAnimations(0f, false);
             }
         }
-        else
-        {
-            if (agent != null)
-            {
-                agent.isStopped = false;
-                agent.SetDestination(player.transform.position);
-            }
-
-            float currentSpeed = agent != null ? agent.velocity.magnitude : 0f;
-            UpdateAnimations(currentSpeed, true);
-        }
 
         UpdateHealthBarPosition();
+    }
+
+    // ==================== 检测是否面向玩家 ====================
+    bool IsFacingPlayer()
+    {
+        if (player == null) return false;
+
+        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+        directionToPlayer.y = 0;
+
+        // 获取敌人的前方向（忽略Y轴）
+        Vector3 forward = transform.forward;
+        forward.y = 0;
+
+        // 计算夹角
+        float angle = Vector3.Angle(forward, directionToPlayer);
+
+        return angle <= facingAngleThreshold;
     }
 
     // ==================== 攻击 ====================
@@ -181,6 +226,10 @@ public class EnemyAI : MonoBehaviour
 
         isAttacking = true;
         attackTimer = 0f;
+
+        // 攻击时强制停止移动
+        if (agent != null) agent.isStopped = true;
+
         animator.SetBool("IsAttacking", true);
         animator.SetTrigger("Attack");
 
@@ -192,13 +241,19 @@ public class EnemyAI : MonoBehaviour
     {
         yield return new WaitForSeconds(attackDamageDelay);
 
-        if (player != null && !player.IsDead())
+        if (player != null && !player.IsDead() && !isDead)
         {
             float distance = Vector3.Distance(transform.position, player.transform.position);
-            if (distance <= enemyData.attackRange)
+
+            // 再次检查距离和面向角度
+            if (distance <= enemyData.attackRange && IsFacingPlayer())
             {
                 player.TakeDamage(enemyData.attackDamage);
                 Debug.Log($"👊 {gameObject.name} 攻击玩家，造成 {enemyData.attackDamage} 伤害");
+            }
+            else
+            {
+                Debug.Log($"❌ {gameObject.name} 攻击失败：{(distance > enemyData.attackRange ? "距离过远" : "未面向玩家")}");
             }
         }
     }
@@ -378,11 +433,21 @@ public class EnemyAI : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
 
+        // 绘制面向角度检测范围
+        Gizmos.color = Color.blue;
+        Vector3 forward = transform.forward;
+        Quaternion leftRotation = Quaternion.Euler(0, -facingAngleThreshold, 0);
+        Quaternion rightRotation = Quaternion.Euler(0, facingAngleThreshold, 0);
+        Vector3 leftBoundary = leftRotation * forward * 2f;
+        Vector3 rightBoundary = rightRotation * forward * 2f;
+        Gizmos.DrawLine(transform.position, transform.position + leftBoundary);
+        Gizmos.DrawLine(transform.position, transform.position + rightBoundary);
+
 #if UNITY_EDITOR
         if (enemyData != null)
         {
             UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
-                $"{enemyData.enemyName}\nHP: {currentHealth}/{enemyData.health}");
+                $"{enemyData.enemyName}\nHP: {currentHealth}/{enemyData.health}\nFacing: {IsFacingPlayer()}");
         }
 #endif
     }
