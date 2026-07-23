@@ -53,6 +53,9 @@ public class EnemyAI : MonoBehaviour
     private float baseHealth;
     private float baseAttackDamage;
 
+    // 标记是否已初始化血量（防止重复重置）
+    private bool isHealthInitialized = false;
+
     void Start()
     {
         animator = GetComponent<Animator>();
@@ -65,7 +68,12 @@ public class EnemyAI : MonoBehaviour
             baseHealth = enemyData.health;
             baseAttackDamage = enemyData.attackDamage;
 
-            currentHealth = baseHealth;
+            // ⭐ 初始化血量（只执行一次）
+            if (!isHealthInitialized)
+            {
+                currentHealth = baseHealth;
+                isHealthInitialized = true;
+            }
 
             if (agent != null)
             {
@@ -86,7 +94,12 @@ public class EnemyAI : MonoBehaviour
             baseSpeed = 2f;
             baseHealth = 50f;
             baseAttackDamage = 10f;
-            currentHealth = 50f;
+
+            if (!isHealthInitialized)
+            {
+                currentHealth = 50f;
+                isHealthInitialized = true;
+            }
 
             if (agent != null)
             {
@@ -117,8 +130,8 @@ public class EnemyAI : MonoBehaviour
     {
         if (enemyData == null) return;
 
-        // 应用血量
-        currentHealth = baseHealth * currentHealthMultiplier;
+        // ⭐ 血量只在初始化时设置，不重复重置
+        // 只更新血条显示
         UpdateHealthBar();
 
         // 应用速度
@@ -126,9 +139,6 @@ public class EnemyAI : MonoBehaviour
         {
             agent.speed = baseSpeed * currentSpeedMultiplier;
         }
-
-        // 攻击力在攻击时动态计算，存储在 enemyData 中不修改
-        // 攻击时会用 baseAttackDamage * currentDamageMultiplier
     }
 
     void Update()
@@ -267,7 +277,6 @@ public class EnemyAI : MonoBehaviour
 
             if (distance <= enemyData.attackRange && IsFacingPlayer())
             {
-                // 应用攻击倍率
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));
                 Debug.Log(gameObject.name + " 攻击玩家，造成 " + finalDamage + " 伤害");
@@ -318,6 +327,12 @@ public class EnemyAI : MonoBehaviour
                     break;
                 }
             }
+
+            // 如果还没找到，尝试获取第一个子物体的Image
+            if (healthFillImage == null && healthSlider != null)
+            {
+                healthFillImage = healthSlider.GetComponentInChildren<Image>();
+            }
         }
 
         UpdateHealthBar();
@@ -341,7 +356,8 @@ public class EnemyAI : MonoBehaviour
     {
         if (healthSlider == null || enemyData == null) return;
 
-        float healthPercent = currentHealth / (baseHealth * currentHealthMultiplier);
+        float maxHealth = baseHealth * currentHealthMultiplier;
+        float healthPercent = currentHealth / maxHealth;
         healthSlider.value = healthPercent;
 
         UpdateHealthBarColor(healthPercent);
@@ -435,7 +451,6 @@ public class EnemyAI : MonoBehaviour
     public void SetMultipliersFromSpawner()
     {
         // 由 EnemySpawner 在生成后直接调用 ApplyScalingMultipliers
-        // 这个方法保留以防其他用途
     }
 
     void OnDrawGizmosSelected()

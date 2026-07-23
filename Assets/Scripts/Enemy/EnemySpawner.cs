@@ -73,7 +73,6 @@ public class EnemySpawner : MonoBehaviour
 
         if (useDifficultySettings && currentDifficulty != null)
         {
-            // 使用默认值初始化
             currentSpawnInterval = currentDifficulty.spawnInterval;
             currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
             enableMaxLimit = currentDifficulty.enableMaxLimit;
@@ -133,7 +132,8 @@ public class EnemySpawner : MonoBehaviour
 
     void AutoFindSpawnPoints()
     {
-        GameObject[] foundPoints = GameObject.FindGameObjectsWithTag("SpawnPoint");
+        // 查找 Tag 为 "EnemySpawn" 的物体
+        GameObject[] foundPoints = GameObject.FindGameObjectsWithTag("EnemySpawn");
         foreach (GameObject point in foundPoints)
         {
             SpawnPointData data = new SpawnPointData();
@@ -141,6 +141,7 @@ public class EnemySpawner : MonoBehaviour
             spawnPoints.Add(data);
         }
 
+        // 如果没找到，尝试找 "SpawnPoints" 父物体下的子物体
         if (spawnPoints.Count == 0)
         {
             GameObject parent = GameObject.Find("SpawnPoints");
@@ -155,6 +156,7 @@ public class EnemySpawner : MonoBehaviour
             }
         }
 
+        // 如果还是没有，使用自身位置
         if (spawnPoints.Count == 0)
         {
             SpawnPointData data = new SpawnPointData();

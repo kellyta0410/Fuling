@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -10,6 +9,7 @@ public class UIManager : MonoBehaviour
     [Header("UI 引用")]
     public Slider healthSlider;
     public GameObject gameOverPanel;
+    public GameObject settingsPanel;          // InGame 专用
     public TextMeshProUGUI coinText;
     public TextMeshProUGUI enemyCountText;
     public TextMeshProUGUI finalCoinText;
@@ -25,67 +25,45 @@ public class UIManager : MonoBehaviour
     public Color lowHealthColor = Color.red;
     public Image healthFillImage;
 
+    [Header("InGame 设置 - 音量控制")]
+    public Slider musicSlider;
+    public Slider sfxSlider;
+    public TextMeshProUGUI musicValueText;
+    public TextMeshProUGUI sfxValueText;
+
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
     public GameManager gameManager;
 
-    // 计时器动画相关
     private Vector2 timerOriginalPosition;
     private float timeLimit;
 
-    private void Start()
+    void Start()
     {
-        // 自动查找组件
-        if (player == null)
-        {
-            player = FindObjectOfType<PlayerController>();
-        }
+        // 查找组件
+        if (player == null) player = FindObjectOfType<PlayerController>();
+        if (enemySpawner == null) enemySpawner = FindObjectOfType<EnemySpawner>();
+        if (gameManager == null) gameManager = GameManager.Instance;
 
-        if (enemySpawner == null)
-        {
-            enemySpawner = FindObjectOfType<EnemySpawner>();
-        }
+        // 按钮绑定
+        if (restartButton != null) restartButton.onClick.AddListener(RestartGame);
 
-        if (gameManager == null)
-        {
-            gameManager = GameManager.Instance;
-        }
+        // 初始隐藏面板
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
+        if (settingsPanel != null) settingsPanel.SetActive(false);
 
-        // 绑定按钮事件
-        if (restartButton != null)
-        {
-            restartButton.onClick.AddListener(RestartGame);
-        }
-
-        // 初始隐藏 GameOver
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(false);
-        }
-
-        // 获取血条的 Fill 图片
+        // 血条 Fill
         if (healthSlider != null && healthFillImage == null)
         {
-            Transform fillTransform = healthSlider.transform.Find("Fill Area/Fill");
-            if (fillTransform != null)
-            {
-                healthFillImage = fillTransform.GetComponent<Image>();
-            }
-
-            if (healthFillImage == null)
-            {
-                healthFillImage = healthSlider.GetComponentInChildren<Image>();
-            }
+            Transform fill = healthSlider.transform.Find("Fill Area/Fill");
+            healthFillImage = fill != null ? fill.GetComponent<Image>() : healthSlider.GetComponentInChildren<Image>();
         }
 
-        // 保存计时器原始位置
-        if (timerText != null)
-        {
-            timerOriginalPosition = timerText.rectTransform.anchoredPosition;
-        }
+        // 计时器位置
+        if (timerText != null) timerOriginalPosition = timerText.rectTransform.anchoredPosition;
 
-        // 订阅 GameManager 事件
+        // 订阅事件
         if (gameManager != null)
         {
             gameManager.OnTimerUpdated += UpdateTimerUI;
@@ -93,27 +71,26 @@ public class UIManager : MonoBehaviour
             gameManager.OnGameOver += OnGameOver;
         }
 
-        // 强制设置血条为满血
-        if (healthSlider != null)
-        {
-            healthSlider.value = 1f;
-        }
+        // 加载音量设置
+        LoadSettings();
+
+        // 绑定滑块事件
+        if (musicSlider != null)
+            musicSlider.onValueChanged.AddListener(OnMusicSliderChanged);
+
+        if (sfxSlider != null)
+            sfxSlider.onValueChanged.AddListener(OnSFXSliderChanged);
 
         // 初始化 UI
         UpdateHealthUI();
         UpdateCoinUI();
         UpdateKillUI();
 
-        // 确保游戏时间正常
         Time.timeScale = 1f;
-
-        // 延迟一帧再更新一次
-        StartCoroutine(DelayedUIUpdate());
     }
 
-    private void OnDestroy()
+    void OnDestroy()
     {
-        // 取消订阅事件
         if (gameManager != null)
         {
             gameManager.OnTimerUpdated -= UpdateTimerUI;
@@ -122,59 +99,120 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    private void Update()
+    void Update()
     {
-        // 实时更新击杀数
         UpdateKillUI();
+        if (Input.GetKeyDown(KeyCode.R)) RestartGame();
+    }
 
-        // 按 R 键重启（方便测试）
-        if (Input.GetKeyDown(KeyCode.R))
+    // ==================== 设置面板 ====================
+
+    void LoadSettings()
+    {
+        if (SettingsManager.Instance == null) return;
+
+        float music = SettingsManager.Instance.GetMusicVolume();
+        float sfx = SettingsManager.Instance.GetSFXVolume();
+
+        if (musicSlider != null) musicSlider.value = music;
+        if (sfxSlider != null) sfxSlider.value = sfx;
+
+        UpdateVolumeTexts();
+    }
+
+    void UpdateVolumeTexts()
+    {
+        if (musicValueText != null && musicSlider != null)
+            musicValueText.text = $"{Mathf.RoundToInt(musicSlider.value * 100)}%";
+
+        if (sfxValueText != null && sfxSlider != null)
+            sfxValueText.text = $"{Mathf.RoundToInt(sfxSlider.value * 100)}%";
+    }
+
+    void OnMusicSliderChanged(float value)
+    {
+        SettingsManager.Instance?.SetMusicVolume(value);
+        UpdateVolumeTexts();
+    }
+
+    void OnSFXSliderChanged(float value)
+    {
+        SettingsManager.Instance?.SetSFXVolume(value);
+        UpdateVolumeTexts();
+    }
+
+    public void OpenSettings()
+    {
+        if (settingsPanel != null)
         {
-            RestartGame();
+            settingsPanel.SetActive(true);
+            LoadSettings();  // 刷新当前值
+            Time.timeScale = 0f;
         }
     }
 
-    IEnumerator DelayedUIUpdate()
+    public void CloseSettings()
     {
-        yield return null;
-        UpdateHealthUI();
-        UpdateCoinUI();
-        UpdateKillUI();
-    }
-
-    // ==================== 计时器 UI 方法 ====================
-
-    public void SetTimerVisibility(bool isVisible)
-    {
-        if (timerText != null)
+        if (settingsPanel != null)
         {
-            timerText.gameObject.SetActive(isVisible);
+            settingsPanel.SetActive(false);
+            Time.timeScale = 1f;
         }
     }
 
-    public void UpdateTimerUI(float remainingTime, float timeLimit)
+    // ==================== UI 更新 ====================
+
+    public void UpdateHealthUI()
+    {
+        if (player != null && healthSlider != null)
+        {
+            float percent = player.GetHealthPercent();
+            healthSlider.value = percent;
+            UpdateHealthBarColor(percent);
+        }
+    }
+
+    void UpdateHealthBarColor(float percent)
+    {
+        if (healthFillImage == null) return;
+        healthFillImage.color = percent >= 0.6f ? fullHealthColor : (percent >= 0.3f ? midHealthColor : lowHealthColor);
+    }
+
+    public void UpdateCoinUI()
+    {
+        if (player != null && coinText != null)
+            coinText.text = $"Coins: {player.GetCoins()}";
+    }
+
+    public void UpdateKillUI()
+    {
+        if (enemyCountText != null && player != null)
+            enemyCountText.text = $"Kills: {player.GetKills()}";
+    }
+
+    // ==================== 计时器 ====================
+
+    public void SetTimerVisibility(bool visible)
+    {
+        if (timerText != null) timerText.gameObject.SetActive(visible);
+    }
+
+    public void UpdateTimerUI(float remaining, float limit)
     {
         if (timerText == null) return;
 
-        this.timeLimit = timeLimit;
+        timeLimit = limit;
+        int min = Mathf.FloorToInt(remaining / 60);
+        int sec = Mathf.FloorToInt(remaining % 60);
+        timerText.text = $"{min:00}:{sec:00}";
 
-        // 格式化时间显示
-        int minutes = Mathf.FloorToInt(remainingTime / 60);
-        int seconds = Mathf.FloorToInt(remainingTime % 60);
-        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-
-        // 根据剩余时间百分比更新颜色和动画
-        float percent = timeLimit > 0 ? remainingTime / timeLimit : 0;
+        float percent = limit > 0 ? remaining / limit : 0;
 
         if (percent < 0.1f && percent > 0)
         {
             timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
-
-            // 抖动效果
-            float shakeAmount = 3f;
-            float shakeX = Random.Range(-shakeAmount, shakeAmount);
-            float shakeY = Random.Range(-shakeAmount, shakeAmount);
-            timerText.rectTransform.anchoredPosition = timerOriginalPosition + new Vector2(shakeX, shakeY);
+            float shake = 3f;
+            timerText.rectTransform.anchoredPosition = timerOriginalPosition + new Vector2(Random.Range(-shake, shake), Random.Range(-shake, shake));
         }
         else if (percent < 0.3f && percent > 0)
         {
@@ -187,141 +225,56 @@ public class UIManager : MonoBehaviour
             timerText.rectTransform.anchoredPosition = timerOriginalPosition;
         }
 
-        // 时间到
-        if (remainingTime <= 0)
-        {
-            timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
-            timerText.text = "00:00";
-        }
-    }
-
-    // ==================== UI 更新方法 ====================
-
-    public void UpdateHealthUI()
-    {
-        if (player != null && healthSlider != null)
-        {
-            // ⭐ 这里调用 player.GetHealthPercent()
-            float healthPercent = player.GetHealthPercent();
-            healthSlider.value = healthPercent;
-            UpdateHealthBarColor(healthPercent);
-        }
-    }
-
-    void UpdateHealthBarColor(float healthPercent)
-    {
-        if (healthFillImage == null) return;
-
-        Color targetColor;
-
-        if (healthPercent >= 0.6f)
-        {
-            targetColor = fullHealthColor;
-        }
-        else if (healthPercent >= 0.3f)
-        {
-            targetColor = midHealthColor;
-        }
-        else
-        {
-            targetColor = lowHealthColor;
-        }
-
-        healthFillImage.color = targetColor;
-    }
-
-    public void UpdateCoinUI()
-    {
-        if (player != null && coinText != null)
-        {
-            coinText.text = $"Coins: {player.GetCoins()}";
-        }
-    }
-
-    public void UpdateKillUI()
-    {
-        if (enemyCountText != null && player != null)
-        {
-            enemyCountText.text = $"Kills: {player.GetKills()}";
-        }
+        if (remaining <= 0) { timerText.color = new Color(1f, 0.2f, 0.2f, 1f); timerText.text = "00:00"; }
     }
 
     // ==================== GameOver ====================
 
-    public void OnGameOver()
-    {
-        ShowGameOver();
-    }
+    public void OnGameOver() => ShowGameOver();
 
     public void ShowGameOver()
     {
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
+        if (gameOverPanel == null) return;
 
-            if (finalCoinText != null && player != null)
-            {
-                finalCoinText.text = $"Coins: {player.GetCoins()}";
-            }
+        if (settingsPanel != null) settingsPanel.SetActive(false);
+        gameOverPanel.SetActive(true);
 
-            if (finalKillText != null && player != null)
-            {
-                finalKillText.text = $"Kills: {player.GetKills()}";
-            }
+        if (finalCoinText != null && player != null) finalCoinText.text = $"Coins: {player.GetCoins()}";
+        if (finalKillText != null && player != null) finalKillText.text = $"Kills: {player.GetKills()}";
 
-            Time.timeScale = 0f;
-            Debug.Log("⏸️ Game Paused");
-        }
+        Time.timeScale = 0f;
     }
 
     public void HideGameOver()
     {
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(false);
-        }
-
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
         Time.timeScale = 1f;
-        Debug.Log("▶️ Game Resumed");
     }
 
-    // ==================== 重新开始 ====================
+    // ==================== 按钮方法 ====================
 
     public void RestartGame()
     {
-        Debug.Log("🔄 Restarting Game...");
-
         Time.timeScale = 1f;
-
-        if (player != null)
-        {
-            player.RestartGame();
-        }
-        else
-        {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-        }
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // ==================== 公共方法 ====================
-
-    public void OnPlayerDamaged()
+    public void QuitToGameOver()
     {
-        UpdateHealthUI();
+        if (gameManager != null) gameManager.GameOver(false);
+        else ShowGameOver();
     }
 
-    public void OnPlayerCoinChanged()
+    public void GoToSelection()
     {
-        UpdateCoinUI();
+        Time.timeScale = 1f;
+        SceneManager.LoadScene("DifficultySelection");
     }
 
-    public void OnPlayerKillChanged()
-    {
-        UpdateKillUI();
-    }
+    // ==================== 外部调用 ====================
 
-    public void OnPlayerDied()
-    {
-        ShowGameOver();
-    }
+    public void OnPlayerDamaged() => UpdateHealthUI();
+    public void OnPlayerCoinChanged() => UpdateCoinUI();
+    public void OnPlayerKillChanged() => UpdateKillUI();
+    public void OnPlayerDied() => ShowGameOver();
 }

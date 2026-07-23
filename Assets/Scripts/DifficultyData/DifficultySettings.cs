@@ -24,14 +24,12 @@ public class DifficultySettings : ScriptableObject
     public bool enableScaling = true;
     public float scalingInterval = 30f;
 
-    // 上限值
     public float spawnIntervalMin = 0.3f;
     public int spawnPerIntervalMax = 5;
     public float speedMultiplierMax = 2.5f;
     public float healthMultiplierMax = 3f;
     public float damageMultiplierMax = 2f;
 
-    // 每级增加值
     public float spawnIntervalStep = 0.05f;
     public float spawnPerIntervalStep = 0.1f;
     public float speedMultiplierStep = 0.03f;

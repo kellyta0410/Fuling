@@ -142,48 +142,9 @@ public class PlayerController : MonoBehaviour
         attackRange = currentCharacterData.baseAttackRange;
         attackCooldown = currentCharacterData.baseAttackCooldown;
 
-        // ⭐ 暂时注释掉技能加成（技能系统以后再加）
-        // ApplySkillBonuses();
-
         Debug.Log($"👤 加载角色: {currentCharacterData.characterName}");
         Debug.Log($"  血量: {maxHealth}, 速度: {speed}, 攻击: {attackDamage}");
     }
-
-    // ⭐ 暂时注释掉技能加成方法（技能系统以后再加）
-    /*
-    void ApplySkillBonuses()
-    {
-        if (dataManager == null || currentCharacterData == null) return;
-
-        foreach (SkillData skill in currentCharacterData.skills)
-        {
-            int level = dataManager.GetSkillLevel(skill);
-            if (level <= 0) continue;
-
-            switch (skill.skillType)
-            {
-                case SkillType.HealthBoost:
-                    maxHealth += skill.GetBonusValue(level);
-                    break;
-                case SkillType.SpeedBoost:
-                    speed += skill.GetBonusValue(level);
-                    break;
-                case SkillType.DamageBoost:
-                    attackDamage += Mathf.RoundToInt(skill.GetBonusValue(level));
-                    break;
-                case SkillType.AttackSpeed:
-                    attackCooldown -= skill.GetBonusValue(level);
-                    attackCooldown = Mathf.Max(0.2f, attackCooldown);
-                    break;
-            }
-        }
-
-        if (currentHealth > maxHealth)
-        {
-            currentHealth = maxHealth;
-        }
-    }
-    */
 
     // ==================== Update ====================
 
@@ -469,7 +430,7 @@ public class PlayerController : MonoBehaviour
             uiManager.OnPlayerDied();
         }
 
-        // GameOver 时通知 GameManager（由 GameManager 处理记录保存）
+        // GameOver 时通知 GameManager
         GameManager gm = GameManager.Instance;
         if (gm != null)
         {
@@ -638,11 +599,6 @@ public class PlayerController : MonoBehaviour
         {
             if (col != null && !col.isTrigger) col.enabled = true;
         }
-    }
-
-    public void RestartGame()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     void OnDrawGizmosSelected()
