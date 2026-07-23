@@ -17,7 +17,7 @@ public class UIManager : MonoBehaviour
     public Button restartButton;
 
     [Header("计时器 UI")]
-    public TextMeshProUGUI timerText;  // 从 GameManager 移过来的
+    public TextMeshProUGUI timerText;
 
     [Header("血条颜色")]
     public Color fullHealthColor = Color.green;
@@ -201,6 +201,7 @@ public class UIManager : MonoBehaviour
     {
         if (player != null && healthSlider != null)
         {
+            // ⭐ 这里调用 player.GetHealthPercent()
             float healthPercent = player.GetHealthPercent();
             healthSlider.value = healthPercent;
             UpdateHealthBarColor(healthPercent);

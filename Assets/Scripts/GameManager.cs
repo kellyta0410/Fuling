@@ -272,6 +272,8 @@ public class GameManager : MonoBehaviour
         OnTimerVisibilityChanged(!isInfinite);
     }
 
+    // GameManager.cs 中的 GameOver 方法修改
+
     public void GameOver(bool isWin)
     {
         if (isGameOver) return;
@@ -287,36 +289,41 @@ public class GameManager : MonoBehaviour
         {
             coins = player.GetCoins();
             kills = player.GetKills();
-            Debug.Log("从 Player 获取数据: 金币=" + coins + ", 击杀=" + kills);
-        }
-        else
-        {
-            Debug.LogWarning("未找到 PlayerController");
         }
 
         float timeToSave = 0f;
-
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
             timeToSave = GetElapsedTime();
-            Debug.Log("无限模式游玩时长: " + timeToSave + "秒");
         }
         else
         {
             timeToSave = timeLimit - remainingTime;
             if (timeToSave < 0) timeToSave = 0;
-            Debug.Log("生存时间: " + timeToSave + "秒");
         }
 
-        SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+        // ⭐ 使用 GameDataManager 保存记录和金币
+        GameDataManager dataManager = GameDataManager.Instance;
+        if (dataManager != null)
+        {
+            // 保存最高纪录
+            dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
 
-        // 触发 GameOver 事件
+            // 累加总金币（通关获得的金币加入总资产）
+            dataManager.AddCoins(coins);
+        }
+        else
+        {
+            // 降级方案：直接保存
+            SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+        }
+
         if (OnGameOver != null)
         {
             OnGameOver();
         }
 
-        Debug.Log("游戏结束！" + currentDifficulty.difficultyName + " 记录已保存");
+        Debug.Log($"游戏结束！{currentDifficulty.difficultyName} 金币: {coins}, 击杀: {kills}, 时间: {timeToSave:F1}s");
     }
 
     void SaveBestRecord(string difficultyName, int coins, int kills, float time)

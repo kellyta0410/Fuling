@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -10,85 +9,94 @@ public class PlayerController : MonoBehaviour
     private CharacterController controller;
     private Animator animator;
     private UIManager uiManager;
+    private GameDataManager dataManager;
 
-    // ==================== 移动参数 ====================
-    [Header("移动参数")]
+    // ==================== 基础属性（从角色配置加载） ====================
+    [Header("基础属性（运行时从角色配置加载）")]
+    public float maxHealth = 100f;
     public float speed = 4f;
+    public int attackDamage = 20;
+    public float attackRange = 2f;
+    public float attackCooldown = 1f;
+
+    [Header("重力参数")]
     public float gravity = 3.5f;
     public float smoothRotation = 10f;
 
-    // ==================== 战斗参数 ====================
-    [Header("战斗参数")]
-    public float maxHealth = 100f;
-    private float currentHealth;
-    public float attackRange = 2f;
-    public float attackCooldown = 1f;
-    public int attackDamage = 20;
+    [Header("攻击参数")]
     public float attackDuration = 0.5f;
     public float attackDamageDelay = 0.3f;
 
-    // ==================== 地面检测 ====================
     [Header("地面检测")]
     public LayerMask groundLayer;
     public float groundCheckDistance = 0.5f;
 
-    // ==================== 死亡参数 ====================
     [Header("死亡参数")]
     public float deathDelay = 1.5f;
 
     // ==================== 摇杆 UI ====================
-    [Header("摇杆 UI（拖拽赋值）")]
     public RectTransform joystickBg;
     public RectTransform joystickHandle;
     public float joystickRadius = 150f;
 
-    // ==================== 按钮 UI ====================
-    [Header("按钮 UI（拖拽赋值）")]
+    [Header("按钮 UI")]
     public Button actionButton;
 
-    // ==================== 私有变量 ====================
+    // ==================== 运行时数据 ====================
+    private float currentHealth;
+    private int coins = 0;
+    private int kills = 0;
+    private bool isDead = false;
+    private bool isDying = false;
+
+    // ==================== 移动相关 ====================
     private Vector3 velocity = Vector3.zero;
     private Vector2 inputVector = Vector2.zero;
     private Vector2 joystickInput = Vector2.zero;
     private Vector2 keyboardInput = Vector2.zero;
     private bool isDragging = false;
     private Vector2 touchStartPos;
-
     private bool isGrounded = false;
+    private Vector3 lastGroundPosition = Vector3.zero;
+    private bool wasGrounded = false;
 
+    // ==================== 攻击相关 ====================
     private float attackTimer = 0f;
     private bool isAttacking = false;
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
 
-    private int coins = 0;
-    private int kills = 0;
-    private bool isDead = false;
-    private bool isDying = false;
+    // ==================== 角色配置 ====================
+    private CharacterData currentCharacterData;
 
-    private Vector3 lastGroundPosition = Vector3.zero;
-    private bool wasGrounded = false;
-
-    // ==================== 属性（供外部访问） ====================
-    public float GetHealthPercent() => currentHealth / maxHealth;
+    // ==================== 属性 ====================
+    public float HealthPercent => currentHealth / maxHealth;
     public int GetCoins() => coins;
     public int GetKills() => kills;
     public bool IsDead() => isDead;
+    public CharacterData GetCharacterData() => currentCharacterData;
+
+    public float GetHealthPercent()
+    {
+        return currentHealth / maxHealth;
+    }
+
+    // ==================== Unity 生命周期 ====================
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
         uiManager = FindObjectOfType<UIManager>();
+        dataManager = GameDataManager.Instance;
 
+        // 加载角色数据
+        LoadCharacterData();
+
+        // 设置初始血量
         currentHealth = maxHealth;
 
-        if (controller != null)
-        {
-            controller.minMoveDistance = 0.001f;
-            controller.enableOverlapRecovery = true;
-        }
-
+        // 设置地面层
         int groundLayerIndex = LayerMask.NameToLayer("Ground");
         if (groundLayerIndex != -1)
         {
@@ -99,6 +107,7 @@ public class PlayerController : MonoBehaviour
             groundLayer = ~0;
         }
 
+        // 平台设置
 #if UNITY_ANDROID || UNITY_IOS
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
@@ -107,6 +116,76 @@ public class PlayerController : MonoBehaviour
         if (actionButton != null) actionButton.gameObject.SetActive(false);
 #endif
     }
+
+    // ==================== 角色数据加载 ====================
+
+    void LoadCharacterData()
+    {
+        if (dataManager == null)
+        {
+            Debug.LogWarning("GameDataManager 未找到，使用默认属性");
+            return;
+        }
+
+        currentCharacterData = dataManager.CurrentCharacter;
+
+        if (currentCharacterData == null)
+        {
+            Debug.LogWarning("未选择角色，使用默认属性");
+            return;
+        }
+
+        // 应用角色基础属性
+        maxHealth = currentCharacterData.baseHealth;
+        speed = currentCharacterData.baseSpeed;
+        attackDamage = currentCharacterData.baseAttack;
+        attackRange = currentCharacterData.baseAttackRange;
+        attackCooldown = currentCharacterData.baseAttackCooldown;
+
+        // ⭐ 暂时注释掉技能加成（技能系统以后再加）
+        // ApplySkillBonuses();
+
+        Debug.Log($"👤 加载角色: {currentCharacterData.characterName}");
+        Debug.Log($"  血量: {maxHealth}, 速度: {speed}, 攻击: {attackDamage}");
+    }
+
+    // ⭐ 暂时注释掉技能加成方法（技能系统以后再加）
+    /*
+    void ApplySkillBonuses()
+    {
+        if (dataManager == null || currentCharacterData == null) return;
+
+        foreach (SkillData skill in currentCharacterData.skills)
+        {
+            int level = dataManager.GetSkillLevel(skill);
+            if (level <= 0) continue;
+
+            switch (skill.skillType)
+            {
+                case SkillType.HealthBoost:
+                    maxHealth += skill.GetBonusValue(level);
+                    break;
+                case SkillType.SpeedBoost:
+                    speed += skill.GetBonusValue(level);
+                    break;
+                case SkillType.DamageBoost:
+                    attackDamage += Mathf.RoundToInt(skill.GetBonusValue(level));
+                    break;
+                case SkillType.AttackSpeed:
+                    attackCooldown -= skill.GetBonusValue(level);
+                    attackCooldown = Mathf.Max(0.2f, attackCooldown);
+                    break;
+            }
+        }
+
+        if (currentHealth > maxHealth)
+        {
+            currentHealth = maxHealth;
+        }
+    }
+    */
+
+    // ==================== Update ====================
 
     void Update()
     {
@@ -120,6 +199,7 @@ public class PlayerController : MonoBehaviour
         inputVector = keyboardInput;
 #endif
 
+        // 攻击冷却
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -130,6 +210,7 @@ public class PlayerController : MonoBehaviour
             }
         }
 
+        // 攻击计时
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -141,6 +222,7 @@ public class PlayerController : MonoBehaviour
             }
         }
 
+        // 移动
         Vector3 moveDir = GetMoveDirection(inputVector);
         float inputMagnitude = Mathf.Clamp01(inputVector.magnitude);
 
@@ -150,6 +232,7 @@ public class PlayerController : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
         }
 
+        // 地面检测
         isGrounded = IsGrounded();
 
         if (isGrounded && !wasGrounded)
@@ -167,6 +250,7 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
+        // 移动逻辑
         float currentSpeed = isAttacking ? speed * 0.3f : speed;
         if (isGrounded)
         {
@@ -207,6 +291,7 @@ public class PlayerController : MonoBehaviour
         velocity.y -= gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
 
+        // 地面吸附
         if (isGrounded && velocity.y <= 0)
         {
             if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, 1.5f, groundLayer))
@@ -224,12 +309,12 @@ public class PlayerController : MonoBehaviour
     }
 
     // ==================== 攻击 ====================
+
     void PerformAction()
     {
         PerformAttack();
     }
 
-    // ==================== 攻击逻辑 ====================
     void PerformAttack()
     {
         if (!canAttack || isAttacking || isDead || isDying) return;
@@ -248,7 +333,11 @@ public class PlayerController : MonoBehaviour
     {
         yield return new WaitForSeconds(attackDamageDelay);
 
-        Collider[] hitColliders = Physics.OverlapSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
+        Collider[] hitColliders = Physics.OverlapSphere(
+            transform.position + transform.forward * attackRange * 0.5f,
+            attackRange
+        );
+
         foreach (Collider hit in hitColliders)
         {
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
@@ -260,13 +349,13 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ==================== 受伤（平滑扣血） ====================
+    // ==================== 受伤 ====================
+
     public void TakeDamage(float damage)
     {
         if (isDead || isDying) return;
 
         animator.SetTrigger("Hit");
-
         StartCoroutine(SmoothDamage(damage));
     }
 
@@ -283,20 +372,13 @@ public class PlayerController : MonoBehaviour
             float t = elapsed / duration;
             currentHealth = Mathf.Lerp(startHealth, targetHealth, t);
 
-            if (uiManager != null)
-            {
-                uiManager.UpdateHealthUI();
-            }
+            if (uiManager != null) uiManager.UpdateHealthUI();
 
             yield return null;
         }
 
         currentHealth = targetHealth;
-
-        if (uiManager != null)
-        {
-            uiManager.UpdateHealthUI();
-        }
+        if (uiManager != null) uiManager.UpdateHealthUI();
 
         if (currentHealth <= 0)
         {
@@ -305,86 +387,51 @@ public class PlayerController : MonoBehaviour
     }
 
     // ==================== 死亡 ====================
+
     void Die()
     {
         if (isDead || isDying) return;
 
         isDying = true;
-        isDead = false;
-
         velocity = Vector3.zero;
 
-        Vector3 rayOrigin = transform.position + Vector3.up * 0.5f;
-        float rayDistance = 10f;
-        bool foundGround = false;
+        // 放到地面
+        PlaceOnGround();
 
-        Debug.DrawRay(rayOrigin, Vector3.down * rayDistance, Color.red, 2f);
-        RaycastHit hit;
-        if (Physics.Raycast(rayOrigin, Vector3.down, out hit, rayDistance, groundLayer))
-        {
-            Vector3 newPos = transform.position;
-            newPos.y = hit.point.y + 0.1f;
-            transform.position = newPos;
-            foundGround = true;
-            Debug.Log($"⬇️ 将玩家放到地面，高度: {newPos.y}");
-        }
-
-        if (!foundGround)
-        {
-            float radius = controller != null ? controller.radius * 0.5f : 0.3f;
-            if (Physics.SphereCast(rayOrigin, radius, Vector3.down, out hit, rayDistance, groundLayer))
-            {
-                Vector3 newPos = transform.position;
-                newPos.y = hit.point.y + 0.1f;
-                transform.position = newPos;
-                foundGround = true;
-                Debug.Log($"⬇️ 使用 SphereCast 放到地面，高度: {newPos.y}");
-            }
-        }
-
-        if (!foundGround)
-        {
-            float height = controller != null ? controller.height : 2f;
-            Vector3 footPos = transform.position - Vector3.up * (height * 0.5f);
-            if (Physics.Raycast(footPos, Vector3.down, out hit, rayDistance, groundLayer))
-            {
-                Vector3 newPos = transform.position;
-                newPos.y = hit.point.y + 0.1f;
-                transform.position = newPos;
-                foundGround = true;
-                Debug.Log($"⬇️ 从脚底找到地面，高度: {newPos.y}");
-            }
-        }
-
-        if (!foundGround)
-        {
-            Vector3 newPos = transform.position;
-            newPos.y = 0.1f;
-            transform.position = newPos;
-            Debug.LogWarning("⚠️ 未找到地面，放到 y=0.1");
-        }
-
-        if (controller != null)
-        {
-            controller.enabled = false;
-        }
+        if (controller != null) controller.enabled = false;
 
         Collider[] colliders = GetComponents<Collider>();
         foreach (Collider col in colliders)
         {
-            if (col != null && !col.isTrigger)
-            {
-                col.enabled = false;
-            }
+            if (col != null && !col.isTrigger) col.enabled = false;
         }
 
         animator.SetBool("IsMoving", false);
         animator.SetBool("IsAttacking", false);
-
         animator.SetTrigger("Die");
-        Debug.Log($"💀 玩家死亡，位置: {transform.position}");
+
+        Debug.Log($"💀 玩家死亡");
 
         StartCoroutine(WaitForDeathAnimationEnd());
+    }
+
+    void PlaceOnGround()
+    {
+        Vector3 rayOrigin = transform.position + Vector3.up * 0.5f;
+        float rayDistance = 10f;
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, rayDistance, groundLayer))
+        {
+            Vector3 newPos = transform.position;
+            newPos.y = hit.point.y + 0.1f;
+            transform.position = newPos;
+        }
+        else
+        {
+            Vector3 newPos = transform.position;
+            newPos.y = 0.1f;
+            transform.position = newPos;
+        }
     }
 
     IEnumerator WaitForDeathAnimationEnd()
@@ -398,63 +445,54 @@ public class PlayerController : MonoBehaviour
             if (stateInfo.IsName("Die") || stateInfo.IsName("Death") || stateInfo.IsName("Dead"))
             {
                 if (stateInfo.normalizedTime >= 0.95f)
-                {
-                    Debug.Log($"💀 死亡动画播放完成！(进度: {stateInfo.normalizedTime:F2})");
                     break;
-                }
             }
             else
             {
                 if (stateInfo.normalizedTime >= 0.95f && stateInfo.length > 0)
-                {
-                    Debug.Log($"💀 动画状态已切换，但当前动画进度 {stateInfo.normalizedTime:F2}，视为完成");
                     break;
-                }
             }
 
             yield return null;
         }
 
-        Debug.Log($"⏳ 等待 {deathDelay} 秒后显示 GameOver...");
         yield return new WaitForSeconds(deathDelay);
 
         isDead = true;
         isDying = false;
         velocity = Vector3.zero;
 
-        if (controller != null)
-        {
-            controller.enabled = false;
-        }
+        if (controller != null) controller.enabled = false;
 
         if (uiManager != null)
         {
             uiManager.OnPlayerDied();
-            Debug.Log($"💀 显示游戏结束面板（死亡动画完成 + 延迟 {deathDelay} 秒）");
+        }
+
+        // GameOver 时通知 GameManager（由 GameManager 处理记录保存）
+        GameManager gm = GameManager.Instance;
+        if (gm != null)
+        {
+            gm.GameOver(false);
         }
     }
 
-    // ==================== 金币收集 ====================
+    // ==================== 金币和击杀 ====================
+
     public void AddCoin(int amount)
     {
         coins += amount;
-
-        if (uiManager != null)
-        {
-            uiManager.OnPlayerCoinChanged();
-        }
+        if (uiManager != null) uiManager.OnPlayerCoinChanged();
     }
 
     public void AddKill()
     {
         kills++;
         Debug.Log($"💀 击杀数: {kills}");
-
-        if (uiManager != null)
-        {
-            uiManager.OnPlayerKillChanged();
-        }
+        if (uiManager != null) uiManager.OnPlayerKillChanged();
     }
+
+    // ==================== 动画 ====================
 
     void UpdateAnimations()
     {
@@ -468,6 +506,8 @@ public class PlayerController : MonoBehaviour
         animator.SetFloat("Speed", currentSpeed);
         animator.SetFloat("VerticalSpeed", velocity.y);
     }
+
+    // ==================== 输入 ====================
 
     void HandleKeyboardInput()
     {
@@ -483,11 +523,7 @@ public class PlayerController : MonoBehaviour
         keyboardInput = new Vector2(h, v);
 
         if (Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0)) PerformAction();
-
-        if (Input.GetKeyDown(KeyCode.K))
-        {
-            TakeDamage(999f);
-        }
+        if (Input.GetKeyDown(KeyCode.K)) TakeDamage(999f);
     }
 
     void HandleTouchInput()
@@ -500,8 +536,7 @@ public class PlayerController : MonoBehaviour
             {
                 isDragging = false;
                 joystickInput = Vector2.zero;
-                if (joystickHandle != null)
-                    joystickHandle.anchoredPosition = Vector2.zero;
+                if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
             }
             return;
         }
@@ -519,8 +554,7 @@ public class PlayerController : MonoBehaviour
                         RectTransformUtility.ScreenPointToLocalPointInRectangle(
                             joystickBg, touch.position, null, out touchStartPos
                         );
-                        if (joystickHandle != null)
-                            joystickHandle.anchoredPosition = Vector2.zero;
+                        if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
                     }
                     break;
 
@@ -536,9 +570,7 @@ public class PlayerController : MonoBehaviour
                         float distance = Mathf.Min(delta.magnitude, joystickRadius);
                         Vector2 clampedDelta = delta.normalized * distance;
 
-                        if (joystickHandle != null)
-                            joystickHandle.anchoredPosition = clampedDelta;
-
+                        if (joystickHandle != null) joystickHandle.anchoredPosition = clampedDelta;
                         joystickInput = clampedDelta / joystickRadius;
                     }
                     break;
@@ -549,13 +581,14 @@ public class PlayerController : MonoBehaviour
                     {
                         isDragging = false;
                         joystickInput = Vector2.zero;
-                        if (joystickHandle != null)
-                            joystickHandle.anchoredPosition = Vector2.zero;
+                        if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
                     }
                     break;
             }
         }
     }
+
+    // ==================== 工具方法 ====================
 
     bool IsGrounded()
     {
@@ -577,8 +610,7 @@ public class PlayerController : MonoBehaviour
 
     Vector3 GetMoveDirection(Vector2 input)
     {
-        if (input.magnitude < 0.1f)
-            return Vector3.zero;
+        if (input.magnitude < 0.1f) return Vector3.zero;
 
         Vector3 forward = Camera.main.transform.forward;
         Vector3 right = Camera.main.transform.right;
@@ -590,36 +622,21 @@ public class PlayerController : MonoBehaviour
         return (forward * input.y + right * input.x).normalized;
     }
 
-    public void Respawn()
+    public void ResetState()
     {
         isDead = false;
         isDying = false;
         currentHealth = maxHealth;
-        transform.position = Vector3.zero;
         velocity = Vector3.zero;
+        coins = 0;
+        kills = 0;
 
-        if (controller != null)
-        {
-            controller.enabled = true;
-            controller.radius = 0.5f;
-            controller.height = 2f;
-        }
+        if (controller != null) controller.enabled = true;
 
         Collider[] colliders = GetComponents<Collider>();
         foreach (Collider col in colliders)
         {
-            if (col != null && !col.isTrigger)
-            {
-                col.enabled = true;
-            }
-        }
-
-        animator.SetTrigger("Respawn");
-
-        if (uiManager != null)
-        {
-            uiManager.HideGameOver();
-            uiManager.UpdateHealthUI();
+            if (col != null && !col.isTrigger) col.enabled = true;
         }
     }
 

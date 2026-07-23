@@ -112,6 +112,13 @@ public class MainMenuManager : MonoBehaviour
 
         // 保存设置
         SaveSettings();
+
+        settingsPanel.SetActive(false);
+    }
+
+    public void CloseCredits()
+    {
+        CreditsPanel.SetActive(false);
     }
 
     /// <summary>
