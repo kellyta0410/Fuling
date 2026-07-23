@@ -14,8 +14,6 @@ public class EnemyData : ScriptableObject
     [Header("奖励")]
     public int coinReward = 10;
 
-    [Header("视觉")]
-    public Color enemyColor = Color.red;
     public float scale = 1f;
 
     [Header("动画参数")]

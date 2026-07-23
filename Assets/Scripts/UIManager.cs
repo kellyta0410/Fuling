@@ -16,6 +16,12 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI finalKillText;
     public Button restartButton;
 
+    [Header("血条颜色")]
+    public Color fullHealthColor = Color.green;
+    public Color midHealthColor = Color.yellow;
+    public Color lowHealthColor = Color.red;
+    public Image healthFillImage;  // ⭐ 血条的 Fill 图片
+
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
@@ -45,7 +51,24 @@ public class UIManager : MonoBehaviour
             gameOverPanel.SetActive(false);
         }
 
-        // ⭐ 强制设置血条为满血
+        // ⭐ 获取血条的 Fill 图片
+        if (healthSlider != null && healthFillImage == null)
+        {
+            // 尝试获取 Slider 的 Fill 子物体
+            Transform fillTransform = healthSlider.transform.Find("Fill Area/Fill");
+            if (fillTransform != null)
+            {
+                healthFillImage = fillTransform.GetComponent<Image>();
+            }
+
+            // 如果没找到，尝试直接获取
+            if (healthFillImage == null)
+            {
+                healthFillImage = healthSlider.GetComponentInChildren<Image>();
+            }
+        }
+
+        // 强制设置血条为满血
         if (healthSlider != null)
         {
             healthSlider.value = 1f;
@@ -59,7 +82,7 @@ public class UIManager : MonoBehaviour
         // 确保游戏时间正常
         Time.timeScale = 1f;
 
-        // ⭐ 延迟一帧再更新一次
+        // 延迟一帧再更新一次
         StartCoroutine(DelayedUIUpdate());
     }
 
@@ -75,10 +98,10 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // ⭐ 延迟更新
+    // 延迟更新
     IEnumerator DelayedUIUpdate()
     {
-        yield return null; // 等待一帧
+        yield return null;
         UpdateHealthUI();
         UpdateCoinUI();
         UpdateKillUI();
@@ -90,8 +113,38 @@ public class UIManager : MonoBehaviour
     {
         if (player != null && healthSlider != null)
         {
-            healthSlider.value = player.GetHealthPercent();
+            float healthPercent = player.GetHealthPercent();
+            healthSlider.value = healthPercent;
+
+            // ⭐ 更新血条颜色
+            UpdateHealthBarColor(healthPercent);
         }
+    }
+
+    // ==================== ⭐ 血条颜色更新 ====================
+    void UpdateHealthBarColor(float healthPercent)
+    {
+        if (healthFillImage == null) return;
+
+        Color targetColor;
+
+        if (healthPercent >= 0.6f)
+        {
+            // 60% - 100%: 绿色
+            targetColor = fullHealthColor;
+        }
+        else if (healthPercent >= 0.3f)
+        {
+            // 30% - 60%: 黄色
+            targetColor = midHealthColor;
+        }
+        else
+        {
+            // 0% - 30%: 红色
+            targetColor = lowHealthColor;
+        }
+
+        healthFillImage.color = targetColor;
     }
 
     public void UpdateCoinUI()
