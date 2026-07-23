@@ -52,11 +52,14 @@ public class EnemyAI : MonoBehaviour
     [Header("面向检测")]
     public float facingAngleThreshold = 45f; // 允许的攻击角度偏差
 
+    [Header("难度影响")]
+    [HideInInspector] public float speedMultiplier = 1f;
+
     void Start()
     {
         animator = GetComponent<Animator>();
         player = FindObjectOfType<PlayerController>();
-        agent = GetComponent<NavMeshAgent>();
+        agent = GetComponent<NavMeshAgent>(); // ⭐ 这里直接赋值，不加类型声明
 
         if (enemyData != null)
         {
@@ -92,6 +95,13 @@ public class EnemyAI : MonoBehaviour
         }
 
         CreateHealthBar();
+
+        // ⭐ 应用速度倍率（删除原来的错误代码，用这个）
+        if (agent != null && enemyData != null)
+        {
+            agent.speed = enemyData.speed * speedMultiplier;
+            Debug.Log($"🏃 {gameObject.name} 速度: {enemyData.speed} × {speedMultiplier} = {agent.speed}");
+        }
     }
 
     void Update()

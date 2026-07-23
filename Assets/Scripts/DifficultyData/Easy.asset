@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c7c20047a758834e85633327e2d722c, type: 3}
+  m_Name: Easy
+  m_EditorClassIdentifier: 
+  difficultyName: "\u7B80\u5355"
+  sceneName: Easy
+  isInfiniteMode: 0
+  timeLimit: 90
+  spawnInterval: 2
+  spawnPerInterval: 1
+  enemySpeedMultiplier: 1
+  enableMaxLimit: 1
+  maxEnemyCount: 30
+  enableCooldown: 1
+  cooldownTime: 10
+  allowedEnemyPrefabs:
+  - {fileID: 2051455957182502511, guid: c7149de1882fe0f4d9b109749982959b, type: 3}

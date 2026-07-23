@@ -245,31 +245,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2d19fb306a6ead34f9eaf49d30ea2dca, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 2
-  jumpSpeed: 5
+  speed: 5
   gravity: 10
   smoothRotation: 10
-  airControl: 0.5
-  stepOffset: 0.3
-  slopeLimit: 45
-  skinWidth: 0.08
   maxHealth: 100
-  currentHealth: 0
   attackRange: 2
   attackCooldown: 1
   attackDamage: 20
-  attackDuration: 0.5
+  attackDuration: 0.1
+  attackDamageDelay: 0.3
   groundLayer:
     serializedVersion: 2
     m_Bits: 8
   groundCheckDistance: 0.3
-  healthSlider: {fileID: 0}
-  gameOverPanel: {fileID: 0}
-  coinText: {fileID: 0}
-  enemyCountText: {fileID: 0}
-  finalCoinText: {fileID: 0}
+  deathDelay: 1.5
   joystickBg: {fileID: 0}
   joystickHandle: {fileID: 0}
   joystickRadius: 150
-  jumpButton: {fileID: 0}
   actionButton: {fileID: 0}
