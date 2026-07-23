@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 3326042165485003100}
   - component: {fileID: 219992877768298468}
-  - component: {fileID: 144512043939829044}
   m_Layer: 0
   m_Name: Game Manager
   m_TagString: Untagged
@@ -57,23 +56,3 @@ MonoBehaviour:
   currentSpeedMultiplier: 0
   currentHealthMultiplier: 0
   currentDamageMultiplier: 0
---- !u!114 &144512043939829044
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6565582277956161847}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 25887f65520398f4385df411ed76cc30, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  audioMixer: {fileID: 24100000, guid: a741f1adb2f6cba47af2510ffd5e534b, type: 2}
-  settingsPanel: {fileID: 0}
-  musicSlider: {fileID: 0}
-  sfxSlider: {fileID: 0}
-  musicValueText: {fileID: 0}
-  sfxValueText: {fileID: 0}
-  defaultMusicVolume: 0.8
-  defaultSFXVolume: 0.8
