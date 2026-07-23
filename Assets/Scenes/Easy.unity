@@ -740,11 +740,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyPrefabs:
   - {fileID: 2051455957182502511, guid: c7149de1882fe0f4d9b109749982959b, type: 3}
-  - {fileID: 2051455957182502511, guid: 40a5ef2c7bae0f248ab67a341df39511, type: 3}
-  - {fileID: 2051455957182502511, guid: 36bf8170fb708bd4688f81f836519cbe, type: 3}
   playerTarget: {fileID: 1408689811}
-  enableMaxLimit: 1
-  maxEnemyCount: 20
   spawnPoints:
   - point: {fileID: 1115792774}
     activationRadius: 20
@@ -782,11 +778,7 @@ MonoBehaviour:
     isOnCooldown: 0
     cooldownTimer: 0
     hasSpawnedOnce: 0
-  spawnInterval: 10
-  spawnPerInterval: 3
-  cooldownTime: 10
-  enableCooldown: 1
-  currentDifficulty: {fileID: 0}
+  currentDifficulty: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   useDifficultySettings: 1
   showDebugLogs: 1
 --- !u!1 &832575517
@@ -1752,12 +1744,14 @@ MonoBehaviour:
   finalCoinText: {fileID: 1195156575}
   finalKillText: {fileID: 1795671632}
   restartButton: {fileID: 1533821975}
+  timerText: {fileID: 0}
   fullHealthColor: {r: 0, g: 1, b: 0, a: 1}
   midHealthColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   lowHealthColor: {r: 1, g: 0, b: 0, a: 1}
   healthFillImage: {fileID: 0}
   player: {fileID: 1408689812}
   enemySpawner: {fileID: 790284417}
+  gameManager: {fileID: 0}
 --- !u!1 &2075901028
 GameObject:
   m_ObjectHideFlags: 0
@@ -1976,13 +1970,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 45a28c4ce68c3e945b39f5be0ab1aa55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timerText: {fileID: 8772688028918430651}
   currentDifficulty: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   enemySpawner: {fileID: 790284417}
   easyConfig: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   normalConfig: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   hardConfig: {fileID: 11400000, guid: e4769ee8dacc85243a7a48ab19bd35d0, type: 2}
   infiniteConfig: {fileID: 11400000, guid: d5105edb7b30cd940a7d3bad358a3c47, type: 2}
+  scalingLevel: 0
+  currentSpawnInterval: 0
+  currentSpawnPerInterval: 0
+  currentSpeedMultiplier: 0
+  currentHealthMultiplier: 0
+  currentDamageMultiplier: 0
 --- !u!1001 &4394452277128781400
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2287,18 +2286,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: d7d90a95a090d4b4a960e32b74aa8496, type: 3}
---- !u!114 &8772688028918430651 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8237477027459005745, guid: d7d90a95a090d4b4a960e32b74aa8496,
-    type: 3}
-  m_PrefabInstance: {fileID: 8772688028918430650}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

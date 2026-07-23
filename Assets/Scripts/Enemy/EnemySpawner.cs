@@ -5,6 +5,7 @@ using UnityEngine.AI;
 public class EnemySpawner : MonoBehaviour
 {
     [Header("核心设置")]
+    [HideInInspector]
     public List<GameObject> enemyPrefabs;
     public Transform playerTarget;
 
@@ -70,11 +71,6 @@ public class EnemySpawner : MonoBehaviour
             AutoFindSpawnPoints();
         }
 
-        if (enemyPrefabs.Count == 0)
-        {
-            Debug.LogError("没有敌人预制体");
-        }
-
         if (useDifficultySettings && currentDifficulty != null)
         {
             // 使用默认值初始化
@@ -91,12 +87,16 @@ public class EnemySpawner : MonoBehaviour
             }
         }
 
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0)
+        {
+            Debug.LogError("没有敌人预制体！请在 DifficultySettings 中配置 allowedEnemyPrefabs");
+        }
+
         string limitText = enableMaxLimit ? "上限: " + maxEnemyCount : "无限生成";
         string cooldownText = enableCooldown ? "冷却: " + cooldownTime + "秒" : "无冷却";
         Debug.Log("找到 " + spawnPoints.Count + " 个生成点 | " + limitText + " | " + cooldownText);
     }
 
-    // 由 GameManager 调用，更新生成参数和倍率
     public void ApplyScalingParameters(
         float spawnInterval,
         int spawnPerInterval,
@@ -166,7 +166,7 @@ public class EnemySpawner : MonoBehaviour
 
     void Update()
     {
-        if (enemyPrefabs.Count == 0 || playerTarget == null) return;
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0 || playerTarget == null) return;
 
         CleanupAllEnemies();
 
@@ -329,7 +329,6 @@ public class EnemySpawner : MonoBehaviour
             EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
             if (enemyScript != null)
             {
-                // 应用当前倍率
                 enemyScript.ApplyScalingMultipliers(
                     currentSpeedMultiplier,
                     currentHealthMultiplier,

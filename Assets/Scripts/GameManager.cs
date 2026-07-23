@@ -6,9 +6,6 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
-    [Header("UI 组件")]
-    public TextMeshProUGUI timerText;
-
     [Header("游戏状态")]
     public DifficultySettings currentDifficulty;
     public EnemySpawner enemySpawner;
@@ -32,6 +29,11 @@ public class GameManager : MonoBehaviour
     private float scalingTimer = 0f;
     private bool isGameRunning = false;
     private bool isGameOver = false;
+
+    // 事件：当计时器更新时触发
+    public System.Action<float, float> OnTimerUpdated; // (remainingTime, timeLimit)
+    public System.Action<bool> OnTimerVisibilityChanged; // (isVisible)
+    public System.Action OnGameOver;
 
     void Awake()
     {
@@ -69,7 +71,6 @@ public class GameManager : MonoBehaviour
 
         if (currentDifficulty != null && enemySpawner != null)
         {
-            // 初始化生成参数
             ApplyCurrentDifficultyToSpawner();
             StartGame();
         }
@@ -105,9 +106,10 @@ public class GameManager : MonoBehaviour
             timeLimit = currentDifficulty.timeLimit;
             remainingTime = timeLimit;
 
-            if (currentDifficulty.isInfiniteMode)
+            bool isInfinite = currentDifficulty.IsInfiniteMode();
+
+            if (isInfinite)
             {
-                // 无限模式：初始值 = 基础值
                 currentSpawnInterval = currentDifficulty.spawnInterval;
                 currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
                 currentSpeedMultiplier = 1f;
@@ -118,7 +120,6 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                // 普通模式：使用固定值
                 currentSpawnInterval = currentDifficulty.spawnInterval;
                 currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
                 currentSpeedMultiplier = 1f;
@@ -127,9 +128,11 @@ public class GameManager : MonoBehaviour
             }
 
             ApplyCurrentDifficultyToSpawner();
-            UpdateTimerVisibility();
 
-            string timeDisplay = currentDifficulty.isInfiniteMode ? "无限" : timeLimit + "秒";
+            // 通知UI计时器可见性
+            NotifyTimerVisibility();
+
+            string timeDisplay = isInfinite ? "无限" : timeLimit + "秒";
             Debug.Log("游戏开始！难度: " + currentDifficulty.difficultyName + ", 时间: " + timeDisplay);
         }
     }
@@ -138,10 +141,13 @@ public class GameManager : MonoBehaviour
     {
         if (!isGameRunning || isGameOver) return;
 
-        // 无限模式
-        if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
+        if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
-            HideTimer();
+            // 无限模式：隐藏计时器
+            if (OnTimerVisibilityChanged != null)
+            {
+                OnTimerVisibilityChanged(false);
+            }
 
             if (currentDifficulty.enableScaling)
             {
@@ -150,14 +156,27 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // 普通模式
-        ShowTimer();
+        // 普通模式：更新计时器
+        if (OnTimerVisibilityChanged != null)
+        {
+            OnTimerVisibilityChanged(true);
+        }
+
         remainingTime -= Time.deltaTime;
-        UpdateTimerUI();
+
+        // 触发计时器更新事件
+        if (OnTimerUpdated != null)
+        {
+            OnTimerUpdated(remainingTime, timeLimit);
+        }
 
         if (remainingTime <= 0)
         {
             remainingTime = 0;
+            if (OnTimerUpdated != null)
+            {
+                OnTimerUpdated(remainingTime, timeLimit);
+            }
             GameOver(false);
         }
     }
@@ -171,7 +190,6 @@ public class GameManager : MonoBehaviour
             scalingTimer = 0f;
             scalingLevel++;
 
-            // 计算当前值（固定值方式）
             currentSpawnInterval = Mathf.Max(
                 currentDifficulty.spawnInterval - (scalingLevel * currentDifficulty.spawnIntervalStep),
                 currentDifficulty.spawnIntervalMin
@@ -197,7 +215,6 @@ public class GameManager : MonoBehaviour
                 currentDifficulty.damageMultiplierMax
             );
 
-            // 应用到生成器
             ApplyCurrentDifficultyToSpawner();
 
             Debug.Log("无限模式成长 - 等级: " + scalingLevel);
@@ -213,8 +230,9 @@ public class GameManager : MonoBehaviour
     {
         if (enemySpawner == null) return;
 
-        // 根据是否无限模式，传递不同的值给生成器
-        if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
+        bool isInfinite = currentDifficulty.IsInfiniteMode();
+
+        if (isInfinite)
         {
             enemySpawner.ApplyScalingParameters(
                 currentSpawnInterval,
@@ -231,7 +249,6 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // 普通模式：使用基础值
             enemySpawner.ApplyScalingParameters(
                 currentDifficulty.spawnInterval,
                 currentDifficulty.spawnPerInterval,
@@ -247,67 +264,12 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void HideTimer()
+    void NotifyTimerVisibility()
     {
-        if (timerText != null && timerText.gameObject.activeSelf)
-        {
-            timerText.gameObject.SetActive(false);
-        }
-    }
+        if (OnTimerVisibilityChanged == null) return;
 
-    void ShowTimer()
-    {
-        if (timerText != null && !timerText.gameObject.activeSelf)
-        {
-            timerText.gameObject.SetActive(true);
-        }
-    }
-
-    void UpdateTimerVisibility()
-    {
-        if (currentDifficulty == null) return;
-
-        if (currentDifficulty.isInfiniteMode)
-        {
-            HideTimer();
-        }
-        else
-        {
-            ShowTimer();
-            UpdateTimerUI();
-        }
-    }
-
-    void UpdateTimerUI()
-    {
-        if (timerText != null)
-        {
-            int minutes = Mathf.FloorToInt(remainingTime / 60);
-            int seconds = Mathf.FloorToInt(remainingTime % 60);
-            timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-
-            float percent = remainingTime / timeLimit;
-
-            if (percent < 0.1f)
-            {
-                timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
-
-                float shakeAmount = 3f;
-                float shakeX = Random.Range(-shakeAmount, shakeAmount);
-                float shakeY = Random.Range(-shakeAmount, shakeAmount);
-                timerText.rectTransform.anchoredPosition = new Vector2(shakeX, shakeY);
-            }
-            else if (percent < 0.3f)
-            {
-                timerText.color = Color.yellow;
-                timerText.rectTransform.anchoredPosition = Vector2.zero;
-            }
-            else
-            {
-                timerText.color = Color.white;
-                timerText.rectTransform.anchoredPosition = Vector2.zero;
-            }
-        }
+        bool isInfinite = currentDifficulty != null && currentDifficulty.IsInfiniteMode();
+        OnTimerVisibilityChanged(!isInfinite);
     }
 
     public void GameOver(bool isWin)
@@ -334,7 +296,7 @@ public class GameManager : MonoBehaviour
 
         float timeToSave = 0f;
 
-        if (currentDifficulty != null && currentDifficulty.isInfiniteMode)
+        if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
             timeToSave = GetElapsedTime();
             Debug.Log("无限模式游玩时长: " + timeToSave + "秒");
@@ -347,6 +309,12 @@ public class GameManager : MonoBehaviour
         }
 
         SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+
+        // 触发 GameOver 事件
+        if (OnGameOver != null)
+        {
+            OnGameOver();
+        }
 
         Debug.Log("游戏结束！" + currentDifficulty.difficultyName + " 记录已保存");
     }
@@ -407,7 +375,7 @@ public class GameManager : MonoBehaviour
 
     public bool IsInfiniteMode()
     {
-        return currentDifficulty != null && currentDifficulty.isInfiniteMode;
+        return currentDifficulty != null && currentDifficulty.IsInfiniteMode();
     }
 
     public float GetElapsedTime()
@@ -428,5 +396,10 @@ public class GameManager : MonoBehaviour
     public float GetCurrentDamageMultiplier()
     {
         return currentDamageMultiplier;
+    }
+
+    public bool IsGameRunning()
+    {
+        return isGameRunning && !isGameOver;
     }
 }

@@ -14,8 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   difficultyName: "\u65E0\u9650\u6A21\u5F0F"
   sceneName: Infinite
-  isInfiniteMode: 1
+  mode: 1
   timeLimit: 0
+  enableScaling: 1
+  scalingInterval: 30
+  spawnIntervalMin: 0.3
+  spawnPerIntervalMax: 5
+  speedMultiplierMax: 2.5
+  healthMultiplierMax: 3
+  damageMultiplierMax: 2
+  spawnIntervalStep: 0.05
+  spawnPerIntervalStep: 0.1
+  speedMultiplierStep: 0.03
+  healthMultiplierStep: 0.04
+  damageMultiplierStep: 0.02
   spawnInterval: 2
   spawnPerInterval: 1
   enemySpeedMultiplier: 1

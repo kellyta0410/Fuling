@@ -16,15 +16,23 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI finalKillText;
     public Button restartButton;
 
+    [Header("计时器 UI")]
+    public TextMeshProUGUI timerText;  // 从 GameManager 移过来的
+
     [Header("血条颜色")]
     public Color fullHealthColor = Color.green;
     public Color midHealthColor = Color.yellow;
     public Color lowHealthColor = Color.red;
-    public Image healthFillImage;  // ⭐ 血条的 Fill 图片
+    public Image healthFillImage;
 
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
+    public GameManager gameManager;
+
+    // 计时器动画相关
+    private Vector2 timerOriginalPosition;
+    private float timeLimit;
 
     private void Start()
     {
@@ -39,6 +47,11 @@ public class UIManager : MonoBehaviour
             enemySpawner = FindObjectOfType<EnemySpawner>();
         }
 
+        if (gameManager == null)
+        {
+            gameManager = GameManager.Instance;
+        }
+
         // 绑定按钮事件
         if (restartButton != null)
         {
@@ -51,21 +64,33 @@ public class UIManager : MonoBehaviour
             gameOverPanel.SetActive(false);
         }
 
-        // ⭐ 获取血条的 Fill 图片
+        // 获取血条的 Fill 图片
         if (healthSlider != null && healthFillImage == null)
         {
-            // 尝试获取 Slider 的 Fill 子物体
             Transform fillTransform = healthSlider.transform.Find("Fill Area/Fill");
             if (fillTransform != null)
             {
                 healthFillImage = fillTransform.GetComponent<Image>();
             }
 
-            // 如果没找到，尝试直接获取
             if (healthFillImage == null)
             {
                 healthFillImage = healthSlider.GetComponentInChildren<Image>();
             }
+        }
+
+        // 保存计时器原始位置
+        if (timerText != null)
+        {
+            timerOriginalPosition = timerText.rectTransform.anchoredPosition;
+        }
+
+        // 订阅 GameManager 事件
+        if (gameManager != null)
+        {
+            gameManager.OnTimerUpdated += UpdateTimerUI;
+            gameManager.OnTimerVisibilityChanged += SetTimerVisibility;
+            gameManager.OnGameOver += OnGameOver;
         }
 
         // 强制设置血条为满血
@@ -86,6 +111,17 @@ public class UIManager : MonoBehaviour
         StartCoroutine(DelayedUIUpdate());
     }
 
+    private void OnDestroy()
+    {
+        // 取消订阅事件
+        if (gameManager != null)
+        {
+            gameManager.OnTimerUpdated -= UpdateTimerUI;
+            gameManager.OnTimerVisibilityChanged -= SetTimerVisibility;
+            gameManager.OnGameOver -= OnGameOver;
+        }
+    }
+
     private void Update()
     {
         // 实时更新击杀数
@@ -98,13 +134,65 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // 延迟更新
     IEnumerator DelayedUIUpdate()
     {
         yield return null;
         UpdateHealthUI();
         UpdateCoinUI();
         UpdateKillUI();
+    }
+
+    // ==================== 计时器 UI 方法 ====================
+
+    public void SetTimerVisibility(bool isVisible)
+    {
+        if (timerText != null)
+        {
+            timerText.gameObject.SetActive(isVisible);
+        }
+    }
+
+    public void UpdateTimerUI(float remainingTime, float timeLimit)
+    {
+        if (timerText == null) return;
+
+        this.timeLimit = timeLimit;
+
+        // 格式化时间显示
+        int minutes = Mathf.FloorToInt(remainingTime / 60);
+        int seconds = Mathf.FloorToInt(remainingTime % 60);
+        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
+
+        // 根据剩余时间百分比更新颜色和动画
+        float percent = timeLimit > 0 ? remainingTime / timeLimit : 0;
+
+        if (percent < 0.1f && percent > 0)
+        {
+            timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
+
+            // 抖动效果
+            float shakeAmount = 3f;
+            float shakeX = Random.Range(-shakeAmount, shakeAmount);
+            float shakeY = Random.Range(-shakeAmount, shakeAmount);
+            timerText.rectTransform.anchoredPosition = timerOriginalPosition + new Vector2(shakeX, shakeY);
+        }
+        else if (percent < 0.3f && percent > 0)
+        {
+            timerText.color = Color.yellow;
+            timerText.rectTransform.anchoredPosition = timerOriginalPosition;
+        }
+        else
+        {
+            timerText.color = Color.white;
+            timerText.rectTransform.anchoredPosition = timerOriginalPosition;
+        }
+
+        // 时间到
+        if (remainingTime <= 0)
+        {
+            timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
+            timerText.text = "00:00";
+        }
     }
 
     // ==================== UI 更新方法 ====================
@@ -115,13 +203,10 @@ public class UIManager : MonoBehaviour
         {
             float healthPercent = player.GetHealthPercent();
             healthSlider.value = healthPercent;
-
-            // ⭐ 更新血条颜色
             UpdateHealthBarColor(healthPercent);
         }
     }
 
-    // ==================== ⭐ 血条颜色更新 ====================
     void UpdateHealthBarColor(float healthPercent)
     {
         if (healthFillImage == null) return;
@@ -130,17 +215,14 @@ public class UIManager : MonoBehaviour
 
         if (healthPercent >= 0.6f)
         {
-            // 60% - 100%: 绿色
             targetColor = fullHealthColor;
         }
         else if (healthPercent >= 0.3f)
         {
-            // 30% - 60%: 黄色
             targetColor = midHealthColor;
         }
         else
         {
-            // 0% - 30%: 红色
             targetColor = lowHealthColor;
         }
 
@@ -164,6 +246,11 @@ public class UIManager : MonoBehaviour
     }
 
     // ==================== GameOver ====================
+
+    public void OnGameOver()
+    {
+        ShowGameOver();
+    }
 
     public void ShowGameOver()
     {

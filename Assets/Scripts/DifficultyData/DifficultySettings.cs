@@ -1,6 +1,12 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 
+public enum GameMode
+{
+    Normal,
+    Infinite
+}
+
 [CreateAssetMenu(fileName = "NewDifficulty", menuName = "Game/Difficulty Settings")]
 public class DifficultySettings : ScriptableObject
 {
@@ -8,8 +14,11 @@ public class DifficultySettings : ScriptableObject
     public string difficultyName = "普通";
     public string sceneName = "GameScene";
 
-    [Header("无限模式")]
-    public bool isInfiniteMode = false;
+    [Header("模式选择")]
+    public GameMode mode = GameMode.Normal;
+
+    [Header("普通模式 - 时间限制")]
+    public float timeLimit = 90f;
 
     [Header("无限模式 - 成长设置")]
     public bool enableScaling = true;
@@ -22,15 +31,12 @@ public class DifficultySettings : ScriptableObject
     public float healthMultiplierMax = 3f;
     public float damageMultiplierMax = 2f;
 
-    // 每级增加值（固定值方式）
+    // 每级增加值
     public float spawnIntervalStep = 0.05f;
     public float spawnPerIntervalStep = 0.1f;
     public float speedMultiplierStep = 0.03f;
     public float healthMultiplierStep = 0.04f;
     public float damageMultiplierStep = 0.02f;
-
-    [Header("普通模式 - 时间限制")]
-    public float timeLimit = 90f;
 
     [Header("生成参数（基础值）")]
     public float spawnInterval = 2f;
@@ -47,4 +53,9 @@ public class DifficultySettings : ScriptableObject
 
     [Header("敌人类型")]
     public List<GameObject> allowedEnemyPrefabs;
+
+    public bool IsInfiniteMode()
+    {
+        return mode == GameMode.Infinite;
+    }
 }
