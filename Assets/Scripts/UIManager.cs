@@ -268,7 +268,7 @@ public class UIManager : MonoBehaviour
     public void GoToSelection()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene("DifficultySelection");
+        SceneManager.LoadScene("Selection");
     }
 
     // ==================== 外部调用 ====================

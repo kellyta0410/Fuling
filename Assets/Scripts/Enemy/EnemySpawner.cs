@@ -19,7 +19,7 @@ public class EnemySpawner : MonoBehaviour
     [Header("调试")]
     public bool showDebugLogs = true;
 
-    // 当前生成参数（由 GameManager 更新）
+    // 当前生成参数
     private float currentSpawnInterval = 2f;
     private int currentSpawnPerInterval = 1;
     private bool enableMaxLimit = false;
@@ -27,7 +27,6 @@ public class EnemySpawner : MonoBehaviour
     private bool enableCooldown = true;
     private float cooldownTime = 10f;
 
-    // 当前倍率（由 GameManager 更新）
     private float currentSpeedMultiplier = 1f;
     private float currentHealthMultiplier = 1f;
     private float currentDamageMultiplier = 1f;
@@ -52,6 +51,11 @@ public class EnemySpawner : MonoBehaviour
     private List<GameObject> allActiveEnemies = new List<GameObject>();
     private int globalTotalSpawned = 0;
 
+    void Awake()
+    {
+        // 不需要 DontDestroyOnLoad，每个场景独立
+    }
+
     void Start()
     {
         InitializeSpawner();
@@ -69,6 +73,12 @@ public class EnemySpawner : MonoBehaviour
         if (spawnPoints.Count == 0)
         {
             AutoFindSpawnPoints();
+        }
+
+        // ⭐ 从 GameManager 获取当前难度（如果 currentDifficulty 为空）
+        if (currentDifficulty == null && GameManager.Instance != null)
+        {
+            currentDifficulty = GameManager.Instance.currentDifficulty;
         }
 
         if (useDifficultySettings && currentDifficulty != null)
@@ -132,7 +142,6 @@ public class EnemySpawner : MonoBehaviour
 
     void AutoFindSpawnPoints()
     {
-        // 查找 Tag 为 "EnemySpawn" 的物体
         GameObject[] foundPoints = GameObject.FindGameObjectsWithTag("EnemySpawn");
         foreach (GameObject point in foundPoints)
         {
@@ -141,7 +150,6 @@ public class EnemySpawner : MonoBehaviour
             spawnPoints.Add(data);
         }
 
-        // 如果没找到，尝试找 "SpawnPoints" 父物体下的子物体
         if (spawnPoints.Count == 0)
         {
             GameObject parent = GameObject.Find("SpawnPoints");
@@ -156,7 +164,6 @@ public class EnemySpawner : MonoBehaviour
             }
         }
 
-        // 如果还是没有，使用自身位置
         if (spawnPoints.Count == 0)
         {
             SpawnPointData data = new SpawnPointData();

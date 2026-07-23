@@ -35,25 +35,11 @@ public class GameManager : MonoBehaviour
     public System.Action<bool> OnTimerVisibilityChanged;
     public System.Action OnGameOver;
 
-    // ==================== Unity ====================
-
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            SceneManager.sceneLoaded += OnSceneLoaded;
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
-    }
-
-    void OnDestroy()
-    {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
+        // 每个场景独立，不需要单例，也不 DontDestroyOnLoad
+        // 只保留 Instance 方便其他脚本引用
+        Instance = this;
     }
 
     void Start()
@@ -88,42 +74,13 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ==================== 场景加载回调 ====================
-
-    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    void OnDestroy()
     {
-        // 检查是否是游戏场景（根据场景名判断）
-        if (scene.name == "EasyMap" || scene.name == "NormalMap" ||
-            scene.name == "HardMap" || scene.name == "InfinityMap")
-        {
-            Debug.Log($"📦 加载游戏场景: {scene.name}，重新初始化 GameManager");
-
-            // 重新查找 EnemySpawner（新场景中的）
-            enemySpawner = FindObjectOfType<EnemySpawner>();
-
-            // 从 PlayerPrefs 读取选中的难度
-            string selectedDifficultyName = PlayerPrefs.GetString("SelectedDifficulty", "普通");
-            DifficultySettings loadedDifficulty = GetDifficultyByName(selectedDifficultyName);
-
-            if (loadedDifficulty != null)
-            {
-                currentDifficulty = loadedDifficulty;
-                Debug.Log("重新加载难度: " + currentDifficulty.difficultyName);
-            }
-
-            if (currentDifficulty != null && enemySpawner != null)
-            {
-                ApplyCurrentDifficultyToSpawner();
-                StartGame();  // ⭐ 重置计时器
-            }
-            else
-            {
-                Debug.LogError("重新初始化失败：currentDifficulty 或 enemySpawner 为空");
-            }
-        }
+        // 清理事件
+        OnTimerUpdated = null;
+        OnTimerVisibilityChanged = null;
+        OnGameOver = null;
     }
-
-    // ==================== 难度配置 ====================
 
     DifficultySettings GetDifficultyByName(string name)
     {
@@ -139,8 +96,6 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
-    // ==================== 游戏控制 ====================
-
     public void StartGame()
     {
         isGameRunning = true;
@@ -150,7 +105,6 @@ public class GameManager : MonoBehaviour
 
         if (currentDifficulty != null)
         {
-            // ⭐ 重置计时器
             timeLimit = currentDifficulty.timeLimit;
             remainingTime = timeLimit;
 
@@ -182,8 +136,6 @@ public class GameManager : MonoBehaviour
             Debug.Log("游戏开始！难度: " + currentDifficulty.difficultyName + ", 时间: " + timeDisplay);
         }
     }
-
-    // ==================== Update ====================
 
     void Update()
     {
@@ -225,8 +177,6 @@ public class GameManager : MonoBehaviour
             GameOver(false);
         }
     }
-
-    // ==================== 无限模式成长 ====================
 
     void HandleScaling()
     {
@@ -273,8 +223,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ==================== 应用难度到生成器 ====================
-
     void ApplyCurrentDifficultyToSpawner()
     {
         if (enemySpawner == null) return;
@@ -320,8 +268,6 @@ public class GameManager : MonoBehaviour
         bool isInfinite = currentDifficulty != null && currentDifficulty.IsInfiniteMode();
         OnTimerVisibilityChanged(!isInfinite);
     }
-
-    // ==================== GameOver ====================
 
     public void GameOver(bool isWin)
     {
@@ -413,8 +359,6 @@ public class GameManager : MonoBehaviour
             Debug.Log(difficultyName + " 本次未打破纪录");
         }
     }
-
-    // ==================== 公共方法 ====================
 
     public float GetRemainingTime()
     {
