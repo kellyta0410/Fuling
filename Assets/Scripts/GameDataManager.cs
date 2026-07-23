@@ -6,20 +6,22 @@ public class GameDataManager : MonoBehaviour
 {
     public static GameDataManager Instance;
 
+    [Header("===== 角色列表（直接在 Inspector 拖入） =====")]
+    public List<CharacterData> allCharacters = new List<CharacterData>();
+
     [Header("玩家数据")]
     public int totalCoins = 0;
     public string selectedCharacterName = "";
     public List<string> unlockedCharacterNames = new List<string>();
 
-    [Header("技能数据（暂时保留，以后用）")]
+    [Header("技能数据（暂时保留）")]
     public List<SkillSaveEntry> skillLevels = new List<SkillSaveEntry>();
 
     [Header("默认值")]
-    public string defaultCharacterName = "战士";
+    public string defaultCharacterName = "Mei";
     public int startingCoins = 100;
 
     private CharacterData currentCharacter;
-    private Dictionary<string, CharacterData> characterCache = new Dictionary<string, CharacterData>();
     private Dictionary<string, SkillData> skillCache = new Dictionary<string, SkillData>();
 
     public event System.Action OnDataChanged;
@@ -32,7 +34,6 @@ public class GameDataManager : MonoBehaviour
         {
             if (currentCharacter == null)
             {
-                LoadAllCharacters();
                 currentCharacter = GetCharacterData(selectedCharacterName);
             }
             return currentCharacter;
@@ -59,7 +60,6 @@ public class GameDataManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            LoadAllCharacters();
             LoadAllSkills();
             LoadData();
             InitializeDefaultData();
@@ -93,23 +93,7 @@ public class GameDataManager : MonoBehaviour
         }
     }
 
-    // ==================== 加载配置 ====================
-
-    void LoadAllCharacters()
-    {
-        characterCache.Clear();
-        CharacterData[] allCharacters = Resources.LoadAll<CharacterData>("Characters");
-
-        foreach (CharacterData data in allCharacters)
-        {
-            if (!characterCache.ContainsKey(data.characterName))
-            {
-                characterCache.Add(data.characterName, data);
-            }
-        }
-
-        Debug.Log($"加载了 {characterCache.Count} 个角色");
-    }
+    // ==================== 加载技能（保留） ====================
 
     void LoadAllSkills()
     {
@@ -127,28 +111,18 @@ public class GameDataManager : MonoBehaviour
         Debug.Log($"加载了 {skillCache.Count} 个技能");
     }
 
+    // ==================== 角色管理 ====================
+
     public CharacterData GetCharacterData(string name)
     {
         if (string.IsNullOrEmpty(name)) return null;
-        if (characterCache.TryGetValue(name, out CharacterData data))
-        {
-            return data;
-        }
-        return characterCache.Values.FirstOrDefault();
+        return allCharacters.FirstOrDefault(c => c != null && c.characterName == name);
     }
 
     public CharacterData[] GetAllCharacters()
     {
-        return characterCache.Values.ToArray();
+        return allCharacters.Where(c => c != null).ToArray();
     }
-
-    public SkillData GetSkillData(string skillID)
-    {
-        skillCache.TryGetValue(skillID, out SkillData data);
-        return data;
-    }
-
-    // ==================== 角色管理 ====================
 
     public bool IsCharacterUnlocked(CharacterData character)
     {
@@ -253,6 +227,12 @@ public class GameDataManager : MonoBehaviour
 
         TotalCoins -= amount;
         return true;
+    }
+
+    public SkillData GetSkillData(string skillID)
+    {
+        skillCache.TryGetValue(skillID, out SkillData data);
+        return data;
     }
 
     // ==================== 数据持久化 ====================

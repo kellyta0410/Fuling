@@ -10,7 +10,7 @@ public class CharacterData : ScriptableObject
     public GameObject prefab;
 
     [Header("解锁条件")]
-    public int unlockCost = 100;
+    public int unlockCost = 1500;
 
     [Header("基础属性")]
     public float baseHealth = 100f;

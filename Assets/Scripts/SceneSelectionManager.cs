@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using TMPro;
 
 public class SceneSelectionManager : MonoBehaviour
@@ -37,12 +38,21 @@ public class SceneSelectionManager : MonoBehaviour
     public TextMeshProUGUI infiniteKillsText;
     public TextMeshProUGUI infiniteTimeText;
 
-    [Header("===== 场景 =====")]
-    public string gameSceneName = "GameScene";
+    [Header("===== 角色按钮 =====")]
+    public Button[] characterButtons;
+    public TextMeshProUGUI[] characterButtonTexts;  
+
+    [Header("===== 解锁确认面板 =====")]
+    public GameObject unlockConfirmPanel;
+    public TextMeshProUGUI unlockConfirmText;
+    public Button unlockConfirmButton;
+    public Button unlockCancelButton;
+
+    // 当前准备解锁的角色
+    private CharacterData pendingUnlockCharacter;
 
     void Start()
     {
-        // 获取 GameDataManager
         if (gameDataManager == null)
         {
             gameDataManager = GameDataManager.Instance;
@@ -50,14 +60,23 @@ public class SceneSelectionManager : MonoBehaviour
 
         if (gameDataManager == null)
         {
-            Debug.LogError("GameDataManager 不存在！请确保场景中有 GameDataManager");
+            Debug.LogError("GameDataManager 不存在！");
             return;
         }
 
-        // 监听数据变化
         gameDataManager.OnDataChanged += RefreshAllUI;
 
-        // 初始化UI
+        // 默认隐藏确认面板
+        if (unlockConfirmPanel != null)
+            unlockConfirmPanel.SetActive(false);
+
+        // 绑定确认/取消按钮
+        if (unlockConfirmButton != null)
+            unlockConfirmButton.onClick.AddListener(ConfirmUnlock);
+
+        if (unlockCancelButton != null)
+            unlockCancelButton.onClick.AddListener(CancelUnlock);
+
         ShowMainPanel();
         RefreshAllUI();
     }
@@ -85,13 +104,14 @@ public class SceneSelectionManager : MonoBehaviour
         RefreshCoinDisplay();
         RefreshPlayerName();
         RefreshRecordsDisplay();
+        UpdateCharacterButtons();
     }
 
     public void RefreshCoinDisplay()
     {
         if (coinText != null && gameDataManager != null)
         {
-            coinText.text = $"🪙 {gameDataManager.TotalCoins}";
+            coinText.text = $"{gameDataManager.TotalCoins}";
         }
     }
 
@@ -101,11 +121,11 @@ public class SceneSelectionManager : MonoBehaviour
         {
             if (gameDataManager.CurrentCharacter != null)
             {
-                playerNameText.text = $"👤 {gameDataManager.CurrentCharacter.characterName}";
+                playerNameText.text = $"{gameDataManager.CurrentCharacter.characterName}";
             }
             else
             {
-                playerNameText.text = "👤 未选择";
+                playerNameText.text = "havent choose";
             }
         }
     }
@@ -157,7 +177,6 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void ShowRecordsPanel()
     {
-        SetPanelActive(mainPanel, false);
         SetPanelActive(recordsPanel, true);
         SetPanelActive(characterPanel, false);
         SetPanelActive(upgradePanel, false);
@@ -166,7 +185,6 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void ShowCharacterPanel()
     {
-        SetPanelActive(mainPanel, false);
         SetPanelActive(recordsPanel, false);
         SetPanelActive(characterPanel, true);
         SetPanelActive(upgradePanel, false);
@@ -174,7 +192,6 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void ShowUpgradePanel()
     {
-        SetPanelActive(mainPanel, false);
         SetPanelActive(recordsPanel, false);
         SetPanelActive(characterPanel, false);
         SetPanelActive(upgradePanel, true);
@@ -189,32 +206,19 @@ public class SceneSelectionManager : MonoBehaviour
         }
     }
 
-    public void CloseRecordsPanel() => ShowMainPanel();
-    public void CloseCharacterPanel() => ShowMainPanel();
-    public void CloseUpgradePanel() => ShowMainPanel();
-
-    public void ToggleRecordsPanel()
+    public void CloseRecordsPanel()
     {
-        if (recordsPanel != null && recordsPanel.activeSelf)
-            ShowMainPanel();
-        else
-            ShowRecordsPanel();
+        SetPanelActive(recordsPanel, false);
     }
 
-    public void ToggleCharacterPanel()
+    public void CloseCharacterPanel()
     {
-        if (characterPanel != null && characterPanel.activeSelf)
-            ShowMainPanel();
-        else
-            ShowCharacterPanel();
+        SetPanelActive(characterPanel, false);
     }
 
-    public void ToggleUpgradePanel()
+    public void CloseUpgradePanel()
     {
-        if (upgradePanel != null && upgradePanel.activeSelf)
-            ShowMainPanel();
-        else
-            ShowUpgradePanel();
+        SetPanelActive(upgradePanel, false);
     }
 
     // ==================== 返回主菜单 ====================
@@ -271,46 +275,177 @@ public class SceneSelectionManager : MonoBehaviour
         PlayerPrefs.SetString("SelectedCharacter", gameDataManager.CurrentCharacter.characterName);
         PlayerPrefs.Save();
 
-        Debug.Log($"开始游戏！难度: {difficulty.difficultyName}，角色: {gameDataManager.CurrentCharacter.characterName}");
+        Debug.Log($"开始游戏！难度: {difficulty.difficultyName}，场景: {difficulty.sceneName}，角色: {gameDataManager.CurrentCharacter.characterName}");
 
-        if (!string.IsNullOrEmpty(gameSceneName))
+        if (!string.IsNullOrEmpty(difficulty.sceneName))
         {
-            SceneManager.LoadScene(gameSceneName);
+            SceneManager.LoadScene(difficulty.sceneName);
         }
         else
         {
-            Debug.LogError("游戏场景名未设置！");
+            Debug.LogError($"难度 {difficulty.difficultyName} 的场景名未设置！");
         }
     }
 
     // ==================== 角色选择 ====================
 
-    public void SelectCharacterByName(string characterName)
+    public void SelectCharacter(CharacterData character)
     {
         if (gameDataManager == null) return;
 
-        CharacterData character = gameDataManager.GetCharacterData(characterName);
         if (character == null)
         {
-            Debug.LogWarning($"未找到角色: {characterName}");
+            Debug.LogWarning("角色数据为空");
             return;
         }
 
-        if (!gameDataManager.IsCharacterUnlocked(character))
+        // ⭐ 如果已经解锁 → 直接选择
+        if (gameDataManager.IsCharacterUnlocked(character))
         {
-            if (gameDataManager.UnlockCharacter(character))
+            gameDataManager.SelectCharacter(character);
+            RefreshAllUI();
+            return;
+        }
+
+        // ⭐ 未解锁 → 检查金币是否足够
+        if (gameDataManager.TotalCoins < character.unlockCost)
+        {
+            Debug.Log($"金币不足！需要 {character.unlockCost}，当前 {gameDataManager.TotalCoins}");
+            // 可以显示一个提示（可选）
+            return;
+        }
+
+        // ⭐ 金币足够 → 显示确认面板
+        pendingUnlockCharacter = character;
+        ShowUnlockConfirmPanel(character);
+    }
+
+    // ==================== 解锁确认面板 ====================
+
+    void ShowUnlockConfirmPanel(CharacterData character)
+    {
+        if (unlockConfirmPanel == null)
+        {
+            // 如果没有确认面板，直接解锁（降级方案）
+            UnlockCharacterDirect(character);
+            return;
+        }
+
+        if (unlockConfirmText != null)
+        {
+            unlockConfirmText.text = $"是否花费 {character.unlockCost} 金币解锁\n<color=#FFD700>{character.characterName}</color>？";
+        }
+
+        unlockConfirmPanel.SetActive(true);
+    }
+
+    void ConfirmUnlock()
+    {
+        if (pendingUnlockCharacter == null) return;
+
+        UnlockCharacterDirect(pendingUnlockCharacter);
+        pendingUnlockCharacter = null;
+
+        if (unlockConfirmPanel != null)
+            unlockConfirmPanel.SetActive(false);
+    }
+
+    void CancelUnlock()
+    {
+        pendingUnlockCharacter = null;
+
+        if (unlockConfirmPanel != null)
+            unlockConfirmPanel.SetActive(false);
+    }
+
+    void UnlockCharacterDirect(CharacterData character)
+    {
+        if (gameDataManager.UnlockCharacter(character))
+        {
+            // 解锁成功后自动选中该角色
+            gameDataManager.SelectCharacter(character);
+            RefreshAllUI();
+            Debug.Log($"解锁并选择角色: {character.characterName}");
+        }
+        else
+        {
+            Debug.Log($"解锁失败！");
+        }
+    }
+
+    // ==================== 更新角色按钮状态 ====================
+
+    public void UpdateCharacterButtons()
+    {
+        if (gameDataManager == null) return;
+
+        CharacterData[] allCharacters = gameDataManager.GetAllCharacters();
+        CharacterData currentCharacter = gameDataManager.CurrentCharacter;
+        int totalCoins = gameDataManager.TotalCoins;
+
+        for (int i = 0; i < characterButtons.Length; i++)
+        {
+            if (characterButtons[i] == null) continue;
+
+            if (i >= allCharacters.Length)
             {
-                Debug.Log($"解锁角色: {characterName}");
+                characterButtons[i].gameObject.SetActive(false);
+                continue;
+            }
+
+            characterButtons[i].gameObject.SetActive(true);
+
+            CharacterData character = allCharacters[i];
+            bool isUnlocked = gameDataManager.IsCharacterUnlocked(character);
+            bool isSelected = currentCharacter != null && character != null &&
+                              character.characterName == currentCharacter.characterName;
+            bool canAfford = totalCoins >= character.unlockCost;
+
+            // ========== 设置按钮文字 ==========
+            if (characterButtonTexts != null && characterButtonTexts.Length > i && characterButtonTexts[i] != null)
+            {
+                TextMeshProUGUI text = characterButtonTexts[i];
+
+                if (isSelected)
+                {
+                    text.text = "selected";
+                    text.color = Color.green;
+                }
+                else if (isUnlocked)
+                {
+                    text.text = "select";
+                    text.color = Color.white;
+                }
+                else if (canAfford)
+                {
+                    text.text = $"Unclock ({character.unlockCost})";
+                    text.color = Color.yellow;
+                }
+                else
+                {
+                    text.text = $"{character.unlockCost}";
+                    text.color = Color.gray;
+                }
+            }
+
+            // ========== 设置按钮交互状态 ==========
+            if (isSelected)
+            {
+                characterButtons[i].interactable = false;
+            }
+            else if (isUnlocked)
+            {
+                characterButtons[i].interactable = true;
+            }
+            else if (canAfford)
+            {
+                characterButtons[i].interactable = true;   // 可点击 → 弹出确认
             }
             else
             {
-                Debug.Log($"金币不足，无法解锁 {characterName}");
-                return;
+                characterButtons[i].interactable = false;  // 金币不足
             }
         }
-
-        gameDataManager.SelectCharacter(character);
-        RefreshAllUI();
     }
 
     public GameDataManager GetGameDataManager()
