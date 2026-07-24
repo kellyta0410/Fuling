@@ -148,6 +148,12 @@ public class UIManager : MonoBehaviour
             settingsPanel.SetActive(true);
             LoadSettings();  // 刷新当前值
             Time.timeScale = 0f;
+
+            // ✅ 禁用摇杆
+            if (player != null)
+            {
+                player.SetJoystickEnabled(false);
+            }
         }
     }
 
@@ -157,6 +163,12 @@ public class UIManager : MonoBehaviour
         {
             settingsPanel.SetActive(false);
             Time.timeScale = 1f;
+
+            // ✅ 恢复摇杆
+            if (player != null)
+            {
+                player.SetJoystickEnabled(true);
+            }
         }
     }
 
@@ -243,12 +255,24 @@ public class UIManager : MonoBehaviour
         if (finalKillText != null && player != null) finalKillText.text = $"Kills: {player.GetKills()}";
 
         Time.timeScale = 0f;
+
+        // ✅ 禁用摇杆
+        if (player != null)
+        {
+            player.SetJoystickEnabled(false);
+        }
     }
 
     public void HideGameOver()
     {
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         Time.timeScale = 1f;
+
+        // ✅ 恢复摇杆
+        if (player != null)
+        {
+            player.SetJoystickEnabled(true);
+        }
     }
 
     // ==================== 按钮方法 ====================

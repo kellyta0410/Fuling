@@ -1,7 +1,8 @@
 ﻿using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
 {
@@ -69,6 +70,9 @@ public class PlayerController : MonoBehaviour
     // ==================== 角色配置 ====================
     private CharacterData currentCharacterData;
 
+    // ==================== 摇杆控制 ====================
+    private bool isJoystickEnabled = true;
+
     // ==================== 属性 ====================
     public float HealthPercent => currentHealth / maxHealth;
     public int GetCoins() => coins;
@@ -111,9 +115,11 @@ public class PlayerController : MonoBehaviour
 #if UNITY_ANDROID || UNITY_IOS
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
+        isJoystickEnabled = true;
 #else
         if (joystickBg != null) joystickBg.gameObject.SetActive(false);
         if (actionButton != null) actionButton.gameObject.SetActive(false);
+        isJoystickEnabled = false;
 #endif
     }
 
@@ -153,8 +159,22 @@ public class PlayerController : MonoBehaviour
         if (isDead || isDying) return;
 
 #if UNITY_ANDROID || UNITY_IOS
-        HandleTouchInput();
-        inputVector = joystickInput;
+        if (isJoystickEnabled)
+        {
+            HandleTouchInput();
+            inputVector = joystickInput;
+        }
+        else
+        {
+            // 如果摇杆被禁用，重置输入
+            joystickInput = Vector2.zero;
+            inputVector = Vector2.zero;
+            if (isDragging)
+            {
+                isDragging = false;
+                if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
+            }
+        }
 #else
         HandleKeyboardInput();
         inputVector = keyboardInput;
@@ -267,6 +287,39 @@ public class PlayerController : MonoBehaviour
         }
 
         UpdateAnimations();
+    }
+
+    // ==================== 摇杆控制方法 ====================
+
+    public void SetJoystickEnabled(bool enabled)
+    {
+#if UNITY_ANDROID || UNITY_IOS
+        isJoystickEnabled = enabled;
+
+        if (joystickBg != null)
+        {
+            joystickBg.gameObject.SetActive(enabled);
+        }
+        if (joystickHandle != null)
+        {
+            joystickHandle.gameObject.SetActive(enabled);
+        }
+        if (actionButton != null)
+        {
+            actionButton.gameObject.SetActive(enabled);
+        }
+
+        // 如果禁用摇杆，重置输入状态
+        if (!enabled)
+        {
+            isDragging = false;
+            joystickInput = Vector2.zero;
+            if (joystickHandle != null)
+            {
+                joystickHandle.anchoredPosition = Vector2.zero;
+            }
+        }
+#endif
     }
 
     // ==================== 攻击 ====================
