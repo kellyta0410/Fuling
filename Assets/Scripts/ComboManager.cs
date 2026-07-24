@@ -6,8 +6,8 @@ public class ComboManager : MonoBehaviour
     public static ComboManager Instance;
 
     [Header("Combo 设置")]
-    [SerializeField] private float comboTimeout = 5f;
-    [SerializeField] private int comboThreshold = 2;
+    [SerializeField] private float comboTimeout = 10f;
+    [SerializeField] private int comboThreshold = 5;
 
     [Header("UI")]
     [SerializeField] private GameObject comboUIPanel;
