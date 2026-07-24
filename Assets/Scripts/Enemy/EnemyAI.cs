@@ -421,30 +421,82 @@ public class EnemyAI : MonoBehaviour
     {
         isDead = true;
 
-        if (healthBarInstance != null) healthBarInstance.SetActive(false);
-        if (agent != null) agent.isStopped = true;
-        if (animator != null) animator.SetTrigger("Die");
+        if (healthBarInstance != null)
+            healthBarInstance.SetActive(false);
 
-        SpawnCoin();
+        if (agent != null)
+            agent.isStopped = true;
 
+        if (animator != null)
+            animator.SetTrigger("Die");
+
+        // ⭐ 计算最终金币奖励（检查 Combo）
+        int baseCoinReward = enemyData != null ? enemyData.coinReward : 10;
+        int finalCoinReward = baseCoinReward;
+
+        bool isComboActive = false;
+        if (ComboManager.Instance != null)
+        {
+            isComboActive = ComboManager.Instance.IsComboActive();
+            if (isComboActive)
+            {
+                finalCoinReward = baseCoinReward * 2;  // 双倍
+            }
+
+            // ⭐ 通知 ComboManager 记录击杀
+            ComboManager.Instance.AddKill();
+        }
+
+        // ⭐ 生成金币掉落物（数量 = finalCoinReward）
+        SpawnCoin(finalCoinReward);
+
+        // ⭐ 通知 PlayerController 增加击杀（不再加金币，由拾取金币时加）
         if (player != null)
         {
             player.AddKill();
-            player.AddCoin(enemyData.coinReward);
-            Debug.Log("击杀 " + enemyData.enemyName + "，获得 " + enemyData.coinReward + " 金币");
+            // 移除 player.AddCoin() - 由拾取金币时处理
         }
+
+        Debug.Log($"击杀 {enemyData?.enemyName ?? "敌人"} | " +
+                  $"基础金币: {baseCoinReward} | " +
+                  $"{(isComboActive ? "🔥 Combo x2 → " : "")}最终: {finalCoinReward} 金币");
 
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
         Destroy(gameObject, delay);
     }
 
-    void SpawnCoin()
+    /// <summary>
+    /// 生成金币掉落物（数量翻倍版本）
+    /// </summary>
+    void SpawnCoin(int coinAmount)
     {
-        if (coinPrefab == null) return;
+        if (coinPrefab == null)
+        {
+            Debug.LogWarning("coinPrefab 未设置，无法生成金币");
+            return;
+        }
 
-        GameObject coin = Instantiate(coinPrefab, transform.position, Quaternion.identity);
-        Coin coinScript = coin.GetComponent<Coin>();
-        if (coinScript != null) coinScript.SetValue(enemyData.coinReward);
+        // 生成 coinAmount 个金币（或生成一堆金币）
+        for (int i = 0; i < coinAmount; i++)
+        {
+            // 添加随机偏移，让金币散开
+            Vector3 offset = new Vector3(
+                Random.Range(-0.3f, 0.3f),
+                0.5f,
+                Random.Range(-0.3f, 0.3f)
+            );
+
+            GameObject coin = Instantiate(coinPrefab, transform.position + offset, Quaternion.identity);
+            Coin coinScript = coin.GetComponent<Coin>();
+
+            if (coinScript != null)
+            {
+                // 每个金币价值 1（或者根据你的设计调整）
+                coinScript.SetValue(1);
+            }
+        }
+
+        Debug.Log($"生成了 {coinAmount} 个金币");
     }
 
     public void SetMultipliersFromSpawner()

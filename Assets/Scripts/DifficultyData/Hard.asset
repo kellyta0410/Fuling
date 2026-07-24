@@ -15,7 +15,7 @@ MonoBehaviour:
   difficultyName: "\u56F0\u96BE"
   sceneName: Hard
   mode: 0
-  timeLimit: 90
+  timeLimit: 180
   enableScaling: 1
   scalingInterval: 30
   spawnIntervalMin: 0.3
@@ -37,3 +37,4 @@ MonoBehaviour:
   cooldownTime: 10
   allowedEnemyPrefabs:
   - {fileID: 2051455957182502511, guid: 36bf8170fb708bd4688f81f836519cbe, type: 3}
+  maxScalingLevel: 100

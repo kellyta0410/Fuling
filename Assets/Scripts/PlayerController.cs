@@ -371,7 +371,7 @@ public class PlayerController : MonoBehaviour
             if (enemy != null && !enemy.isDead)
             {
                 enemy.TakeDamageImmediate(attackDamage);
-                Debug.Log($"⚔️ 攻击 {enemy.name}，造成 {attackDamage} 伤害");
+                Debug.Log($"攻击 {enemy.name}，造成 {attackDamage} 伤害");
             }
         }
     }
@@ -437,9 +437,14 @@ public class PlayerController : MonoBehaviour
         animator.SetBool("IsAttacking", false);
         animator.SetTrigger("Die");
 
-        Debug.Log($"💀 玩家死亡");
+        Debug.Log($"玩家死亡");
 
         StartCoroutine(WaitForDeathAnimationEnd());
+
+        if (ComboManager.Instance != null)
+        {
+            ComboManager.Instance.OnPlayerDeath();
+        }
     }
 
     void PlaceOnGround()
