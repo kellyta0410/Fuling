@@ -161,8 +161,8 @@ public class PlayerController : MonoBehaviour
         attackRange = currentCharacterData.baseAttackRange;
         attackCooldown = currentCharacterData.baseAttackCooldown;
 
-        Debug.Log($"👤 加载角色: {currentCharacterData.characterName}");
-        Debug.Log($"  血量: {maxHealth}, 速度: {speed}, 攻击: {attackDamage}");
+        Debug.Log($"加载角色: {currentCharacterData.characterName}");
+        Debug.Log($"血量: {maxHealth}, 速度: {speed}, 攻击: {attackDamage}");
     }
 
     // ==================== Update ====================
@@ -520,7 +520,7 @@ public class PlayerController : MonoBehaviour
     public void AddKill()
     {
         kills++;
-        Debug.Log($"💀 击杀数: {kills}");
+        Debug.Log($"击杀数: {kills}");
         if (uiManager != null) uiManager.OnPlayerKillChanged();
     }
 
@@ -536,7 +536,6 @@ public class PlayerController : MonoBehaviour
         animator.SetBool("IsMoving", currentSpeed > 0.05f);
         animator.SetBool("IsGrounded", isGrounded);
         animator.SetFloat("Speed", currentSpeed);
-        animator.SetFloat("VerticalSpeed", velocity.y);
     }
 
     // ==================== 输入 ====================

@@ -92,6 +92,10 @@ public class RecordsManager : MonoBehaviour
             PlayerPrefs.DeleteKey(diff + "_BestCoins");
             PlayerPrefs.DeleteKey(diff + "_BestKills");
             PlayerPrefs.DeleteKey(diff + "_BestTime");
+            // 🔥 新增：清除完整一局的数据
+            PlayerPrefs.DeleteKey(diff + "_RecordCoins");
+            PlayerPrefs.DeleteKey(diff + "_RecordKills");
+            PlayerPrefs.DeleteKey(diff + "_RecordTime");
         }
         PlayerPrefs.Save();
         RefreshRecords();

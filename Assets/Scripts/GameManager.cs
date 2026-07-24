@@ -30,6 +30,7 @@ public class GameManager : MonoBehaviour
     private float gameStartTime = 0f;
     private bool isGameRunning = false;
     private bool isGameOver = false;
+    private bool hasProcessedGameOver = false;  // ✅ 防止重复处理
 
     // 事件
     public System.Action<float, float> OnTimerUpdated;
@@ -62,6 +63,7 @@ public class GameManager : MonoBehaviour
     {
         isGameRunning = true;
         isGameOver = false;
+        hasProcessedGameOver = false;  // ✅ 重置标记
         scalingLevel = 0;
         scalingTimer = 0f;
         gameStartTime = Time.time;
@@ -242,11 +244,29 @@ public class GameManager : MonoBehaviour
 
     public void GameOver(bool isWin)
     {
-        if (isGameOver) return;
+        // ✅ 防止重复调用
+        if (isGameOver)
+        {
+            Debug.Log("⚠️ GameOver 已经执行过，跳过本次调用");
+            return;
+        }
+
+        if (hasProcessedGameOver)
+        {
+            Debug.Log("⚠️ GameOver 已处理过数据，跳过");
+            return;
+        }
+
+        Debug.Log($"🎯 ===== GameOver 被调用 =====");
+        Debug.Log($"🎯 isWin: {isWin}");
+        Debug.Log($"🎯 当前场景: {SceneManager.GetActiveScene().name}");
+        Debug.Log($"🎯 当前难度: {currentDifficulty?.difficultyName ?? "未知"}");
 
         isGameRunning = false;
         isGameOver = true;
+        hasProcessedGameOver = true;
 
+        // ========== 获取游戏数据 ==========
         int coins = 0;
         int kills = 0;
 
@@ -255,8 +275,14 @@ public class GameManager : MonoBehaviour
         {
             coins = player.GetCoins();
             kills = player.GetKills();
+            Debug.Log($"🎯 玩家数据 - 金币: {coins}, 击杀: {kills}");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ 找不到 PlayerController！");
         }
 
+        // 计算游戏时间
         float timeToSave = 0f;
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
@@ -267,26 +293,47 @@ public class GameManager : MonoBehaviour
             timeToSave = timeLimit - remainingTime;
             if (timeToSave < 0) timeToSave = 0;
         }
+        Debug.Log($"🎯 游戏时间: {timeToSave:F1}秒");
 
+        // ========== 保存数据到 GameDataManager ==========
         GameDataManager dataManager = GameDataManager.Instance;
         if (dataManager != null)
         {
-            dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+            Debug.Log($"🎯 GameDataManager 存在，开始保存数据...");
+            Debug.Log($"🎯 累加前总金币: {dataManager.TotalCoins}");
+
+            // 1. 更新最高纪录
+            if (currentDifficulty != null)
+            {
+                dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+                Debug.Log($"🎯 已更新 {currentDifficulty.difficultyName} 模式的最高纪录");
+            }
+
+            // 2. 累加总金币
             dataManager.AddCoins(coins);
+            Debug.Log($"🎯 累加后总金币: {dataManager.TotalCoins}");
         }
         else
         {
-            SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+            Debug.LogError("❌ GameDataManager.Instance 为空！使用 PlayerPrefs 降级方案");
+            if (currentDifficulty != null)
+            {
+                SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+            }
         }
 
+        // ========== 触发事件 ==========
         if (OnGameOver != null)
         {
+            Debug.Log("🎯 触发 OnGameOver 事件");
             OnGameOver();
         }
 
-        Debug.Log($"🏁 游戏结束！{currentDifficulty.difficultyName} 金币: {coins}, 击杀: {kills}, 时间: {timeToSave:F1}s");
+        Debug.Log($"🏁 ===== 游戏结束完成 =====");
+        Debug.Log($"🏁 {currentDifficulty?.difficultyName ?? "未知"} - 金币: {coins}, 击杀: {kills}, 时间: {timeToSave:F1}s");
     }
 
+    // ✅ 降级方案：直接使用 PlayerPrefs
     void SaveBestRecord(string difficultyName, int coins, int kills, float time)
     {
         string coinsKey = difficultyName + "_BestCoins";
@@ -331,6 +378,8 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // ==================== 公共方法 ====================
+
     public float GetRemainingTime()
     {
         return remainingTime;
@@ -373,5 +422,23 @@ public class GameManager : MonoBehaviour
     public bool IsGameRunning()
     {
         return isGameRunning && !isGameOver;
+    }
+
+    // ✅ 新增：检查是否已经 GameOver
+    public bool IsGameOver()
+    {
+        return isGameOver;
+    }
+
+    // ✅ 新增：重置游戏状态（用于重新开始）
+    public void ResetGameState()
+    {
+        isGameRunning = false;
+        isGameOver = false;
+        hasProcessedGameOver = false;
+        scalingLevel = 0;
+        scalingTimer = 0f;
+        gameStartTime = 0f;
+        Debug.Log("🔄 游戏状态已重置");
     }
 }

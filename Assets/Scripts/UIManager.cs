@@ -9,7 +9,7 @@ public class UIManager : MonoBehaviour
     [Header("UI 引用")]
     public Slider healthSlider;
     public GameObject gameOverPanel;
-    public GameObject settingsPanel;          // InGame 专用
+    public GameObject settingsPanel;
     public TextMeshProUGUI coinText;
     public TextMeshProUGUI enemyCountText;
     public TextMeshProUGUI finalCoinText;
@@ -41,29 +41,23 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
-        // 查找组件
         if (player == null) player = FindObjectOfType<PlayerController>();
         if (enemySpawner == null) enemySpawner = FindObjectOfType<EnemySpawner>();
         if (gameManager == null) gameManager = GameManager.Instance;
 
-        // 按钮绑定
         if (restartButton != null) restartButton.onClick.AddListener(RestartGame);
 
-        // 初始隐藏面板
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
 
-        // 血条 Fill
         if (healthSlider != null && healthFillImage == null)
         {
             Transform fill = healthSlider.transform.Find("Fill Area/Fill");
             healthFillImage = fill != null ? fill.GetComponent<Image>() : healthSlider.GetComponentInChildren<Image>();
         }
 
-        // 计时器位置
         if (timerText != null) timerOriginalPosition = timerText.rectTransform.anchoredPosition;
 
-        // 订阅事件
         if (gameManager != null)
         {
             gameManager.OnTimerUpdated += UpdateTimerUI;
@@ -71,22 +65,18 @@ public class UIManager : MonoBehaviour
             gameManager.OnGameOver += OnGameOver;
         }
 
-        // 加载音量设置
         LoadSettings();
 
-        // 绑定滑块事件
         if (musicSlider != null)
             musicSlider.onValueChanged.AddListener(OnMusicSliderChanged);
 
         if (sfxSlider != null)
             sfxSlider.onValueChanged.AddListener(OnSFXSliderChanged);
 
-        // ✅ 初始化 UI（先更新一次）
         UpdateHealthUI();
         UpdateCoinUI();
         UpdateKillUI();
 
-        // ✅ 如果玩家还没准备好，延迟一帧再更新
         if (player == null || player.GetHealthPercent() <= 0)
         {
             StartCoroutine(DelayedUIUpdate());
@@ -95,13 +85,11 @@ public class UIManager : MonoBehaviour
         Time.timeScale = 1f;
     }
 
-    // ✅ 新增：延迟更新 UI 的协程
     IEnumerator DelayedUIUpdate()
     {
-        yield return null;  // 等待一帧
-        yield return null;  // 再等一帧，确保 PlayerController 完全初始化
+        yield return null;
+        yield return null;
 
-        // 重新查找玩家
         if (player == null) player = FindObjectOfType<PlayerController>();
 
         UpdateHealthUI();
@@ -126,8 +114,6 @@ public class UIManager : MonoBehaviour
         UpdateKillUI();
         if (Input.GetKeyDown(KeyCode.R)) RestartGame();
     }
-
-    // ==================== 设置面板 ====================
 
     void LoadSettings()
     {
@@ -168,10 +154,9 @@ public class UIManager : MonoBehaviour
         if (settingsPanel != null)
         {
             settingsPanel.SetActive(true);
-            LoadSettings();  // 刷新当前值
+            LoadSettings();
             Time.timeScale = 0f;
 
-            // ✅ 禁用摇杆
             if (player != null)
             {
                 player.SetJoystickEnabled(false);
@@ -186,15 +171,12 @@ public class UIManager : MonoBehaviour
             settingsPanel.SetActive(false);
             Time.timeScale = 1f;
 
-            // ✅ 恢复摇杆
             if (player != null)
             {
                 player.SetJoystickEnabled(true);
             }
         }
     }
-
-    // ==================== UI 更新 ====================
 
     public void UpdateHealthUI()
     {
@@ -223,8 +205,6 @@ public class UIManager : MonoBehaviour
         if (enemyCountText != null && player != null)
             enemyCountText.text = $"Kills: {player.GetKills()}";
     }
-
-    // ==================== 计时器 ====================
 
     public void SetTimerVisibility(bool visible)
     {
@@ -273,12 +253,18 @@ public class UIManager : MonoBehaviour
         if (settingsPanel != null) settingsPanel.SetActive(false);
         gameOverPanel.SetActive(true);
 
-        if (finalCoinText != null && player != null) finalCoinText.text = $"Coins: {player.GetCoins()}";
-        if (finalKillText != null && player != null) finalKillText.text = $"Kills: {player.GetKills()}";
+        // ✅ 只获取数据显示，不进行累加
+        int coins = player != null ? player.GetCoins() : 0;
+        int kills = player != null ? player.GetKills() : 0;
+
+        if (finalCoinText != null) finalCoinText.text = $"Coins: {coins}";
+        if (finalKillText != null) finalKillText.text = $"Kills: {kills}";
+
+        // ✅ 删除所有累加代码！GameManager 已经处理了
+        // 不需要在这里调用 AddCoins 或 UpdateRecord
 
         Time.timeScale = 0f;
 
-        // ✅ 禁用摇杆
         if (player != null)
         {
             player.SetJoystickEnabled(false);
@@ -290,14 +276,11 @@ public class UIManager : MonoBehaviour
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         Time.timeScale = 1f;
 
-        // ✅ 恢复摇杆
         if (player != null)
         {
             player.SetJoystickEnabled(true);
         }
     }
-
-    // ==================== 按钮方法 ====================
 
     public void RestartGame()
     {
@@ -316,8 +299,6 @@ public class UIManager : MonoBehaviour
         Time.timeScale = 1f;
         SceneManager.LoadScene("Selection");
     }
-
-    // ==================== 外部调用 ====================
 
     public void OnPlayerDamaged() => UpdateHealthUI();
     public void OnPlayerCoinChanged() => UpdateCoinUI();
