@@ -117,10 +117,23 @@ public class PlayerController : MonoBehaviour
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
         isJoystickEnabled = true;
 #else
-        if (joystickBg != null) joystickBg.gameObject.SetActive(false);
-        if (actionButton != null) actionButton.gameObject.SetActive(false);
-        isJoystickEnabled = false;
+    if (joystickBg != null) joystickBg.gameObject.SetActive(false);
+    if (actionButton != null) actionButton.gameObject.SetActive(false);
+    isJoystickEnabled = false;
 #endif
+
+        // ✅ 强制更新 UI（修复 EasyScene 血条不显示问题）
+        if (uiManager != null)
+        {
+            uiManager.UpdateHealthUI();
+            uiManager.UpdateCoinUI();
+            uiManager.UpdateKillUI();
+            Debug.Log("✅ PlayerController: 强制更新 UI");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ UIManager 为空，无法更新 UI");
+        }
     }
 
     // ==================== 角色数据加载 ====================
@@ -369,7 +382,7 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || isDying) return;
 
-        animator.SetTrigger("Hit");
+        // animator.SetTrigger("Hit"); 
         StartCoroutine(SmoothDamage(damage));
     }
 

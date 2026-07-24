@@ -14,7 +14,7 @@ public class EnemyData : ScriptableObject
     [Header("奖励")]
     public int coinReward = 10;
 
-    public float scale = 1f;
+    //public float scale = 1f;
 
     [Header("动画参数")]
     public float deathAnimationDelay = 2f;

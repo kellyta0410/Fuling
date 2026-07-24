@@ -86,7 +86,7 @@ public class EnemyAI : MonoBehaviour
                 agent.avoidancePriority = Random.Range(0, 100);
             }
 
-            transform.localScale = Vector3.one * enemyData.scale;
+            //transform.localScale = Vector3.one * enemyData.scale;
         }
         else
         {
@@ -389,8 +389,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (isDead || enemyData == null) return;
 
-        if (animator != null) animator.SetTrigger("Hit");
-
+        // if (animator != null) animator.SetTrigger("Hit");  
         StartCoroutine(SmoothDamage(damage));
     }
 

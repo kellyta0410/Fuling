@@ -81,12 +81,34 @@ public class UIManager : MonoBehaviour
         if (sfxSlider != null)
             sfxSlider.onValueChanged.AddListener(OnSFXSliderChanged);
 
-        // 初始化 UI
+        // ✅ 初始化 UI（先更新一次）
         UpdateHealthUI();
         UpdateCoinUI();
         UpdateKillUI();
 
+        // ✅ 如果玩家还没准备好，延迟一帧再更新
+        if (player == null || player.GetHealthPercent() <= 0)
+        {
+            StartCoroutine(DelayedUIUpdate());
+        }
+
         Time.timeScale = 1f;
+    }
+
+    // ✅ 新增：延迟更新 UI 的协程
+    IEnumerator DelayedUIUpdate()
+    {
+        yield return null;  // 等待一帧
+        yield return null;  // 再等一帧，确保 PlayerController 完全初始化
+
+        // 重新查找玩家
+        if (player == null) player = FindObjectOfType<PlayerController>();
+
+        UpdateHealthUI();
+        UpdateCoinUI();
+        UpdateKillUI();
+
+        Debug.Log("✅ UIManager: 延迟更新完成");
     }
 
     void OnDestroy()

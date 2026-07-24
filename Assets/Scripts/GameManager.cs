@@ -27,6 +27,7 @@ public class GameManager : MonoBehaviour
     private float timeLimit;
     private float remainingTime;
     private float scalingTimer = 0f;
+    private float gameStartTime = 0f;  // ✅ 新增：记录游戏开始时间
     private bool isGameRunning = false;
     private bool isGameOver = false;
 
@@ -37,8 +38,6 @@ public class GameManager : MonoBehaviour
 
     void Awake()
     {
-        // 每个场景独立，不需要单例，也不 DontDestroyOnLoad
-        // 只保留 Instance 方便其他脚本引用
         Instance = this;
     }
 
@@ -47,21 +46,8 @@ public class GameManager : MonoBehaviour
         if (enemySpawner == null)
             enemySpawner = FindObjectOfType<EnemySpawner>();
 
-        string selectedDifficultyName = PlayerPrefs.GetString("SelectedDifficulty", "普通");
-        Debug.Log("读取到选中的难度: " + selectedDifficultyName);
-
-        DifficultySettings loadedDifficulty = GetDifficultyByName(selectedDifficultyName);
-
-        if (loadedDifficulty != null)
-        {
-            currentDifficulty = loadedDifficulty;
-            Debug.Log("加载难度配置: " + currentDifficulty.difficultyName);
-        }
-        else
-        {
-            Debug.LogWarning("未找到难度: " + selectedDifficultyName + "，使用默认（普通）");
-            currentDifficulty = normalConfig;
-        }
+        // ✅ 方案2：根据场景名自动设置难度
+        LoadDifficultyByScene();
 
         if (currentDifficulty != null && enemySpawner != null)
         {
@@ -74,12 +60,46 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void OnDestroy()
+    // ✅ 新增：根据场景名加载难度
+    void LoadDifficultyByScene()
     {
-        // 清理事件
-        OnTimerUpdated = null;
-        OnTimerVisibilityChanged = null;
-        OnGameOver = null;
+        string sceneName = SceneManager.GetActiveScene().name.ToLower();
+        Debug.Log("当前场景: " + sceneName);
+
+        if (sceneName.Contains("Easy"))
+        {
+            currentDifficulty = easyConfig;
+            Debug.Log("✅ 自动加载: Easy 难度");
+        }
+        else if (sceneName.Contains("Medium"))
+        {
+            currentDifficulty = normalConfig;
+            Debug.Log("✅ 自动加载: Normal 难度");
+        }
+        else if (sceneName.Contains("Hard"))
+        {
+            currentDifficulty = hardConfig;
+            Debug.Log("✅ 自动加载: Hard 难度");
+        }
+        else if (sceneName.Contains("Infinite"))
+        {
+            currentDifficulty = infiniteConfig;
+            Debug.Log("✅ 自动加载: Infinite 难度");
+        }
+        else
+        {
+            // 兜底：从 PlayerPrefs 读取
+            string selectedDifficultyName = PlayerPrefs.GetString("SelectedDifficulty", "普通");
+            Debug.Log("场景名不匹配，从 PlayerPrefs 读取: " + selectedDifficultyName);
+            currentDifficulty = GetDifficultyByName(selectedDifficultyName);
+        }
+
+        // 如果还是 null，用 normalConfig 兜底
+        if (currentDifficulty == null)
+        {
+            Debug.LogWarning("未找到匹配的难度配置，使用 Normal 作为默认");
+            currentDifficulty = normalConfig;
+        }
     }
 
     DifficultySettings GetDifficultyByName(string name)
@@ -102,6 +122,7 @@ public class GameManager : MonoBehaviour
         isGameOver = false;
         scalingLevel = 0;
         scalingTimer = 0f;
+        gameStartTime = Time.time;  // ✅ 记录开始时间
 
         if (currentDifficulty != null)
         {
@@ -185,6 +206,14 @@ public class GameManager : MonoBehaviour
         if (scalingTimer >= currentDifficulty.scalingInterval)
         {
             scalingTimer = 0f;
+
+            // ✅ 添加最大等级限制（需要在 DifficultySettings 中添加 maxScalingLevel 字段）
+            int maxLevel = currentDifficulty.maxScalingLevel > 0 ? currentDifficulty.maxScalingLevel : 999;
+            if (scalingLevel >= maxLevel)
+            {
+                return;  // 达到上限，不再增长
+            }
+
             scalingLevel++;
 
             currentSpawnInterval = Mathf.Max(
@@ -286,10 +315,11 @@ public class GameManager : MonoBehaviour
             kills = player.GetKills();
         }
 
+        // ✅ 修复：无限模式用真实时间
         float timeToSave = 0f;
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
-            timeToSave = GetElapsedTime();
+            timeToSave = Time.time - gameStartTime;  // 真实经过时间
         }
         else
         {
@@ -375,8 +405,13 @@ public class GameManager : MonoBehaviour
         return currentDifficulty != null && currentDifficulty.IsInfiniteMode();
     }
 
+    // ✅ 修复：无限模式返回真实时间
     public float GetElapsedTime()
     {
+        if (IsInfiniteMode())
+        {
+            return Time.time - gameStartTime;
+        }
         return timeLimit - remainingTime;
     }
 

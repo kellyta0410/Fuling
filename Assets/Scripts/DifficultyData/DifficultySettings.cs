@@ -52,6 +52,9 @@ public class DifficultySettings : ScriptableObject
     [Header("敌人类型")]
     public List<GameObject> allowedEnemyPrefabs;
 
+    [Header("无限模式 - 成长上限")]
+    public int maxScalingLevel = 100;  // 最大成长等级
+
     public bool IsInfiniteMode()
     {
         return mode == GameMode.Infinite;
