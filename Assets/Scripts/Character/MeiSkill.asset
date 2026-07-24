@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d524262452a8f046a93911b3c003370, type: 3}
+  m_Name: MeiSkill
+  m_EditorClassIdentifier: 
+  skillID: 
+  skillName: 
+  description: 
+  icon: {fileID: 0}
+  skillType: 0
+  damageMultiplier: 1.5
+  range: 3
+  cooldown: 8
+  duration: 0.5
+  projectilePrefab: {fileID: 0}
+  projectileSpeed: 10
+  maxLevel: 5
+  baseUpgradeCost: 50
+  costIncreasePerLevel: 25
+  damagePerLevel: 0.1
+  cooldownReductionPerLevel: 0.5
