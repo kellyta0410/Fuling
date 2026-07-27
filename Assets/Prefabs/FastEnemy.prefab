@@ -212,6 +212,14 @@ MonoBehaviour:
   facingAngleThreshold: 45
   detectionRange: 20
   loseTargetRange: 30
-  blinkDistance: 8
-  prepareDuration: 1
-  postBlinkDelay: 0.5
+  prepareDistance: 10
+  prepareDuration: 2
+  distanceToPlayerAfterBlink: 2
+  directAttackDistance: 5
+  postBlinkDelay: 1
+  blinkCooldown: 10
+  showGroundIndicator: 1
+  startColor: {r: 0, g: 1, b: 0, a: 1}
+  endColor: {r: 1, g: 0, b: 0, a: 1}
+  indicatorWidth: 0.2
+  indicatorHeight: 0.05

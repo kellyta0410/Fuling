@@ -4,22 +4,79 @@ using UnityEngine.AI;
 
 public class BlinkerEnemy : EnemyAI
 {
-    private enum BlinkState { Chasing, Preparing, Blinking, PostBlink }
+    private enum BlinkState { Chasing, Preparing, Blinking, PostBlink, Cooldown }
     private BlinkState blinkState = BlinkState.Chasing;
     private float stateTimer = 0f;
     private bool hasPrepared = false;
+    private bool hasAttacked = false;
 
     [Header("瞬移参数")]
-    [Tooltip("瞬移后与玩家的距离（数值越小越贴脸）")]
-    public float blinkDistance = 3f;          // 瞬移后距离玩家多远
-    [Tooltip("瞬移前蓄力停顿时间")]
+    [Tooltip("进入此距离时开始蓄力停顿")]
+    public float prepareDistance = 6f;
+    [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 1.0f;
-    [Tooltip("瞬移后停顿再攻击的时间")]
-    public float postBlinkDelay = 0.5f;
+    [Tooltip("瞬移后距离玩家多远（数值越小越贴脸）")]
+    public float distanceToPlayerAfterBlink = 1.5f;
+    [Tooltip("小于此距离时直接攻击（不瞬移）")]
+    public float directAttackDistance = 2f;
+    [Tooltip("指示线满后到瞬移前的停顿时间（秒）")]
+    public float postBlinkDelay = 0.2f;
+    [Tooltip("瞬移冷却时间（秒）")]
+    public float blinkCooldown = 2.5f;
+
+    [Header("地面指示特效")]
+    [Tooltip("是否显示地面指示")]
+    public bool showGroundIndicator = true;
+    [Tooltip("指示线开始颜色（蓄力开始时）")]
+    public Color startColor = Color.green;
+    [Tooltip("指示线结束颜色（蓄力完成时）")]
+    public Color endColor = Color.red;
+    [Tooltip("指示线宽度")]
+    public float indicatorWidth = 0.2f;
+    [Tooltip("指示线高度（贴地）")]
+    public float indicatorHeight = 0.05f;
+
+    private LineRenderer lineRenderer;
+    private GameObject endMarker;
+    private MeshRenderer endMarkerRenderer;
 
     protected override void OnStart()
     {
+        base.OnStart();
         blinkState = BlinkState.Chasing;
+
+        if (showGroundIndicator)
+        {
+            CreateGroundIndicator();
+        }
+    }
+
+    private void CreateGroundIndicator()
+    {
+        GameObject lineObj = new GameObject("BlinkIndicator_Line");
+        lineObj.transform.SetParent(transform);
+        lineObj.transform.localPosition = Vector3.zero;
+
+        lineRenderer = lineObj.AddComponent<LineRenderer>();
+        lineRenderer.positionCount = 2;
+        lineRenderer.startWidth = indicatorWidth;
+        lineRenderer.endWidth = indicatorWidth;
+        lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        lineRenderer.startColor = startColor;
+        lineRenderer.endColor = startColor;
+        lineRenderer.sortingOrder = 10;
+        lineRenderer.enabled = false;
+
+        endMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        endMarker.name = "BlinkIndicator_End";
+        endMarker.transform.SetParent(transform);
+        endMarker.transform.localScale = new Vector3(0.3f, 0.05f, 0.3f);
+        Destroy(endMarker.GetComponent<Collider>());
+
+        endMarkerRenderer = endMarker.GetComponent<MeshRenderer>();
+        endMarkerRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        endMarkerRenderer.material.color = startColor;
+        endMarker.SetActive(false);
     }
 
     protected override void HandleMovement()
@@ -28,6 +85,7 @@ public class BlinkerEnemy : EnemyAI
         {
             StopAgent();
             IdleRotation();
+            HideGroundIndicator();
             return;
         }
 
@@ -36,8 +94,21 @@ public class BlinkerEnemy : EnemyAI
         switch (blinkState)
         {
             case BlinkState.Chasing:
-                // 正常追击（距离大于瞬移触发距离时）
-                if (distance > blinkDistance + 1f) // 加1m余量，防止频繁切换
+                // ⭐ 如果距离很近（贴脸），直接攻击，不瞬移
+                if (distance <= directAttackDistance && canAttack && !isAttacking)
+                {
+                    StopAgent();
+                    RotateTowardPlayer();
+                    if (IsFacingPlayer())
+                    {
+                        PerformAttack();
+                        Debug.Log($"[Blinker] 贴脸直接攻击！距离: {distance:F1}m");
+                    }
+                    return;
+                }
+
+                // ⭐ 正常追击
+                if (distance > prepareDistance + 0.5f)
                 {
                     if (isAgentValid)
                     {
@@ -46,78 +117,239 @@ public class BlinkerEnemy : EnemyAI
                     }
                 }
 
-                // 当距离 <= blinkDistance + 1 且未攻击，进入准备
-                if (distance <= blinkDistance + 1f && !isAttacking && blinkState == BlinkState.Chasing)
+                // ⭐ 进入蓄力（距离在 prepareDistance 和 directAttackDistance 之间）
+                if (distance <= prepareDistance && distance > directAttackDistance &&
+                    !isAttacking && blinkState == BlinkState.Chasing)
                 {
                     blinkState = BlinkState.Preparing;
                     stateTimer = 0f;
                     hasPrepared = false;
+                    hasAttacked = false;
                     StopAgent();
+
+                    if (showGroundIndicator)
+                    {
+                        ShowGroundIndicator();
+                    }
+
+                    Debug.Log($"[Blinker] 蓄力！距离: {distance:F1}m");
                 }
                 break;
 
             case BlinkState.Preparing:
                 StopAgent();
                 RotateTowardPlayer();
+
                 stateTimer += Time.deltaTime;
+
+                if (showGroundIndicator && lineRenderer != null)
+                {
+                    UpdateGroundIndicator();
+                }
+
+                // ⭐ 蓄力过程中如果玩家靠近到直接攻击距离，取消蓄力直接攻击
+                float currentDistance = Vector3.Distance(transform.position, player.transform.position);
+                if (currentDistance <= directAttackDistance && canAttack && !isAttacking)
+                {
+                    HideGroundIndicator();
+                    StopAgent();
+                    RotateTowardPlayer();
+                    if (IsFacingPlayer())
+                    {
+                        PerformAttack();
+                        hasAttacked = true;
+                        blinkState = BlinkState.Cooldown;
+                        stateTimer = 0f;
+                        Debug.Log($"[Blinker] 蓄力中贴脸，取消瞬移直接攻击！");
+                    }
+                    return;
+                }
+
+                // ⭐ 蓄力完成，进入"瞬移前等待"状态
                 if (stateTimer >= prepareDuration && !hasPrepared)
                 {
                     hasPrepared = true;
-                    PerformBlink();
+                    HideGroundIndicator();
+
+                    // 进入瞬移前等待
                     blinkState = BlinkState.Blinking;
+                    stateTimer = 0f;
+                    Debug.Log($"[Blinker] 蓄力完成，等待 {postBlinkDelay}s 后瞬移");
                 }
                 break;
 
             case BlinkState.Blinking:
-                // 瞬移完成，直接进入后摇
-                blinkState = BlinkState.PostBlink;
-                stateTimer = 0f;
-                break;
-
-            case BlinkState.PostBlink:
-                StopAgent();
-                RotateTowardPlayer();
+                // ⭐ 瞬移前等待（指示线满后等 postBlinkDelay 秒再瞬移）
                 stateTimer += Time.deltaTime;
                 if (stateTimer >= postBlinkDelay)
                 {
-                    // 尝试攻击（如果距离足够且面向玩家）
-                    float distAfterBlink = Vector3.Distance(transform.position, player.transform.position);
-                    if (distAfterBlink <= enemyData.attackRange && IsFacingPlayer() && canAttack)
-                        PerformAttack();
-                    // 回到追逐状态
+                    PerformBlinkToPlayer();
+                    blinkState = BlinkState.PostBlink;
+                    stateTimer = 0f;
+                    Debug.Log($"[Blinker] 瞬移！");
+                }
+                break;
+
+            case BlinkState.PostBlink:
+                // ⭐ 瞬移后立即攻击（不等待）
+                StopAgent();
+                float distAfterBlink = Vector3.Distance(transform.position, player.transform.position);
+                if (!hasAttacked && distAfterBlink <= enemyData.attackRange && canAttack)
+                {
+                    PerformAttack();
+                    hasAttacked = true;
+                    Debug.Log($"[Blinker] 瞬移攻击！距离: {distAfterBlink:F1}m");
+                }
+
+                // 立即进入冷却
+                blinkState = BlinkState.Cooldown;
+                stateTimer = 0f;
+                Debug.Log($"[Blinker] 冷却 {blinkCooldown}s");
+                break;
+
+            case BlinkState.Cooldown:
+                // ⭐ 冷却期间：只追击，不攻击
+                if (distance > enemyData.attackRange)
+                {
+                    if (isAgentValid)
+                    {
+                        agent.isStopped = false;
+                        agent.SetDestination(player.transform.position);
+                    }
+                }
+                else
+                {
+                    StopAgent();
+                    RotateTowardPlayer();
+                }
+
+                stateTimer += Time.deltaTime;
+                if (stateTimer >= blinkCooldown)
+                {
                     blinkState = BlinkState.Chasing;
+                    Debug.Log("[Blinker] 冷却结束");
                 }
                 break;
         }
     }
 
-    /// <summary>
-    /// 执行瞬移：瞬移到玩家前方 blinkDistance 米处
-    /// </summary>
-    private void PerformBlink()
+    private void ShowGroundIndicator()
     {
-        Vector3 dirToPlayer = (player.transform.position - transform.position).normalized;
-        // 目标点 = 玩家位置 - 方向 * 瞬移距离（这样敌人会出现在玩家前方）
-        Vector3 targetPos = player.transform.position - dirToPlayer * blinkDistance;
-        targetPos.y = transform.position.y; // 保持相同高度
+        if (lineRenderer != null)
+        {
+            lineRenderer.enabled = true;
+            lineRenderer.SetPosition(0, GetGroundPosition(transform.position));
+            lineRenderer.SetPosition(1, GetGroundPosition(transform.position));
+            lineRenderer.startColor = startColor;
+            lineRenderer.endColor = startColor;
+        }
 
+        if (endMarker != null)
+        {
+            endMarker.SetActive(true);
+            endMarker.transform.position = GetGroundPosition(transform.position);
+            endMarkerRenderer.material.color = startColor;
+        }
+    }
+
+    private void UpdateGroundIndicator()
+    {
+        float progress = Mathf.Clamp01(stateTimer / prepareDuration);
+
+        Vector3 startPos = GetGroundPosition(transform.position);
+
+        // ⭐ 计算瞬移目标方向（朝向玩家）
+        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+        float currentDistance = Vector3.Distance(transform.position, player.transform.position);
+        float blinkDistance = currentDistance - distanceToPlayerAfterBlink;
+        blinkDistance = Mathf.Max(blinkDistance, 0);
+
+        Vector3 endPos = GetGroundPosition(transform.position + directionToPlayer * blinkDistance * progress);
+
+        lineRenderer.SetPosition(0, startPos);
+        lineRenderer.SetPosition(1, endPos);
+
+        Color currentColor = Color.Lerp(startColor, endColor, progress);
+        lineRenderer.startColor = currentColor;
+        lineRenderer.endColor = currentColor;
+
+        float currentWidth = indicatorWidth * (0.5f + 0.5f * progress);
+        lineRenderer.startWidth = currentWidth;
+        lineRenderer.endWidth = currentWidth;
+
+        if (endMarker != null)
+        {
+            endMarker.transform.position = endPos;
+            endMarkerRenderer.material.color = currentColor;
+            float scale = 0.2f + 0.4f * progress;
+            endMarker.transform.localScale = new Vector3(scale, 0.05f, scale);
+        }
+    }
+
+    private void HideGroundIndicator()
+    {
+        if (lineRenderer != null)
+            lineRenderer.enabled = false;
+        if (endMarker != null)
+            endMarker.SetActive(false);
+    }
+
+    private Vector3 GetGroundPosition(Vector3 position)
+    {
+        RaycastHit hit;
+        if (Physics.Raycast(position + Vector3.up * 2f, Vector3.down, out hit, 5f))
+        {
+            return new Vector3(position.x, hit.point.y + indicatorHeight, position.z);
+        }
+        return new Vector3(position.x, indicatorHeight, position.z);
+    }
+
+    /// <summary>
+    /// ⭐ 瞬移到距离玩家固定距离的位置
+    /// </summary>
+    private void PerformBlinkToPlayer()
+    {
+        if (player == null) return;
+
+        // 计算从敌人指向玩家的方向
+        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+
+        // 目标点 = 玩家位置 - 方向 × 距离（出现在玩家面前）
+        Vector3 targetPos = player.transform.position - directionToPlayer * distanceToPlayerAfterBlink;
+        targetPos.y = transform.position.y;
+
+        // 确保目标点在地面上
         if (isAgentValid && agent.isOnNavMesh)
         {
             NavMeshHit hit;
-            if (NavMesh.SamplePosition(targetPos, out hit, 2f, NavMesh.AllAreas))
+            if (NavMesh.SamplePosition(targetPos, out hit, 3f, NavMesh.AllAreas))
+            {
                 agent.Warp(hit.position);
+                transform.position = hit.position;
+            }
             else
+            {
                 agent.Warp(targetPos);
+                transform.position = targetPos;
+            }
         }
         else
         {
             transform.position = targetPos;
         }
-        RotateTowardPlayer();
+
+        // 瞬移后面向玩家
+        Vector3 faceDir = (player.transform.position - transform.position).normalized;
+        faceDir.y = 0;
+        if (faceDir != Vector3.zero)
+            transform.rotation = Quaternion.LookRotation(faceDir);
+
+        Debug.Log($"[Blinker] 瞬移到距离玩家 {distanceToPlayerAfterBlink:F1}m 处");
     }
 
     private void RotateTowardPlayer()
     {
+        if (player == null) return;
         Vector3 dir = (player.transform.position - transform.position).normalized;
         dir.y = 0;
         if (dir != Vector3.zero)
@@ -128,10 +360,29 @@ public class BlinkerEnemy : EnemyAI
     {
         base.OnDrawGizmosSelected();
         if (enemyData == null || !enemyData.showGizmos) return;
+
+        // 蓄力触发距离（紫色）
         Gizmos.color = Color.magenta;
-        Gizmos.DrawWireSphere(transform.position, blinkDistance);
+        Gizmos.DrawWireSphere(transform.position, prepareDistance);
+
+        // 直接攻击距离（黄色）
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, directAttackDistance);
+
+        // 攻击范围（红色）
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
+
+        // ⭐ 瞬移目标距离（青色虚线圆）- 显示瞬移后会出现在玩家多近
+        if (player != null)
+        {
+            Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
+            Gizmos.DrawWireSphere(player.transform.position, distanceToPlayerAfterBlink);
+        }
+
 #if UNITY_EDITOR
-        UnityEditor.Handles.Label(transform.position + Vector3.up * 3f, $"瞬移距离: {blinkDistance:F1}");
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 3.5f,
+            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移后距离: {distanceToPlayerAfterBlink:F1}m\n瞬移前停顿: {postBlinkDelay:F1}s");
 #endif
     }
 }
