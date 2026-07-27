@@ -113,14 +113,15 @@ PrefabInstance:
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: 5831e8f122a54cb4e9052d06898fa1c9, type: 2}
+    - target: {fileID: 5866666021909216657, guid: 41f081d5c6d286c47a33bed3f84de79a,
+        type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 41f081d5c6d286c47a33bed3f84de79a,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1594826815084696062}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 41f081d5c6d286c47a33bed3f84de79a,
         type: 3}
       insertIndex: -1
@@ -129,6 +130,10 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 7519529453321370406}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 41f081d5c6d286c47a33bed3f84de79a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5147985382120491108}
   m_SourcePrefab: {fileID: 100100000, guid: 41f081d5c6d286c47a33bed3f84de79a, type: 3}
 --- !u!1 &2051455957182502511 stripped
 GameObject:
@@ -136,34 +141,6 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 1205088396766473022}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1594826815084696062
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2051455957182502511}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ac24575c9982d5444ad5888926d283c1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enemyData: {fileID: 11400000, guid: 5a65f4c222357ac4aad54b037bd98353, type: 2}
-  coinPrefab: {fileID: 6635696330829912713, guid: 02a014571be355446be50bc4c7158be5,
-    type: 3}
-  healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
-    type: 3}
-  healthBarOffset: {x: 0, y: 1.5, z: 0}
-  fullHealthColor: {r: 0, g: 1, b: 0, a: 1}
-  midHealthColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  lowHealthColor: {r: 1, g: 0, b: 0, a: 1}
-  isDead: 0
-  canAttack: 1
-  attackDuration: 0.5
-  attackDamageDelay: 0.2
-  facingAngleThreshold: 45
-  detectionRange: 20
-  loseTargetRange: 30
 --- !u!195 &9223355647013587247
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -207,3 +184,40 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1.5286231, z: 0.96297383}
   m_Center: {x: 0, y: 0.7644181, z: 0.018513083}
+--- !u!114 &5147985382120491108
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2051455957182502511}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4644458ef506054aaf910c03dd275ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enemyData: {fileID: 11400000, guid: 5a65f4c222357ac4aad54b037bd98353, type: 2}
+  coinPrefab: {fileID: 6635696330829912713, guid: 02a014571be355446be50bc4c7158be5,
+    type: 3}
+  healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
+    type: 3}
+  healthBarOffset: {x: 0, y: 1.5, z: 0}
+  fullHealthColor: {r: 0, g: 1, b: 0, a: 1}
+  midHealthColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  lowHealthColor: {r: 1, g: 0, b: 0, a: 1}
+  isDead: 0
+  canAttack: 1
+  attackDuration: 0.5
+  attackDamageDelay: 0.3
+  facingAngleThreshold: 45
+  detectionRange: 20
+  loseTargetRange: 30
+  windUpDistance: 10
+  windUpDuration: 1.2
+  chargeSpeed: 30
+  chargeMaxDistance: 50
+  chargeMinDistance: 5
+  recoveryDuration: 0.6
+  chargeCooldown: 3.5
+  pushDuration: 0.2
+  pushDistance: 2

@@ -3,11 +3,12 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.AI;
 
-public class EnemyAI : MonoBehaviour
+public abstract class EnemyAI : MonoBehaviour
 {
-    private Animator animator;
-    private PlayerController player;
-    private NavMeshAgent agent;
+    // ---------- 公共组件 ----------
+    protected Animator animator;
+    protected PlayerController player;
+    protected NavMeshAgent agent;
 
     [Header("敌人数据")]
     public EnemyData enemyData;
@@ -18,10 +19,10 @@ public class EnemyAI : MonoBehaviour
     [Header("血条")]
     public GameObject healthBarPrefab;
     public Vector3 healthBarOffset = new Vector3(0, 1.5f, 0);
-    private GameObject healthBarInstance;
-    private Slider healthSlider;
-    private Image healthFillImage;
-    private float currentHealth;
+    protected GameObject healthBarInstance;
+    protected Slider healthSlider;
+    protected Image healthFillImage;
+    protected float currentHealth;
 
     [Header("血条颜色")]
     public Color fullHealthColor = Color.green;
@@ -31,64 +32,53 @@ public class EnemyAI : MonoBehaviour
     [Header("状态")]
     public bool isDead = false;
 
-    [Header("攻击")]
-    private float attackCooldownTimer = 0f;
+    [Header("攻击通用")]
+    protected float attackCooldownTimer = 0f;
     public bool canAttack = true;
-    private bool isAttacking = false;
-    private float attackTimer = 0f;
+    protected bool isAttacking = false;
+    protected float attackTimer = 0f;
     public float attackDuration = 0.5f;
     public float attackDamageDelay = 0.3f;
-    private Coroutine attackCoroutine;
+    protected Coroutine attackCoroutine;
 
     [Header("面向检测")]
     public float facingAngleThreshold = 45f;
 
     [Header("追击检测")]
-    [Tooltip("检测玩家的范围（进入此范围才开始追击）")]
     public float detectionRange = 18f;
-    [Tooltip("失去玩家目标的范围（比检测范围大，防止频繁切换）")]
     public float loseTargetRange = 25f;
 
-    // 当前倍率（由 EnemySpawner 设置）
-    private float currentSpeedMultiplier = 1f;
-    private float currentHealthMultiplier = 1f;
-    private float currentDamageMultiplier = 1f;
+    // 缩放倍率（由 EnemySpawner 设置）
+    protected float currentSpeedMultiplier = 1f;
+    protected float currentHealthMultiplier = 1f;
+    protected float currentDamageMultiplier = 1f;
 
-    // 存储基础值
-    private float baseSpeed;
-    private float baseHealth;
-    private float baseAttackDamage;
+    // 基础值
+    protected float baseSpeed;
+    protected float baseHealth;
+    protected float baseAttackDamage;
 
-    // 标记是否已初始化血量（防止重复重置）
-    private bool isHealthInitialized = false;
+    protected bool isHealthInitialized = false;
 
-    // 当前是否在追击状态
-    private bool isChasing = false;
+    // 当前是否追击中（子类可读）
+    protected bool isChasing = false;
 
-    // 原地待机时的随机旋转计时
+    // 待机随机旋转
     private float idleRotationTimer = 0f;
     private float idleRotationInterval = 3f;
     private Quaternion targetIdleRotation;
 
-    // ⭐ 标记 NavMeshAgent 是否有效
-    private bool isAgentValid = false;
+    // NavMeshAgent 有效性
+    protected bool isAgentValid = false;
 
-    void Start()
+    // ---------- 生命周期 ----------
+    protected virtual void Start()
     {
         animator = GetComponent<Animator>();
         player = FindObjectOfType<PlayerController>();
         agent = GetComponent<NavMeshAgent>();
 
-        // ⭐ 检查 NavMeshAgent 是否有效
-        if (agent != null && agent.isOnNavMesh)
-        {
-            isAgentValid = true;
-        }
-        else
-        {
-            isAgentValid = false;
-            Debug.LogWarning($"{gameObject.name}: NavMeshAgent 无效或不在 NavMesh 上");
-        }
+        isAgentValid = agent != null && agent.isOnNavMesh;
 
         if (enemyData != null)
         {
@@ -111,24 +101,20 @@ public class EnemyAI : MonoBehaviour
                 agent.height = 2f;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
-
-                // ⭐ 初始时停止移动
                 agent.isStopped = true;
             }
         }
         else
         {
-            Debug.LogWarning("EnemyData 未赋值！使用默认值");
+            // 默认值
             baseSpeed = 2f;
             baseHealth = 50f;
             baseAttackDamage = 10f;
-
             if (!isHealthInitialized)
             {
                 currentHealth = 50f;
                 isHealthInitialized = true;
             }
-
             if (isAgentValid)
             {
                 agent.speed = 2f;
@@ -137,8 +123,6 @@ public class EnemyAI : MonoBehaviour
                 agent.height = 2f;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
-
-                // ⭐ 初始时停止移动
                 agent.isStopped = true;
             }
         }
@@ -146,42 +130,22 @@ public class EnemyAI : MonoBehaviour
         CreateHealthBar();
         ApplyCurrentMultipliers();
 
-        // 初始化为待机状态
         isChasing = false;
-
-        // 设置初始随机旋转
+        // 待机随机旋转
         targetIdleRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
         idleRotationInterval = Random.Range(2f, 5f);
         idleRotationTimer = 0f;
+
+        // 子类可做额外初始化
+        OnStart();
     }
 
-    // 由 EnemySpawner 调用，设置倍率
-    public void ApplyScalingMultipliers(float speedMult, float healthMult, float damageMult)
-    {
-        currentSpeedMultiplier = speedMult;
-        currentHealthMultiplier = healthMult;
-        currentDamageMultiplier = damageMult;
+    protected virtual void OnStart() { }
 
-        ApplyCurrentMultipliers();
-    }
-
-    void ApplyCurrentMultipliers()
-    {
-        if (enemyData == null) return;
-
-        UpdateHealthBar();
-
-        if (isAgentValid)
-        {
-            agent.speed = baseSpeed * currentSpeedMultiplier;
-        }
-    }
-
-    void Update()
+    protected virtual void Update()
     {
         if (isDead)
         {
-            // ⭐ 安全停止 Agent
             StopAgent();
             if (healthBarInstance != null) healthBarInstance.SetActive(false);
             return;
@@ -201,19 +165,18 @@ public class EnemyAI : MonoBehaviour
                     attackCoroutine = null;
                 }
             }
-            // ⭐ 安全停止 Agent
             StopAgent();
             return;
         }
 
         if (player == null || player.IsDead())
         {
-            // ⭐ 安全停止 Agent
             StopAgent();
             UpdateAnimations(0f, false);
             return;
         }
 
+        // 攻击冷却
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -226,220 +189,130 @@ public class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
-        // 追击检测：进入 detectionRange 开始追击
-        if (distance <= detectionRange)
-        {
-            isChasing = true;
-        }
-        // 离开 loseTargetRange 停止追击（比检测范围大，防止抖动）
-        else if (distance > loseTargetRange)
-        {
-            isChasing = false;
-        }
+        // 范围检测
+        if (distance <= detectionRange) isChasing = true;
+        else if (distance > loseTargetRange) isChasing = false;
 
-        // 不在追击状态：待机
-        if (!isChasing)
-        {
-            // ⭐ 安全停止 Agent
-            StopAgent();
-            UpdateAnimations(0f, false);
+        // 子类可自定义移动逻辑
+        HandleMovement();
 
-            // 待机时缓慢旋转（更有生气）
-            IdleRotation();
-
-            // 更新血条位置（但血条一直显示）
-            UpdateHealthBarPosition();
-            return;
-        }
-
-        // ⭐ 追击状态：正常行为
-        if (distance <= enemyData.attackRange)
-        {
-            // ⭐ 安全停止 Agent
-            StopAgent();
-
-            Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
-            directionToPlayer.y = 0;
-
-            if (directionToPlayer != Vector3.zero)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(directionToPlayer);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
-            }
-
-            if (IsFacingPlayer())
-            {
-                if (canAttack && !isAttacking && !isDead)
-                {
-                    PerformAttack();
-                }
-            }
-
-            UpdateAnimations(0f, false);
-        }
-        else
-        {
-            if (!isAttacking)
-            {
-                if (isAgentValid)
-                {
-                    agent.isStopped = false;
-                    agent.SetDestination(player.transform.position);
-                }
-
-                float currentSpeed = isAgentValid ? agent.velocity.magnitude : 0f;
-                UpdateAnimations(currentSpeed, true);
-            }
-            else
-            {
-                // ⭐ 安全停止 Agent
-                StopAgent();
-                UpdateAnimations(0f, false);
-            }
-        }
-
+        // 更新血条位置（始终显示）
         UpdateHealthBarPosition();
+
+        // 动画更新（子类可重写）
+        UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
     }
 
-    /// <summary>
-    /// ⭐ 安全地停止 NavMeshAgent
-    /// </summary>
-    private void StopAgent()
+    // ---------- 子类需要重写的方法 ----------
+    protected abstract void HandleMovement();   // 移动逻辑（追击、瞬移、冲撞等）
+    protected virtual void HandleAttack() { }   // 攻击触发（子类决定何时攻击）
+
+    // ---------- 公共方法 ----------
+    public void ApplyScalingMultipliers(float speedMult, float healthMult, float damageMult)
+    {
+        currentSpeedMultiplier = speedMult;
+        currentHealthMultiplier = healthMult;
+        currentDamageMultiplier = damageMult;
+        ApplyCurrentMultipliers();
+    }
+
+    protected virtual void ApplyCurrentMultipliers()
+    {
+        if (enemyData == null) return;
+        UpdateHealthBar();
+        if (isAgentValid)
+            agent.speed = baseSpeed * currentSpeedMultiplier;
+    }
+
+    // 停止Agent（安全）
+    protected void StopAgent()
     {
         if (isAgentValid && agent != null && agent.isOnNavMesh)
-        {
             agent.isStopped = true;
-        }
     }
 
-    /// <summary>
-    /// 待机时的随机旋转
-    /// </summary>
-    void IdleRotation()
+    // 获取当前速度（供子类调用）
+    protected float GetCurrentSpeed()
     {
-        idleRotationTimer += Time.deltaTime;
-
-        if (idleRotationTimer >= idleRotationInterval)
-        {
-            idleRotationTimer = 0f;
-            idleRotationInterval = Random.Range(2f, 6f);
-            targetIdleRotation = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * transform.rotation;
-        }
-
-        transform.rotation = Quaternion.Slerp(transform.rotation, targetIdleRotation, 0.5f * Time.deltaTime);
+        return isAgentValid ? agent.velocity.magnitude : 0f;
     }
 
-    bool IsFacingPlayer()
+    // 面向检测
+    protected bool IsFacingPlayer()
     {
         if (player == null) return false;
-
-        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
-        directionToPlayer.y = 0;
-
+        Vector3 dir = (player.transform.position - transform.position).normalized;
+        dir.y = 0;
         Vector3 forward = transform.forward;
         forward.y = 0;
-
-        float angle = Vector3.Angle(forward, directionToPlayer);
-
-        return angle <= facingAngleThreshold;
+        return Vector3.Angle(forward, dir) <= facingAngleThreshold;
     }
 
-    void PerformAttack()
+    // 攻击执行（子类调用）
+    protected virtual void PerformAttack()
     {
         if (!canAttack || isDead || isAttacking) return;
-
         canAttack = false;
         attackCooldownTimer = 0f;
-
         isAttacking = true;
         attackTimer = 0f;
-
-        // ⭐ 安全停止 Agent
         StopAgent();
-
         animator.SetBool("IsAttacking", true);
         animator.SetTrigger("Attack");
-
         if (attackCoroutine != null) StopCoroutine(attackCoroutine);
         attackCoroutine = StartCoroutine(DelayedDamage());
     }
 
-    IEnumerator DelayedDamage()
+    protected virtual IEnumerator DelayedDamage()
     {
         yield return new WaitForSeconds(attackDamageDelay);
-
         if (player != null && !player.IsDead() && !isDead)
         {
-            float distance = Vector3.Distance(transform.position, player.transform.position);
-
-            if (distance <= enemyData.attackRange && IsFacingPlayer())
+            float dist = Vector3.Distance(transform.position, player.transform.position);
+            if (dist <= enemyData.attackRange && IsFacingPlayer())
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));
-                Debug.Log(gameObject.name + " 攻击玩家，造成 " + finalDamage + " 伤害");
-            }
-            else
-            {
-                Debug.Log(gameObject.name + " 攻击失败");
+                Debug.Log(gameObject.name + " 攻击造成 " + finalDamage + " 伤害");
             }
         }
     }
 
-    void CreateHealthBar()
+    // 血条相关
+    protected virtual void CreateHealthBar()
     {
-        if (healthBarPrefab == null)
-        {
-            Debug.LogWarning("HealthBar Prefab 未设置");
-            return;
-        }
-
+        if (healthBarPrefab == null) return;
         healthBarInstance = Instantiate(healthBarPrefab, transform.position + healthBarOffset, Quaternion.identity);
         healthBarInstance.transform.SetParent(transform);
-
         healthSlider = healthBarInstance.GetComponent<Slider>();
-        if (healthSlider == null)
-        {
-            healthSlider = healthBarInstance.GetComponentInChildren<Slider>();
-        }
-
+        if (healthSlider == null) healthSlider = healthBarInstance.GetComponentInChildren<Slider>();
         if (healthSlider != null)
         {
-            Transform fillTransform = healthSlider.transform.Find("Fill Area/Fill");
-            if (fillTransform != null)
-            {
-                healthFillImage = fillTransform.GetComponent<Image>();
-            }
+            Transform fill = healthSlider.transform.Find("Fill Area/Fill");
+            if (fill != null) healthFillImage = fill.GetComponent<Image>();
         }
-
         if (healthFillImage == null)
         {
-            Image[] images = healthBarInstance.GetComponentsInChildren<Image>();
-            foreach (Image img in images)
+            Image[] imgs = healthBarInstance.GetComponentsInChildren<Image>();
+            foreach (var img in imgs)
             {
-                if (img.transform != healthBarInstance.transform &&
-                    img.transform.parent != null &&
-                    img.transform.parent.name.Contains("Fill"))
+                if (img.transform.parent != null && img.transform.parent.name.Contains("Fill"))
                 {
                     healthFillImage = img;
                     break;
                 }
             }
-
             if (healthFillImage == null && healthSlider != null)
-            {
                 healthFillImage = healthSlider.GetComponentInChildren<Image>();
-            }
         }
-
         UpdateHealthBar();
     }
 
-    void UpdateHealthBarPosition()
+    protected void UpdateHealthBarPosition()
     {
         if (healthBarInstance != null)
         {
             healthBarInstance.transform.localPosition = healthBarOffset;
-
             if (Camera.main != null)
             {
                 healthBarInstance.transform.LookAt(Camera.main.transform);
@@ -448,181 +321,113 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    void UpdateHealthBar()
+    protected void UpdateHealthBar()
     {
         if (healthSlider == null || enemyData == null) return;
-
         float maxHealth = baseHealth * currentHealthMultiplier;
-        float healthPercent = currentHealth / maxHealth;
-        healthSlider.value = healthPercent;
-
-        UpdateHealthBarColor(healthPercent);
+        float percent = currentHealth / maxHealth;
+        healthSlider.value = percent;
+        if (healthFillImage != null)
+        {
+            Color color;
+            if (percent >= 0.6f) color = fullHealthColor;
+            else if (percent >= 0.3f) color = midHealthColor;
+            else color = lowHealthColor;
+            healthFillImage.color = color;
+        }
     }
 
-    void UpdateHealthBarColor(float healthPercent)
+    // 受伤
+    public void TakeDamageImmediate(int damage)
     {
-        if (healthFillImage == null) return;
-
-        Color targetColor;
-        if (healthPercent >= 0.6f)
-            targetColor = fullHealthColor;
-        else if (healthPercent >= 0.3f)
-            targetColor = midHealthColor;
-        else
-            targetColor = lowHealthColor;
-
-        healthFillImage.color = targetColor;
+        if (isDead || enemyData == null) return;
+        StartCoroutine(SmoothDamage(damage));
     }
 
-    void UpdateAnimations(float speed, bool isMoving)
+    protected virtual IEnumerator SmoothDamage(int damage)
+    {
+        float duration = 0.2f;
+        float elapsed = 0f;
+        float start = currentHealth;
+        float target = Mathf.Max(currentHealth - damage, 0);
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            currentHealth = Mathf.Lerp(start, target, elapsed / duration);
+            UpdateHealthBar();
+            yield return null;
+        }
+        currentHealth = target;
+        UpdateHealthBar();
+        if (currentHealth <= 0) Die();
+    }
+
+    protected virtual void Die()
+    {
+        isDead = true;
+        if (healthBarInstance != null) healthBarInstance.SetActive(false);
+        StopAgent();
+        animator.SetTrigger("Die");
+
+        int baseCoin = enemyData != null ? enemyData.coinReward : 10;
+        int finalCoin = baseCoin;
+        bool comboActive = ComboManager.Instance != null && ComboManager.Instance.IsComboActive();
+        if (comboActive) finalCoin = baseCoin * 2;
+        if (ComboManager.Instance != null) ComboManager.Instance.AddKill();
+        SpawnCoin(finalCoin);
+        if (player != null) player.AddKill();
+
+        float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
+        Destroy(gameObject, delay);
+    }
+
+    protected virtual void SpawnCoin(int amount)
+    {
+        if (coinPrefab == null) return;
+        for (int i = 0; i < amount; i++)
+        {
+            Vector3 offset = new Vector3(Random.Range(-0.3f, 0.3f), 0.5f, Random.Range(-0.3f, 0.3f));
+            GameObject coin = Instantiate(coinPrefab, transform.position + offset, Quaternion.identity);
+            Coin coinScript = coin.GetComponent<Coin>();
+            if (coinScript != null) coinScript.SetValue(1);
+        }
+    }
+
+    protected void UpdateAnimations(float speed, bool isMoving)
     {
         if (animator == null || isAttacking) return;
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsMoving", isMoving);
     }
 
-    public void TakeDamageImmediate(int damage)
+    // 待机旋转（基类提供，子类可调用）
+    protected void IdleRotation()
     {
-        if (isDead || enemyData == null) return;
-
-        StartCoroutine(SmoothDamage(damage));
+        idleRotationTimer += Time.deltaTime;
+        if (idleRotationTimer >= idleRotationInterval)
+        {
+            idleRotationTimer = 0f;
+            idleRotationInterval = Random.Range(2f, 6f);
+            targetIdleRotation = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * transform.rotation;
+        }
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetIdleRotation, 0.5f * Time.deltaTime);
     }
 
-    IEnumerator SmoothDamage(int damage)
-    {
-        float duration = 0.2f;
-        float elapsed = 0f;
-        float startHealth = currentHealth;
-        float targetHealth = Mathf.Max(currentHealth - damage, 0);
-
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / duration;
-            currentHealth = Mathf.Lerp(startHealth, targetHealth, t);
-            UpdateHealthBar();
-            yield return null;
-        }
-
-        currentHealth = targetHealth;
-        UpdateHealthBar();
-
-        Debug.Log("敌人受到 " + damage + " 伤害，剩余血量: " + currentHealth);
-
-        if (currentHealth <= 0) Die();
-    }
-
-    void Die()
-    {
-        isDead = true;
-
-        if (healthBarInstance != null)
-            healthBarInstance.SetActive(false);
-
-        // ⭐ 安全停止 Agent
-        StopAgent();
-
-        if (animator != null)
-            animator.SetTrigger("Die");
-
-        int baseCoinReward = enemyData != null ? enemyData.coinReward : 10;
-        int finalCoinReward = baseCoinReward;
-
-        bool isComboActive = false;
-        if (ComboManager.Instance != null)
-        {
-            isComboActive = ComboManager.Instance.IsComboActive();
-            if (isComboActive)
-            {
-                finalCoinReward = baseCoinReward * 2;
-            }
-
-            ComboManager.Instance.AddKill();
-        }
-
-        SpawnCoin(finalCoinReward);
-
-        if (player != null)
-        {
-            player.AddKill();
-        }
-
-        Debug.Log($"击杀 {enemyData?.enemyName ?? "敌人"} | " +
-                  $"基础金币: {baseCoinReward} | " +
-                  $"{(isComboActive ? "🔥 Combo x2 → " : "")}最终: {finalCoinReward} 金币");
-
-        float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
-        Destroy(gameObject, delay);
-    }
-
-    void SpawnCoin(int coinAmount)
-    {
-        if (coinPrefab == null)
-        {
-            Debug.LogWarning("coinPrefab 未设置，无法生成金币");
-            return;
-        }
-
-        for (int i = 0; i < coinAmount; i++)
-        {
-            Vector3 offset = new Vector3(
-                Random.Range(-0.3f, 0.3f),
-                0.5f,
-                Random.Range(-0.3f, 0.3f)
-            );
-
-            GameObject coin = Instantiate(coinPrefab, transform.position + offset, Quaternion.identity);
-            Coin coinScript = coin.GetComponent<Coin>();
-
-            if (coinScript != null)
-            {
-                coinScript.SetValue(1);
-            }
-        }
-
-        Debug.Log($"生成了 {coinAmount} 个金币");
-    }
-
-    public void SetMultipliersFromSpawner()
-    {
-        // 由 EnemySpawner 在生成后直接调用 ApplyScalingMultipliers
-    }
-
-    void OnDrawGizmosSelected()
+    // 可视化调试
+    protected virtual void OnDrawGizmosSelected()
     {
         if (enemyData == null || !enemyData.showGizmos) return;
-
-        // 检测范围（绿色）
-        Gizmos.color = new Color(0f, 1f, 0f, 0.3f);
+        Gizmos.color = new Color(0, 1, 0, 0.3f);
         Gizmos.DrawWireSphere(transform.position, detectionRange);
-
-        // 失去目标范围（红色）
-        Gizmos.color = new Color(1f, 0f, 0f, 0.2f);
+        Gizmos.color = new Color(1, 0, 0, 0.2f);
         Gizmos.DrawWireSphere(transform.position, loseTargetRange);
-
-        // 攻击范围（黄色）
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
-
-        // 面向角度
         Gizmos.color = Color.blue;
-        Vector3 forward = transform.forward;
-        Quaternion leftRotation = Quaternion.Euler(0, -facingAngleThreshold, 0);
-        Quaternion rightRotation = Quaternion.Euler(0, facingAngleThreshold, 0);
-        Vector3 leftBoundary = leftRotation * forward * 2f;
-        Vector3 rightBoundary = rightRotation * forward * 2f;
-        Gizmos.DrawLine(transform.position, transform.position + leftBoundary);
-        Gizmos.DrawLine(transform.position, transform.position + rightBoundary);
-
-#if UNITY_EDITOR
-        if (enemyData != null)
-        {
-            float maxHealth = baseHealth * currentHealthMultiplier;
-            UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
-                enemyData.enemyName + "\nHP: " + currentHealth + "/" + maxHealth +
-                "\n追击: " + (isChasing ? "是" : "否") +
-                "\n距离: " + (player != null ? Vector3.Distance(transform.position, player.transform.position).ToString("F1") : "N/A"));
-        }
-#endif
+        Vector3 fwd = transform.forward;
+        Quaternion left = Quaternion.Euler(0, -facingAngleThreshold, 0);
+        Quaternion right = Quaternion.Euler(0, facingAngleThreshold, 0);
+        Gizmos.DrawLine(transform.position, transform.position + left * fwd * 2f);
+        Gizmos.DrawLine(transform.position, transform.position + right * fwd * 2f);
     }
 }
