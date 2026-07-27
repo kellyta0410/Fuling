@@ -43,6 +43,12 @@ public class EnemyAI : MonoBehaviour
     [Header("面向检测")]
     public float facingAngleThreshold = 45f;
 
+    [Header("追击检测")]
+    [Tooltip("检测玩家的范围（进入此范围才开始追击）")]
+    public float detectionRange = 18f;
+    [Tooltip("失去玩家目标的范围（比检测范围大，防止频繁切换）")]
+    public float loseTargetRange = 25f;
+
     // 当前倍率（由 EnemySpawner 设置）
     private float currentSpeedMultiplier = 1f;
     private float currentHealthMultiplier = 1f;
@@ -56,11 +62,33 @@ public class EnemyAI : MonoBehaviour
     // 标记是否已初始化血量（防止重复重置）
     private bool isHealthInitialized = false;
 
+    // 当前是否在追击状态
+    private bool isChasing = false;
+
+    // 原地待机时的随机旋转计时
+    private float idleRotationTimer = 0f;
+    private float idleRotationInterval = 3f;
+    private Quaternion targetIdleRotation;
+
+    // ⭐ 标记 NavMeshAgent 是否有效
+    private bool isAgentValid = false;
+
     void Start()
     {
         animator = GetComponent<Animator>();
         player = FindObjectOfType<PlayerController>();
         agent = GetComponent<NavMeshAgent>();
+
+        // ⭐ 检查 NavMeshAgent 是否有效
+        if (agent != null && agent.isOnNavMesh)
+        {
+            isAgentValid = true;
+        }
+        else
+        {
+            isAgentValid = false;
+            Debug.LogWarning($"{gameObject.name}: NavMeshAgent 无效或不在 NavMesh 上");
+        }
 
         if (enemyData != null)
         {
@@ -68,14 +96,13 @@ public class EnemyAI : MonoBehaviour
             baseHealth = enemyData.health;
             baseAttackDamage = enemyData.attackDamage;
 
-            // ⭐ 初始化血量（只执行一次）
             if (!isHealthInitialized)
             {
                 currentHealth = baseHealth;
                 isHealthInitialized = true;
             }
 
-            if (agent != null)
+            if (isAgentValid)
             {
                 agent.speed = baseSpeed;
                 agent.stoppingDistance = enemyData.attackRange * 0.85f;
@@ -84,9 +111,10 @@ public class EnemyAI : MonoBehaviour
                 agent.height = 2f;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
-            }
 
-            //transform.localScale = Vector3.one * enemyData.scale;
+                // ⭐ 初始时停止移动
+                agent.isStopped = true;
+            }
         }
         else
         {
@@ -101,7 +129,7 @@ public class EnemyAI : MonoBehaviour
                 isHealthInitialized = true;
             }
 
-            if (agent != null)
+            if (isAgentValid)
             {
                 agent.speed = 2f;
                 agent.stoppingDistance = 1.5f * 0.85f;
@@ -109,11 +137,22 @@ public class EnemyAI : MonoBehaviour
                 agent.height = 2f;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
+
+                // ⭐ 初始时停止移动
+                agent.isStopped = true;
             }
         }
 
         CreateHealthBar();
         ApplyCurrentMultipliers();
+
+        // 初始化为待机状态
+        isChasing = false;
+
+        // 设置初始随机旋转
+        targetIdleRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
+        idleRotationInterval = Random.Range(2f, 5f);
+        idleRotationTimer = 0f;
     }
 
     // 由 EnemySpawner 调用，设置倍率
@@ -130,12 +169,9 @@ public class EnemyAI : MonoBehaviour
     {
         if (enemyData == null) return;
 
-        // ⭐ 血量只在初始化时设置，不重复重置
-        // 只更新血条显示
         UpdateHealthBar();
 
-        // 应用速度
-        if (agent != null)
+        if (isAgentValid)
         {
             agent.speed = baseSpeed * currentSpeedMultiplier;
         }
@@ -145,7 +181,8 @@ public class EnemyAI : MonoBehaviour
     {
         if (isDead)
         {
-            if (agent != null) agent.isStopped = true;
+            // ⭐ 安全停止 Agent
+            StopAgent();
             if (healthBarInstance != null) healthBarInstance.SetActive(false);
             return;
         }
@@ -164,13 +201,15 @@ public class EnemyAI : MonoBehaviour
                     attackCoroutine = null;
                 }
             }
-            if (agent != null) agent.isStopped = true;
+            // ⭐ 安全停止 Agent
+            StopAgent();
             return;
         }
 
         if (player == null || player.IsDead())
         {
-            if (agent != null) agent.isStopped = true;
+            // ⭐ 安全停止 Agent
+            StopAgent();
             UpdateAnimations(0f, false);
             return;
         }
@@ -187,9 +226,37 @@ public class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
+        // 追击检测：进入 detectionRange 开始追击
+        if (distance <= detectionRange)
+        {
+            isChasing = true;
+        }
+        // 离开 loseTargetRange 停止追击（比检测范围大，防止抖动）
+        else if (distance > loseTargetRange)
+        {
+            isChasing = false;
+        }
+
+        // 不在追击状态：待机
+        if (!isChasing)
+        {
+            // ⭐ 安全停止 Agent
+            StopAgent();
+            UpdateAnimations(0f, false);
+
+            // 待机时缓慢旋转（更有生气）
+            IdleRotation();
+
+            // 更新血条位置（但血条一直显示）
+            UpdateHealthBarPosition();
+            return;
+        }
+
+        // ⭐ 追击状态：正常行为
         if (distance <= enemyData.attackRange)
         {
-            if (agent != null) agent.isStopped = true;
+            // ⭐ 安全停止 Agent
+            StopAgent();
 
             Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
             directionToPlayer.y = 0;
@@ -214,23 +281,52 @@ public class EnemyAI : MonoBehaviour
         {
             if (!isAttacking)
             {
-                if (agent != null)
+                if (isAgentValid)
                 {
                     agent.isStopped = false;
                     agent.SetDestination(player.transform.position);
                 }
 
-                float currentSpeed = agent != null ? agent.velocity.magnitude : 0f;
+                float currentSpeed = isAgentValid ? agent.velocity.magnitude : 0f;
                 UpdateAnimations(currentSpeed, true);
             }
             else
             {
-                if (agent != null) agent.isStopped = true;
+                // ⭐ 安全停止 Agent
+                StopAgent();
                 UpdateAnimations(0f, false);
             }
         }
 
         UpdateHealthBarPosition();
+    }
+
+    /// <summary>
+    /// ⭐ 安全地停止 NavMeshAgent
+    /// </summary>
+    private void StopAgent()
+    {
+        if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+        }
+    }
+
+    /// <summary>
+    /// 待机时的随机旋转
+    /// </summary>
+    void IdleRotation()
+    {
+        idleRotationTimer += Time.deltaTime;
+
+        if (idleRotationTimer >= idleRotationInterval)
+        {
+            idleRotationTimer = 0f;
+            idleRotationInterval = Random.Range(2f, 6f);
+            targetIdleRotation = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * transform.rotation;
+        }
+
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetIdleRotation, 0.5f * Time.deltaTime);
     }
 
     bool IsFacingPlayer()
@@ -258,7 +354,8 @@ public class EnemyAI : MonoBehaviour
         isAttacking = true;
         attackTimer = 0f;
 
-        if (agent != null) agent.isStopped = true;
+        // ⭐ 安全停止 Agent
+        StopAgent();
 
         animator.SetBool("IsAttacking", true);
         animator.SetTrigger("Attack");
@@ -328,7 +425,6 @@ public class EnemyAI : MonoBehaviour
                 }
             }
 
-            // 如果还没找到，尝试获取第一个子物体的Image
             if (healthFillImage == null && healthSlider != null)
             {
                 healthFillImage = healthSlider.GetComponentInChildren<Image>();
@@ -389,7 +485,6 @@ public class EnemyAI : MonoBehaviour
     {
         if (isDead || enemyData == null) return;
 
-        // if (animator != null) animator.SetTrigger("Hit");  
         StartCoroutine(SmoothDamage(damage));
     }
 
@@ -424,13 +519,12 @@ public class EnemyAI : MonoBehaviour
         if (healthBarInstance != null)
             healthBarInstance.SetActive(false);
 
-        if (agent != null)
-            agent.isStopped = true;
+        // ⭐ 安全停止 Agent
+        StopAgent();
 
         if (animator != null)
             animator.SetTrigger("Die");
 
-        // ⭐ 计算最终金币奖励（检查 Combo）
         int baseCoinReward = enemyData != null ? enemyData.coinReward : 10;
         int finalCoinReward = baseCoinReward;
 
@@ -440,21 +534,17 @@ public class EnemyAI : MonoBehaviour
             isComboActive = ComboManager.Instance.IsComboActive();
             if (isComboActive)
             {
-                finalCoinReward = baseCoinReward * 2;  // 双倍
+                finalCoinReward = baseCoinReward * 2;
             }
 
-            // ⭐ 通知 ComboManager 记录击杀
             ComboManager.Instance.AddKill();
         }
 
-        // ⭐ 生成金币掉落物（数量 = finalCoinReward）
         SpawnCoin(finalCoinReward);
 
-        // ⭐ 通知 PlayerController 增加击杀（不再加金币，由拾取金币时加）
         if (player != null)
         {
             player.AddKill();
-            // 移除 player.AddCoin() - 由拾取金币时处理
         }
 
         Debug.Log($"击杀 {enemyData?.enemyName ?? "敌人"} | " +
@@ -465,9 +555,6 @@ public class EnemyAI : MonoBehaviour
         Destroy(gameObject, delay);
     }
 
-    /// <summary>
-    /// 生成金币掉落物（数量翻倍版本）
-    /// </summary>
     void SpawnCoin(int coinAmount)
     {
         if (coinPrefab == null)
@@ -476,10 +563,8 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 生成 coinAmount 个金币（或生成一堆金币）
         for (int i = 0; i < coinAmount; i++)
         {
-            // 添加随机偏移，让金币散开
             Vector3 offset = new Vector3(
                 Random.Range(-0.3f, 0.3f),
                 0.5f,
@@ -491,7 +576,6 @@ public class EnemyAI : MonoBehaviour
 
             if (coinScript != null)
             {
-                // 每个金币价值 1（或者根据你的设计调整）
                 coinScript.SetValue(1);
             }
         }
@@ -508,12 +592,19 @@ public class EnemyAI : MonoBehaviour
     {
         if (enemyData == null || !enemyData.showGizmos) return;
 
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, 10f);
+        // 检测范围（绿色）
+        Gizmos.color = new Color(0f, 1f, 0f, 0.3f);
+        Gizmos.DrawWireSphere(transform.position, detectionRange);
 
-        Gizmos.color = Color.red;
+        // 失去目标范围（红色）
+        Gizmos.color = new Color(1f, 0f, 0f, 0.2f);
+        Gizmos.DrawWireSphere(transform.position, loseTargetRange);
+
+        // 攻击范围（黄色）
+        Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
 
+        // 面向角度
         Gizmos.color = Color.blue;
         Vector3 forward = transform.forward;
         Quaternion leftRotation = Quaternion.Euler(0, -facingAngleThreshold, 0);
@@ -528,7 +619,9 @@ public class EnemyAI : MonoBehaviour
         {
             float maxHealth = baseHealth * currentHealthMultiplier;
             UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
-                enemyData.enemyName + "\nHP: " + currentHealth + "/" + maxHealth + "\nFacing: " + IsFacingPlayer());
+                enemyData.enemyName + "\nHP: " + currentHealth + "/" + maxHealth +
+                "\n追击: " + (isChasing ? "是" : "否") +
+                "\n距离: " + (player != null ? Vector3.Distance(transform.position, player.transform.position).ToString("F1") : "N/A"));
         }
 #endif
     }
