@@ -48,6 +48,21 @@ public abstract class EnemyAI : MonoBehaviour
     public float detectionRange = 18f;
     public float loseTargetRange = 25f;
 
+    [Header("群组行为（分离力）")]
+    [Tooltip("是否启用敌人之间的分离力（避免重叠）")]
+    public bool enableSeparation = true;
+    [Tooltip("分离检测半径（敌人之间保持的距离）")]
+    public float separationRadius = 1.5f;
+    [Tooltip("分离力强度（越大推开越快）")]
+    public float separationForce = 3f;
+    [Tooltip("分离力平滑速度")]
+    public float separationSmoothSpeed = 8f;
+
+    // 分离力相关
+    private Vector3 separationVelocity = Vector3.zero;
+    private Collider myCollider;
+    private int enemyLayerMask;
+
     // 缩放倍率（由 EnemySpawner 设置）
     protected float currentSpeedMultiplier = 1f;
     protected float currentHealthMultiplier = 1f;
@@ -77,8 +92,12 @@ public abstract class EnemyAI : MonoBehaviour
         animator = GetComponent<Animator>();
         player = FindObjectOfType<PlayerController>();
         agent = GetComponent<NavMeshAgent>();
+        myCollider = GetComponent<Collider>();
 
         isAgentValid = agent != null && agent.isOnNavMesh;
+
+        // 设置敌人 Layer 检测
+        enemyLayerMask = LayerMask.GetMask("Enemy");
 
         if (enemyData != null)
         {
@@ -196,11 +215,56 @@ public abstract class EnemyAI : MonoBehaviour
         // 子类可自定义移动逻辑
         HandleMovement();
 
+        // ⭐ 应用分离力（在移动之后）
+        if (enableSeparation && isChasing && !isAttacking)
+        {
+            ApplySeparation();
+        }
+
         // 更新血条位置（始终显示）
         UpdateHealthBarPosition();
 
         // 动画更新（子类可重写）
         UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
+    }
+
+    /// <summary>
+    /// ⭐ 应用分离力（防止敌人互相重叠）
+    /// </summary>
+    private void ApplySeparation()
+    {
+        if (myCollider == null) return;
+
+        Collider[] nearbyEnemies = Physics.OverlapSphere(transform.position, separationRadius, enemyLayerMask);
+        Vector3 force = Vector3.zero;
+        int count = 0;
+
+        foreach (Collider col in nearbyEnemies)
+        {
+            if (col.gameObject == gameObject) continue;
+
+            Vector3 dir = (transform.position - col.transform.position);
+            float dist = dir.magnitude;
+
+            if (dist < separationRadius && dist > 0.01f)
+            {
+                float strength = 1f - (dist / separationRadius);
+                force += dir.normalized * strength * separationForce;
+                count++;
+            }
+        }
+
+        if (count > 0 && isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            // 平滑应用分离力
+            separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
+            agent.Move(separationVelocity * Time.deltaTime);
+        }
+        else
+        {
+            // 逐渐归零
+            separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
+        }
     }
 
     // ---------- 子类需要重写的方法 ----------
@@ -429,5 +493,12 @@ public abstract class EnemyAI : MonoBehaviour
         Quaternion right = Quaternion.Euler(0, facingAngleThreshold, 0);
         Gizmos.DrawLine(transform.position, transform.position + left * fwd * 2f);
         Gizmos.DrawLine(transform.position, transform.position + right * fwd * 2f);
+
+        // ⭐ 显示分离力检测范围（半透明绿色）
+        if (enableSeparation)
+        {
+            Gizmos.color = new Color(0, 1, 0, 0.15f);
+            Gizmos.DrawWireSphere(transform.position, separationRadius);
+        }
     }
 }
