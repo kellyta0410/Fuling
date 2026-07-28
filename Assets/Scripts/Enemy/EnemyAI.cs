@@ -83,7 +83,7 @@ public abstract class EnemyAI : MonoBehaviour
     // ⭐ 停止距离（防止推玩家）
     private float stopDistance = 1.2f;
 
-    // ⭐ 新增：所属Tile
+    // ⭐ 所属Tile
     [Header("所属Tile")]
     public Tile ownerTile;
 
@@ -176,7 +176,7 @@ public abstract class EnemyAI : MonoBehaviour
             {
                 isAttacking = false;
                 attackTimer = 0f;
-                animator.SetBool("IsAttacking", false);
+                if (animator != null) animator.SetBool("IsAttacking", false);
                 if (attackCoroutine != null)
                 {
                     StopCoroutine(attackCoroutine);
@@ -197,7 +197,7 @@ public abstract class EnemyAI : MonoBehaviour
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
-            if (attackCooldownTimer >= enemyData.attackCooldown)
+            if (attackCooldownTimer >= (enemyData != null ? enemyData.attackCooldown : 1.5f))
             {
                 canAttack = true;
                 attackCooldownTimer = 0f;
@@ -218,23 +218,26 @@ public abstract class EnemyAI : MonoBehaviour
         }
 
         UpdateHealthBarPosition();
-        UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
+
+        // 计算物理速度并同步动画
+        float currentSpeed = GetCurrentSpeed();
+        bool isMovingState = isChasing && !isAttacking && currentSpeed > 0.05f;
+        UpdateAnimations(currentSpeed, isMovingState);
     }
 
-    // ⭐ 直接追踪（无限模式）
-    // ⭐ 无限模式：一直追击，但使用完整的攻击逻辑
     // ⭐ 无限模式：一直追击，但保留完整攻击逻辑
     void InfiniteChaseUpdate()
     {
         if (player == null || isDead) return;
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
+        float attackRangeValue = enemyData != null ? enemyData.attackRange : 1.5f;
 
         // 攻击冷却
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
-            if (attackCooldownTimer >= enemyData.attackCooldown)
+            if (attackCooldownTimer >= (enemyData != null ? enemyData.attackCooldown : 1.5f))
             {
                 canAttack = true;
                 attackCooldownTimer = 0f;
@@ -242,14 +245,14 @@ public abstract class EnemyAI : MonoBehaviour
         }
 
         // ⭐ 在攻击范围内 → 执行攻击
-        if (distance <= enemyData.attackRange && canAttack && IsFacingPlayer())
+        if (distance <= attackRangeValue && canAttack && IsFacingPlayer())
         {
             PerformAttack();
             return;
         }
 
         // ⭐ 在攻击范围内但冷却中 → 面向玩家，不移动
-        if (distance <= enemyData.attackRange)
+        if (distance <= attackRangeValue)
         {
             Vector3 lookTarget = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
             transform.LookAt(lookTarget);
@@ -273,7 +276,7 @@ public abstract class EnemyAI : MonoBehaviour
             }
             else
             {
-                UpdateAnimations(speed, true);
+                UpdateAnimations(agent.velocity.magnitude, true);
             }
         }
         else
@@ -392,8 +395,11 @@ public abstract class EnemyAI : MonoBehaviour
         isAttacking = true;
         attackTimer = 0f;
         StopAgent();
-        animator.SetBool("IsAttacking", true);
-        animator.SetTrigger("Attack");
+        if (animator != null)
+        {
+            animator.SetBool("IsAttacking", true);
+            animator.SetTrigger("Attack");
+        }
         if (attackCoroutine != null) StopCoroutine(attackCoroutine);
         attackCoroutine = StartCoroutine(DelayedDamage());
     }
@@ -404,7 +410,8 @@ public abstract class EnemyAI : MonoBehaviour
         if (player != null && !player.IsDead() && !isDead)
         {
             float dist = Vector3.Distance(transform.position, player.transform.position);
-            if (dist <= enemyData.attackRange && IsFacingPlayer())
+            float attackRangeValue = enemyData != null ? enemyData.attackRange : 1.5f;
+            if (dist <= attackRangeValue && IsFacingPlayer())
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));
@@ -457,7 +464,7 @@ public abstract class EnemyAI : MonoBehaviour
 
     protected void UpdateHealthBar()
     {
-        if (healthSlider == null || enemyData == null) return;
+        if (healthSlider == null) return;
         float maxHealth = baseHealth * currentHealthMultiplier;
         float percent = currentHealth / maxHealth;
         healthSlider.value = percent;
@@ -473,7 +480,13 @@ public abstract class EnemyAI : MonoBehaviour
 
     public void TakeDamageImmediate(int damage)
     {
-        if (isDead || enemyData == null) return;
+        if (isDead) return;
+
+        if (animator != null)
+        {
+            animator.SetTrigger("Hit");
+        }
+
         StartCoroutine(SmoothDamage(damage));
     }
 
@@ -500,7 +513,11 @@ public abstract class EnemyAI : MonoBehaviour
         isDead = true;
         if (healthBarInstance != null) healthBarInstance.SetActive(false);
         StopAgent();
-        animator.SetTrigger("Die");
+        if (animator != null)
+        {
+            animator.SetBool("IsMoving", false);
+            animator.SetTrigger("Die");
+        }
 
         // ⭐ 从Tile中注销
         if (ownerTile != null)
@@ -532,9 +549,11 @@ public abstract class EnemyAI : MonoBehaviour
         }
     }
 
+    // ⭐ 动画更新核心方法（同时驱动 Float 与 Bool）
     protected void UpdateAnimations(float speed, bool isMoving)
     {
         if (animator == null || isAttacking) return;
+
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsMoving", isMoving);
     }

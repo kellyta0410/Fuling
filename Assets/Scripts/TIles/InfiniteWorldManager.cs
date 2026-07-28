@@ -6,20 +6,17 @@ public class InfiniteWorldManager : MonoBehaviour
     [Header("核心设置")]
     public Tile[] tilePrefabs;           // 3种Tile预制体
     public Transform playerTarget;
-    public float tileSize = 10f;         // 与预制体Scale一致
+    public float tileSize = 10f;         // 与预制体实际尺寸一致
 
-    [Header("生成范围")]
-    public int spawnRadius = 5;          // 方形范围半径（格数）
-    public int destroyRadius = 7;        // 销毁半径（必须大于 spawnRadius）
-
-    [Header("性能限制")]
-    public int maxTileCount = 100;
+    [Header("生成与销毁范围")]
+    public int spawnRadius = 5;          // 方形生成半径（格数）
+    public int destroyRadius = 7;        // 方形销毁半径（必须 > spawnRadius）
 
     [Header("Tile生成权重")]
     public float[] tileWeights = new float[] { 1f, 1f, 1f }; // 与预制体匹配的权重数组
 
     [Header("生成点过滤")]
-    public int minSpawnDistance = 1;     // 跳过玩家周围区域
+    public int minSpawnDistance = 1;     // 过滤玩家周围区域
 
     [Header("调试")]
     public bool showDebugLogs = true;
@@ -30,7 +27,7 @@ public class InfiniteWorldManager : MonoBehaviour
     private Vector2Int lastPlayerGridPos;
     private bool isInitialized = false;
 
-    // GC 性能优化缓存集合
+    // GC 性能优化缓存集合（避免重复 new 垃圾回收）
     private HashSet<Vector2Int> neededPositionsCache = new HashSet<Vector2Int>();
     private List<Vector2Int> toRemoveCache = new List<Vector2Int>();
 
@@ -69,7 +66,7 @@ public class InfiniteWorldManager : MonoBehaviour
         lastPlayerGridPos = WorldToGrid(playerTarget.position);
         UpdateTiles();
         isInitialized = true;
-        if (showDebugLogs) Debug.Log($"✅ 初始生成完成，Tile 数量: {activeTiles.Count}");
+        if (showDebugLogs) Debug.Log($"✅ 初始生成完成，当前 Tile 数量: {activeTiles.Count}");
     }
 
     void Update()
@@ -77,7 +74,7 @@ public class InfiniteWorldManager : MonoBehaviour
         if (playerTarget == null || tilePrefabs == null || tilePrefabs.Length == 0 || !isInitialized)
             return;
 
-        // 检测玩家是否移动到新网格
+        // 检测玩家是否移动到了新的网格格子里
         Vector2Int currentGrid = WorldToGrid(playerTarget.position);
         if (currentGrid != lastPlayerGridPos)
         {
@@ -91,10 +88,21 @@ public class InfiniteWorldManager : MonoBehaviour
     {
         Vector2Int playerGrid = WorldToGrid(playerTarget.position);
 
-        // 1. 获取需要存在的 Tile 坐标集合（方形范围，零 GC 分配）
+        // ⭐ 1.【先销毁】：把超出 destroyRadius 的旧 Tile 立即清理掉，释放资源
+        toRemoveCache.Clear();
+        foreach (var kvp in activeTiles)
+        {
+            int gridDistance = GetChebyshevDistance(kvp.Key, playerGrid);
+            if (gridDistance > destroyRadius)
+                toRemoveCache.Add(kvp.Key);
+        }
+        foreach (var pos in toRemoveCache)
+            DestroyTile(pos);
+
+        // ⭐ 2.【算范围】：计算玩家当前周围需要的 Tile 坐标集合
         GetPositionsInRadius(playerGrid, spawnRadius, neededPositionsCache);
 
-        // 2. 移动方向预生成（修正：使用归一化方向向量计算相对网格偏移）
+        // ⭐ 3.【预预测】：根据玩家移动方向提前生成前方 Tile，防止边缘看穿
         Vector3 moveDelta = playerTarget.position - previousPlayerPos;
         if (moveDelta.sqrMagnitude > 0.01f)
         {
@@ -109,32 +117,16 @@ public class InfiniteWorldManager : MonoBehaviour
             }
         }
 
-        // 3. 创建新 Tile
+        // ⭐ 4.【无限制生成】：只要缺的 Tile，直接全部刷出，不再有数量闸门卡死
         foreach (var pos in neededPositionsCache)
         {
             if (!activeTiles.ContainsKey(pos))
             {
-                if (activeTiles.Count >= maxTileCount)
-                {
-                    if (showDebugLogs) Debug.LogWarning($"⚠️ 达到Tile上限: {maxTileCount}");
-                    break;
-                }
                 CreateTile(pos);
             }
         }
 
-        // 4. 移除超出销毁范围的 Tile（统一采用切比雪夫/方形距离）
-        toRemoveCache.Clear();
-        foreach (var kvp in activeTiles)
-        {
-            int gridDistance = GetChebyshevDistance(kvp.Key, playerGrid);
-            if (gridDistance > destroyRadius)
-                toRemoveCache.Add(kvp.Key);
-        }
-        foreach (var pos in toRemoveCache)
-            DestroyTile(pos);
-
-        // 5. 更新 Tile 激活状态
+        // 5. 更新 Tile 激活状态（近处激活，远观暂停）
         foreach (var kvp in activeTiles)
         {
             int gridDistance = GetChebyshevDistance(kvp.Key, playerGrid);
@@ -167,6 +159,7 @@ public class InfiniteWorldManager : MonoBehaviour
         }
     }
 
+    // 切比雪夫距离（方形区域判定，避免圆形欧氏距离导致角落 Tile 频繁被刷掉）
     int GetChebyshevDistance(Vector2Int a, Vector2Int b)
     {
         return Mathf.Max(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));
@@ -251,7 +244,6 @@ public class InfiniteWorldManager : MonoBehaviour
 
             if (dist < minSpawnDistance) continue;
 
-            // ⭐ 优先返回 Tile 上的 spawnPoint 变换组件
             if (tile.isActive)
             {
                 Transform sp = tile.spawnPoint != null ? tile.spawnPoint : tile.transform;

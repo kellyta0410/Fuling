@@ -31,7 +31,8 @@ public class DifficultySettings : ScriptableObject
     public float damageMultiplierMax = 2f;
 
     public float spawnIntervalStep = 0.05f;
-    public float spawnPerIntervalStep = 0.1f;
+    // ⭐ 修正：步长设为 int，确保等级提升时能精准增加整数个敌人
+    public int spawnPerIntervalStep = 1;
     public float speedMultiplierStep = 0.03f;
     public float healthMultiplierStep = 0.04f;
     public float damageMultiplierStep = 0.02f;
@@ -45,7 +46,6 @@ public class DifficultySettings : ScriptableObject
     public bool enableMaxLimit = true;
     public int maxEnemyCount = 30;
 
-    // ⭐ 新增：容量限制成长
     [Header("容量限制成长（无限模式）")]
     [Tooltip("是否开启上限成长")]
     public bool enableMaxLimitScaling = true;

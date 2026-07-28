@@ -338,6 +338,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: afabc329b2dec7b43b28e4a631686c60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  updateDelay: 0.5
 --- !u!114 &474558067
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -356,7 +357,7 @@ MonoBehaviour:
   m_Center: {x: 0, y: 2, z: 0}
   m_LayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 128
   m_UseGeometry: 0
   m_DefaultArea: 0
   m_GenerateLinks: 0
@@ -419,13 +420,12 @@ MonoBehaviour:
   - {fileID: -1827694153214402951, guid: 69987084dabf68e448948039410fcc52, type: 3}
   playerTarget: {fileID: 9164792864367638642}
   tileSize: 10
-  spawnRadius: 4
-  destroyRadius: 7
-  maxTileCount: 50
-  maxEnemyCount: 80
-  type1Weight: 1
-  type2Weight: 1
-  type3Weight: 1
+  spawnRadius: 3
+  destroyRadius: 5
+  tileWeights:
+  - 1
+  - 1
+  - 1
   minSpawnDistance: 1
   showDebugLogs: 1
   showGizmos: 1
@@ -460,7 +460,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &667670079
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1026,7 +1026,7 @@ CharacterController:
   m_Enabled: 1
   serializedVersion: 3
   m_Height: 1.4
-  m_Radius: 0.5
+  m_Radius: 0.3
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.01

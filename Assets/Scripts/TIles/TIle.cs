@@ -13,7 +13,7 @@ public class Tile : MonoBehaviour
     [Header("Tile设置")]
     public TileType tileType;
     public Vector2Int gridPosition;
-    public float tileSize = 20f;
+    public float tileSize = 10f;
 
     [Header("生成点")]
     public Transform spawnPoint;  // 单个生成点

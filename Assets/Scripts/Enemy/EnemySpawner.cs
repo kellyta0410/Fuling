@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.AI;
 
@@ -45,6 +46,11 @@ public class EnemySpawner : MonoBehaviour
     private bool initialSpawnDone = false;
     private bool canSpawn = false;
 
+    // 缓存组件引用，避免 Update 中频繁 Find 开销
+    private CountdownManager countdownManager;
+    private InfiniteWorldManager worldManager;
+    private float cleanupTimer = 0f;
+
     [System.Serializable]
     public class SpawnPointData
     {
@@ -59,6 +65,7 @@ public class EnemySpawner : MonoBehaviour
         public float cooldownTimer = 0f;
         public bool hasSpawnedOnce = false;
         public TileType tileType = TileType.Type0;
+
         [System.NonSerialized]
         public List<GameObject> activeEnemies = new List<GameObject>();
     }
@@ -72,7 +79,6 @@ public class EnemySpawner : MonoBehaviour
 
     private List<GameObject> allActiveEnemies = new List<GameObject>();
     private int globalTotalSpawned = 0;
-    private InfiniteWorldManager worldManager;
 
     void Awake()
     {
@@ -81,13 +87,289 @@ public class EnemySpawner : MonoBehaviour
 
     void Start()
     {
+        // 预先获取并缓存全局管理器
+        countdownManager = FindObjectOfType<CountdownManager>();
+        worldManager = FindObjectOfType<InfiniteWorldManager>();
+
         InitializeSpawner();
+    }
+
+    void Update()
+    {
+        // 1. 如果游戏正在倒计时，直接跳过逻辑
+        if (countdownManager != null && countdownManager.IsCountingDown()) return;
+        if (!canSpawn || enemyPrefabs == null || enemyPrefabs.Count == 0 || playerTarget == null) return;
+
+        // 2. 降低清理频率：每 1 秒才遍历清理一次已被销毁的敌人对象，避免每帧 GC
+        cleanupTimer += Time.deltaTime;
+        if (cleanupTimer >= 1.0f)
+        {
+            cleanupTimer = 0f;
+            CleanupDeadEnemies();
+        }
+
+        // 3. 处理每个生成点的激活、冷却与生成逻辑
+        ProcessSpawnPoints();
+    }
+
+    void ProcessSpawnPoints()
+    {
+        // 倒序遍历，方便中途安全移除失效的生成点
+        for (int i = spawnPoints.Count - 1; i >= 0; i--)
+        {
+            SpawnPointData spawnData = spawnPoints[i];
+
+            // 自动清理被销毁的动态 Tile 生成点
+            if (spawnData.point == null)
+            {
+                spawnPoints.RemoveAt(i);
+                continue;
+            }
+
+            // 父级 Tile 停用状态检查
+            if (spawnData.point.parent != null)
+            {
+                Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
+                if (parentTile != null && !parentTile.isActive) continue;
+            }
+
+            float distance = Vector3.Distance(spawnData.point.position, playerTarget.position);
+
+            // 处理生成点冷却计时
+            if (spawnData.isOnCooldown)
+            {
+                spawnData.cooldownTimer -= Time.deltaTime;
+                if (spawnData.cooldownTimer <= 0f)
+                {
+                    spawnData.isOnCooldown = false;
+                }
+            }
+
+            // 进入/离开范围的状态切换
+            if (distance <= spawnData.activationRadius && !spawnData.isActive)
+            {
+                spawnData.isActive = true;
+                spawnData.spawnTimer = 0f; // 重置计时器，统一由后续定时逻辑控制
+            }
+            else if (distance > spawnData.deactivationRadius && spawnData.isActive)
+            {
+                spawnData.isActive = false;
+                spawnData.spawnTimer = 0f;
+            }
+
+            // 激活且未冷却时的生成逻辑
+            if (spawnData.isActive && !spawnData.isOnCooldown)
+            {
+                if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) continue;
+
+                spawnData.spawnTimer += Time.deltaTime;
+                if (spawnData.spawnTimer >= currentSpawnInterval)
+                {
+                    spawnData.spawnTimer = 0f;
+                    int toSpawn = currentSpawnPerInterval;
+
+                    if (enableMaxLimit)
+                    {
+                        int currentCount = allActiveEnemies.Count;
+                        int maxSpawn = maxEnemyCount - currentCount;
+                        toSpawn = Mathf.Min(currentSpawnPerInterval, maxSpawn);
+                    }
+
+                    if (toSpawn > 0)
+                    {
+                        // 开始协程分帧生成
+                        StartCoroutine(Routine_SpawnEnemies(spawnData, toSpawn));
+
+                        if (enableCooldown)
+                        {
+                            spawnData.isOnCooldown = true;
+                            spawnData.cooldownTimer = cooldownTime;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 🌟 核心优化：使用协程进行错峰生成，避免单帧 Instantiate 过多导致瞬间卡顿
+    /// </summary>
+    IEnumerator Routine_SpawnEnemies(SpawnPointData spawnData, int count)
+    {
+        float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : defaultSpawnRadius;
+
+        for (int i = 0; i < count; i++)
+        {
+            // 如果生成点中途被销毁，中断生成
+            if (spawnData.point == null) yield break;
+
+            // 再次检查上限限制（防止协程等待期间场上敌人超标）
+            if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) yield break;
+
+            GameObject enemyPrefab = GetWeightedRandomEnemy();
+            if (enemyPrefab != null)
+            {
+                Vector3 spawnPos = GetRandomPositionAroundPoint(spawnData.point.position, spawnRadius);
+                spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
+
+                if (!IsPositionValid(spawnPos))
+                {
+                    spawnPos = spawnData.point.position;
+                    spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
+                }
+
+                GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.Euler(0, Random.Range(0, 360), 0));
+                enemy.transform.parent = null;
+
+                // 注册敌人到对应的 Tile
+                if (spawnData.point != null && spawnData.point.parent != null)
+                {
+                    Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
+                    if (parentTile != null)
+                    {
+                        RegisterEnemyToTile(enemy, parentTile.gridPosition);
+                    }
+                }
+                else if (worldManager != null)
+                {
+                    Vector2Int gridPos = worldManager.WorldToGrid(spawnPos);
+                    RegisterEnemyToTile(enemy, gridPos);
+                }
+
+                // 统一应用难度属性加成
+                EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
+                if (enemyScript != null)
+                {
+                    enemyScript.ApplyScalingMultipliers(
+                        currentSpeedMultiplier,
+                        currentHealthMultiplier,
+                        currentDamageMultiplier
+                    );
+                }
+
+                spawnData.activeEnemies.Add(enemy);
+                allActiveEnemies.Add(enemy);
+                spawnData.totalSpawned++;
+                globalTotalSpawned++;
+            }
+
+            // 关键：每生成一个敌人，微小停顿一帧/几毫秒，把 CPU 压力平摊开
+            if (count > 1)
+            {
+                yield return new WaitForSeconds(0.05f);
+            }
+        }
+    }
+
+    GameObject GetWeightedRandomEnemy()
+    {
+        if (enemyWeights == null || enemyWeights.Count == 0 || enemyWeights.Count != enemyPrefabs.Count)
+        {
+            return enemyPrefabs[Random.Range(0, enemyPrefabs.Count)];
+        }
+
+        float totalWeight = 0f;
+        foreach (EnemyWeight ew in enemyWeights)
+        {
+            if (ew.enemyPrefab != null) totalWeight += Mathf.Max(0, ew.weight);
+        }
+
+        if (totalWeight <= 0f) return enemyPrefabs[Random.Range(0, enemyPrefabs.Count)];
+
+        float randomValue = Random.Range(0f, totalWeight);
+        float cumulative = 0f;
+
+        for (int i = 0; i < enemyWeights.Count; i++)
+        {
+            if (enemyWeights[i].enemyPrefab == null) continue;
+
+            cumulative += enemyWeights[i].weight;
+            if (randomValue <= cumulative)
+            {
+                return enemyWeights[i].enemyPrefab;
+            }
+        }
+
+        return enemyPrefabs[0];
+    }
+
+    void PerformInitialSpawn()
+    {
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0) return;
+
+        foreach (SpawnPointData spawnData in spawnPoints)
+        {
+            if (spawnData.point == null) continue;
+
+            int spawnCount = initialSpawnCount;
+            if (enableMaxLimit)
+            {
+                int currentCount = allActiveEnemies.Count;
+                int maxSpawn = maxEnemyCount - currentCount;
+                spawnCount = Mathf.Min(spawnCount, maxSpawn);
+            }
+
+            if (spawnCount > 0)
+            {
+                StartCoroutine(Routine_SpawnEnemies(spawnData, spawnCount));
+                spawnData.hasSpawnedOnce = true;
+                if (enableCooldown)
+                {
+                    spawnData.isOnCooldown = true;
+                    spawnData.cooldownTimer = cooldownTime;
+                }
+            }
+        }
+        initialSpawnDone = true;
+    }
+
+    private void CleanupDeadEnemies()
+    {
+        // 倒序遍历清理，不使用匿名 Lambda 表达式，零额外的 GC 垃圾
+        for (int i = allActiveEnemies.Count - 1; i >= 0; i--)
+        {
+            if (allActiveEnemies[i] == null)
+            {
+                allActiveEnemies.RemoveAt(i);
+            }
+        }
+
+        foreach (SpawnPointData spawnData in spawnPoints)
+        {
+            for (int i = spawnData.activeEnemies.Count - 1; i >= 0; i--)
+            {
+                if (spawnData.activeEnemies[i] == null)
+                {
+                    spawnData.activeEnemies.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    public void RegisterEnemyToTile(GameObject enemy, Vector2Int gridPos)
+    {
+        if (worldManager == null)
+        {
+            worldManager = FindObjectOfType<InfiniteWorldManager>();
+            if (worldManager == null) return;
+        }
+
+        Tile targetTile = worldManager.GetTileAtPosition(gridPos);
+        if (targetTile != null)
+        {
+            targetTile.RegisterEnemy(enemy);
+            if (showDebugLogs) Debug.Log($"✅ 敌人已注册到 Tile {gridPos}");
+        }
+        else if (showDebugLogs)
+        {
+            Debug.LogWarning($"⚠️ 找不到 Tile {gridPos} 来注册敌人");
+        }
     }
 
     public void EnableSpawning()
     {
         canSpawn = true;
-        Debug.Log("✅ 敌人生成已启用！");
+        if (showDebugLogs) Debug.Log("✅ 敌人生成已启用！");
 
         if (spawnOnStart && !initialSpawnDone)
         {
@@ -98,13 +380,10 @@ public class EnemySpawner : MonoBehaviour
     public void DisableSpawning()
     {
         canSpawn = false;
-        Debug.Log("⏸️ 敌人生成已禁用");
+        if (showDebugLogs) Debug.Log("⏸️ 敌人生成已禁用");
     }
 
-    public bool IsSpawningEnabled()
-    {
-        return canSpawn;
-    }
+    public bool IsSpawningEnabled() => canSpawn;
 
     void InitializeSpawner()
     {
@@ -112,13 +391,10 @@ public class EnemySpawner : MonoBehaviour
         {
             GameObject player = GameObject.FindGameObjectWithTag("Player");
             if (player != null) playerTarget = player.transform;
-            else Debug.LogWarning("未找到 Player");
+            else Debug.LogWarning("未找到 Tag 为 Player 的对象");
         }
 
-        if (spawnPoints.Count == 0)
-        {
-            AutoFindSpawnPoints();
-        }
+        if (spawnPoints.Count == 0) AutoFindSpawnPoints();
 
         if (currentDifficulty == null && GameManager.Instance != null)
         {
@@ -140,13 +416,7 @@ public class EnemySpawner : MonoBehaviour
 
                 if (enemyWeights.Count == 0)
                 {
-                    foreach (GameObject prefab in enemyPrefabs)
-                    {
-                        EnemyWeight ew = new EnemyWeight();
-                        ew.enemyPrefab = prefab;
-                        ew.weight = 1f;
-                        enemyWeights.Add(ew);
-                    }
+                    UpdateWeightList();
                 }
             }
         }
@@ -155,38 +425,6 @@ public class EnemySpawner : MonoBehaviour
         {
             Debug.LogError("没有敌人预制体！");
         }
-
-        worldManager = FindObjectOfType<InfiniteWorldManager>();
-    }
-
-    void PerformInitialSpawn()
-    {
-        if (enemyPrefabs == null || enemyPrefabs.Count == 0) return;
-
-        foreach (SpawnPointData spawnData in spawnPoints)
-        {
-            if (spawnData.point == null) continue;
-
-            int spawnCount = initialSpawnCount;
-            if (enableMaxLimit)
-            {
-                int currentCount = allActiveEnemies.Count;
-                int maxSpawn = maxEnemyCount - currentCount;
-                spawnCount = Mathf.Min(spawnCount, maxSpawn);
-            }
-
-            if (spawnCount > 0)
-            {
-                SpawnEnemyAtPoint(spawnData, spawnCount);
-                spawnData.hasSpawnedOnce = true;
-                if (enableCooldown)
-                {
-                    spawnData.isOnCooldown = true;
-                    spawnData.cooldownTimer = cooldownTime;
-                }
-            }
-        }
-        initialSpawnDone = true;
     }
 
     public void ApplyScalingParameters(
@@ -262,217 +500,11 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    void Update()
-    {
-        // ⭐ 如果游戏在倒计时，完全停止所有逻辑
-        CountdownManager countdown = FindObjectOfType<CountdownManager>();
-        if (countdown != null && countdown.IsCountingDown())
-        {
-            return;
-        }
-
-        if (!canSpawn) return;
-        if (enemyPrefabs == null || enemyPrefabs.Count == 0 || playerTarget == null) return;
-
-        CleanupAllEnemies();
-
-        foreach (SpawnPointData spawnData in spawnPoints)
-        {
-            if (spawnData.point == null) continue;
-
-            bool parentTileActive = true;
-            if (spawnData.point.parent != null)
-            {
-                Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
-                if (parentTile != null && !parentTile.isActive)
-                {
-                    parentTileActive = false;
-                }
-            }
-
-            if (!parentTileActive) continue;
-
-            float distance = Vector3.Distance(spawnData.point.position, playerTarget.position);
-
-            if (spawnData.isOnCooldown)
-            {
-                spawnData.cooldownTimer -= Time.deltaTime;
-                if (spawnData.cooldownTimer <= 0f)
-                {
-                    spawnData.isOnCooldown = false;
-                }
-            }
-
-            if (distance <= spawnData.activationRadius && !spawnData.isActive)
-            {
-                spawnData.isActive = true;
-                spawnData.spawnTimer = 0f;
-
-                if (!spawnData.isOnCooldown)
-                {
-                    int toSpawn = currentSpawnPerInterval;
-                    if (enableMaxLimit)
-                    {
-                        int currentCount = allActiveEnemies.Count;
-                        int maxSpawn = maxEnemyCount - currentCount;
-                        toSpawn = Mathf.Min(toSpawn, maxSpawn);
-                    }
-
-                    if (toSpawn > 0)
-                    {
-                        SpawnEnemyAtPoint(spawnData, toSpawn);
-                        spawnData.hasSpawnedOnce = true;
-                        if (enableCooldown)
-                        {
-                            spawnData.isOnCooldown = true;
-                            spawnData.cooldownTimer = cooldownTime;
-                        }
-                    }
-                }
-            }
-
-            if (distance > spawnData.deactivationRadius && spawnData.isActive)
-            {
-                spawnData.isActive = false;
-                spawnData.spawnTimer = 0f;
-            }
-
-            if (spawnData.isActive && !spawnData.isOnCooldown)
-            {
-                if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) continue;
-
-                spawnData.spawnTimer += Time.deltaTime;
-                if (spawnData.spawnTimer >= currentSpawnInterval)
-                {
-                    spawnData.spawnTimer = 0f;
-                    int toSpawn = currentSpawnPerInterval;
-
-                    if (enableMaxLimit)
-                    {
-                        int currentCount = allActiveEnemies.Count;
-                        int maxSpawn = maxEnemyCount - currentCount;
-                        toSpawn = Mathf.Min(currentSpawnPerInterval, maxSpawn);
-                    }
-
-                    if (toSpawn > 0)
-                    {
-                        SpawnEnemyAtPoint(spawnData, toSpawn);
-                        if (enableCooldown)
-                        {
-                            spawnData.isOnCooldown = true;
-                            spawnData.cooldownTimer = cooldownTime;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    GameObject GetWeightedRandomEnemy()
-    {
-        if (enemyWeights == null || enemyWeights.Count == 0 || enemyWeights.Count != enemyPrefabs.Count)
-        {
-            return enemyPrefabs[Random.Range(0, enemyPrefabs.Count)];
-        }
-
-        float totalWeight = 0f;
-        foreach (EnemyWeight ew in enemyWeights) totalWeight += ew.weight;
-
-        if (totalWeight <= 0) return enemyPrefabs[Random.Range(0, enemyPrefabs.Count)];
-
-        float randomValue = Random.Range(0f, totalWeight);
-        float cumulative = 0f;
-
-        for (int i = 0; i < enemyWeights.Count; i++)
-        {
-            cumulative += enemyWeights[i].weight;
-            if (randomValue <= cumulative) return enemyWeights[i].enemyPrefab;
-        }
-
-        return enemyWeights[enemyWeights.Count - 1].enemyPrefab;
-    }
-
-    void SpawnEnemyAtPoint(SpawnPointData spawnData, int count)
-    {
-        float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : defaultSpawnRadius;
-
-        for (int i = 0; i < count; i++)
-        {
-            GameObject enemyPrefab = GetWeightedRandomEnemy();
-
-            Vector3 spawnPos = GetRandomPositionAroundPoint(spawnData.point.position, spawnRadius);
-            spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
-
-            if (!IsPositionValid(spawnPos))
-            {
-                spawnPos = spawnData.point.position;
-                spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
-            }
-
-            GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
-            enemy.transform.parent = null;
-            enemy.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
-
-            if (spawnData.point != null && spawnData.point.parent != null)
-            {
-                Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
-                if (parentTile != null)
-                {
-                    RegisterEnemyToTile(enemy, parentTile.gridPosition);
-                }
-            }
-            else if (worldManager != null)
-            {
-                Vector2Int gridPos = worldManager.WorldToGrid(spawnPos);
-                RegisterEnemyToTile(enemy, gridPos);
-            }
-
-            EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
-            if (enemyScript != null)
-            {
-                enemyScript.ApplyScalingMultipliers(
-                    currentSpeedMultiplier,
-                    currentHealthMultiplier,
-                    currentDamageMultiplier
-                );
-            }
-
-            spawnData.activeEnemies.Add(enemy);
-            allActiveEnemies.Add(enemy);
-            spawnData.totalSpawned++;
-            globalTotalSpawned++;
-        }
-    }
-
-    public void RegisterEnemyToTile(GameObject enemy, Vector2Int gridPos)
-    {
-        if (worldManager == null)
-        {
-            worldManager = FindObjectOfType<InfiniteWorldManager>();
-            if (worldManager == null) return;
-        }
-
-        Tile targetTile = worldManager.GetTileAtPosition(gridPos);
-        if (targetTile != null)
-        {
-            targetTile.RegisterEnemy(enemy);
-            if (showDebugLogs)
-            {
-                Debug.Log($"✅ 敌人已注册到 Tile {gridPos}");
-            }
-        }
-        else if (showDebugLogs)
-        {
-            Debug.LogWarning($"⚠️ 找不到 Tile {gridPos} 来注册敌人");
-        }
-    }
-
     Vector3 GetRandomPositionAroundPoint(Vector3 center, float radius)
     {
         float angle = Random.Range(0f, Mathf.PI * 2f);
         float distance = Mathf.Sqrt(Random.Range(0f, 1f)) * radius;
-        float yPos = center.y;
-        return new Vector3(center.x + Mathf.Cos(angle) * distance, yPos, center.z + Mathf.Sin(angle) * distance);
+        return new Vector3(center.x + Mathf.Cos(angle) * distance, center.y, center.z + Mathf.Sin(angle) * distance);
     }
 
     Vector3 GetValidNavMeshPosition(Vector3 position, float sampleRadius)
@@ -489,22 +521,16 @@ public class EnemySpawner : MonoBehaviour
         return NavMesh.SamplePosition(position, out hit, 1f, NavMesh.AllAreas);
     }
 
-    void CleanupAllEnemies()
-    {
-        allActiveEnemies.RemoveAll(e => e == null);
-        foreach (SpawnPointData spawnData in spawnPoints)
-        {
-            spawnData.activeEnemies.RemoveAll(e => e == null);
-        }
-    }
-
     public void ClearAllEnemies()
     {
+        StopAllCoroutines(); // 停止所有生成协程
+
         foreach (GameObject enemy in allActiveEnemies)
         {
             if (enemy != null) Destroy(enemy);
         }
         allActiveEnemies.Clear();
+
         foreach (SpawnPointData spawnData in spawnPoints)
         {
             spawnData.activeEnemies.Clear();
@@ -528,22 +554,8 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    public void StartSpawning()
-    {
-        canSpawn = true;
-        Debug.Log("✅ 敌人开始生成！");
-
-        if (spawnOnStart && !initialSpawnDone)
-        {
-            PerformInitialSpawn();
-        }
-    }
-
-    public void StopSpawning()
-    {
-        canSpawn = false;
-        Debug.Log("⏸️ 敌人停止生成");
-    }
+    public void StartSpawning() => EnableSpawning();
+    public void StopSpawning() => DisableSpawning();
 
     public void UpdateSpawnPoints(List<Transform> newSpawnPoints)
     {
@@ -572,10 +584,7 @@ public class EnemySpawner : MonoBehaviour
             }
         }
 
-        if (showDebugLogs)
-        {
-            Debug.Log($"🔄 生成点已更新：{spawnPoints.Count} 个生成点");
-        }
+        if (showDebugLogs) Debug.Log($"🔄 生成点已更新：{spawnPoints.Count} 个生成点");
     }
 
     public string GetStats()
