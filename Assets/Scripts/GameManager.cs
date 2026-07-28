@@ -99,6 +99,13 @@ public class GameManager : MonoBehaviour
                     Debug.Log("✅ 无限世界管理器已激活");
                 }
 
+                // ⭐ 关键修复：启用 EnemySpawner 的生成
+                if (enemySpawner != null)
+                {
+                    enemySpawner.EnableSpawning();
+                    Debug.Log("✅ EnemySpawner 生成已启用");
+                }
+
                 // ⭐ 通知UIManager进入计时模式（正计时）
                 UIManager uiManager = FindObjectOfType<UIManager>();
                 if (uiManager != null)
@@ -118,6 +125,13 @@ public class GameManager : MonoBehaviour
                 if (worldManager != null)
                 {
                     worldManager.gameObject.SetActive(false);
+                }
+
+                // ⭐ 普通模式也启用生成
+                if (enemySpawner != null)
+                {
+                    enemySpawner.EnableSpawning();
+                    Debug.Log("✅ EnemySpawner 生成已启用（普通模式）");
                 }
 
                 // ⭐ 通知UIManager进入倒计时模式
@@ -308,6 +322,12 @@ public class GameManager : MonoBehaviour
         isGameOver = true;
         hasProcessedGameOver = true;
 
+        // ⭐ 禁用敌人生成
+        if (enemySpawner != null)
+        {
+            enemySpawner.DisableSpawning();
+        }
+
         int coins = 0;
         int kills = 0;
 
@@ -477,6 +497,13 @@ public class GameManager : MonoBehaviour
         scalingTimer = 0f;
         gameStartTime = 0f;
         currentMaxEnemyCount = currentDifficulty != null ? currentDifficulty.maxEnemyCount : 30;
+
+        if (enemySpawner != null)
+        {
+            enemySpawner.DisableSpawning();
+            enemySpawner.ResetSpawner();
+        }
+
         Debug.Log("🔄 游戏状态已重置");
     }
 }

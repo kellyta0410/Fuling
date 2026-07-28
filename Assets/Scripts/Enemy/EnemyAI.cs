@@ -50,9 +50,9 @@ public abstract class EnemyAI : MonoBehaviour
 
     [Header("群组行为（分离力）")]
     public bool enableSeparation = true;
-    public float separationRadius = 1.5f;
-    public float separationForce = 3f;
-    public float separationSmoothSpeed = 8f;
+    public float separationRadius = 2f;
+    public float separationForce = 5f;
+    public float separationSmoothSpeed = 10f;
 
     // 分离力相关
     private Vector3 separationVelocity = Vector3.zero;
@@ -80,6 +80,13 @@ public abstract class EnemyAI : MonoBehaviour
     // 无限模式
     private bool useDirectChase = false;
 
+    // ⭐ 停止距离（防止推玩家）
+    private float stopDistance = 1.2f;
+
+    // ⭐ 新增：所属Tile
+    [Header("所属Tile")]
+    public Tile ownerTile;
+
     // ---------- 生命周期 ----------
     protected virtual void Start()
     {
@@ -91,7 +98,6 @@ public abstract class EnemyAI : MonoBehaviour
         isAgentValid = agent != null && agent.isOnNavMesh;
         enemyLayerMask = LayerMask.GetMask("Enemy");
 
-        // 检测无限模式
         if (GameManager.Instance != null)
         {
             useDirectChase = GameManager.Instance.IsInfiniteMode();
@@ -155,14 +161,14 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 无限模式：直接追踪
+        // ⭐ 无限模式：一直追击，但保留攻击逻辑
         if (useDirectChase && player != null && !player.IsDead())
         {
-            DirectChaseUpdate();
+            InfiniteChaseUpdate();
             return;
         }
 
-        // 普通模式：NavMesh寻路
+        // ⭐ 普通模式：范围检测才追击
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -200,6 +206,7 @@ public abstract class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
+        // ⭐ 普通模式：范围检测
         if (distance <= detectionRange) isChasing = true;
         else if (distance > loseTargetRange) isChasing = false;
 
@@ -214,8 +221,10 @@ public abstract class EnemyAI : MonoBehaviour
         UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
     }
 
-    // ⭐ 直接追踪更新（无限模式专用）
-    void DirectChaseUpdate()
+    // ⭐ 直接追踪（无限模式）
+    // ⭐ 无限模式：一直追击，但使用完整的攻击逻辑
+    // ⭐ 无限模式：一直追击，但保留完整攻击逻辑
+    void InfiniteChaseUpdate()
     {
         if (player == null || isDead) return;
 
@@ -232,42 +241,65 @@ public abstract class EnemyAI : MonoBehaviour
             }
         }
 
-        // 攻击检测
+        // ⭐ 在攻击范围内 → 执行攻击
         if (distance <= enemyData.attackRange && canAttack && IsFacingPlayer())
         {
             PerformAttack();
             return;
         }
 
-        // ⭐ 停止距离（碰到玩家就停，不会推着玩家走）
-        float stopDistance = 0.8f;
-        if (distance < stopDistance)
+        // ⭐ 在攻击范围内但冷却中 → 面向玩家，不移动
+        if (distance <= enemyData.attackRange)
         {
-            // 只面向玩家，不移动
             Vector3 lookTarget = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
             transform.LookAt(lookTarget);
             UpdateAnimations(0f, false);
             return;
         }
 
-        // 直接走向玩家
+        // ⭐ 超出攻击范围 → 一直追击（无限模式核心）
         Vector3 direction = (player.transform.position - transform.position).normalized;
         float speed = baseSpeed * currentSpeedMultiplier;
-        Vector3 targetPosition = transform.position + direction * speed * Time.deltaTime;
 
-        targetPosition.y = transform.position.y;
-        transform.position = targetPosition;
+        // 使用 NavMeshAgent 或直接移动
+        if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
+            agent.SetDestination(player.transform.position);
 
-        // 面向玩家
-        Vector3 lookTarget2 = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
-        transform.LookAt(lookTarget2);
+            if (agent.remainingDistance <= agent.stoppingDistance)
+            {
+                UpdateAnimations(0f, false);
+            }
+            else
+            {
+                UpdateAnimations(speed, true);
+            }
+        }
+        else
+        {
+            // 直接移动
+            Vector3 targetPosition = transform.position + direction * speed * Time.deltaTime;
+            targetPosition.y = transform.position.y;
+            transform.position = targetPosition;
 
-        UpdateAnimations(speed, true);
+            Vector3 lookTarget = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
+            transform.LookAt(lookTarget);
+            UpdateAnimations(speed, true);
+        }
+
         isChasing = true;
+
+        // 分离力
+        if (enableSeparation)
+        {
+            ApplySeparation();
+        }
+
         UpdateHealthBarPosition();
     }
 
-    // 应用分离力
+    // ⭐ 分离力
     private void ApplySeparation()
     {
         if (myCollider == null) return;
@@ -285,7 +317,6 @@ public abstract class EnemyAI : MonoBehaviour
 
             if (dist < separationRadius && dist > 0.01f)
             {
-                // 距离越近力越大
                 float strength = 1f - (dist / separationRadius);
                 force += dir.normalized * strength * separationForce;
                 count++;
@@ -294,23 +325,19 @@ public abstract class EnemyAI : MonoBehaviour
 
         if (count > 0)
         {
-            // 平滑加速
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
 
-            // 应用分离力（无限模式直接移动）
             if (useDirectChase)
             {
-                // ⭐ 乘大一点让分离效果更明显
-                transform.position += separationVelocity * Time.deltaTime * 3f;
+                transform.position += separationVelocity * Time.deltaTime;
             }
             else if (isAgentValid && agent != null && agent.isOnNavMesh)
             {
-                agent.Move(separationVelocity * Time.deltaTime * 3f);
+                agent.Move(separationVelocity * Time.deltaTime);
             }
         }
         else
         {
-            // 没有附近敌人时，逐渐停止
             separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
         }
     }
@@ -381,7 +408,6 @@ public abstract class EnemyAI : MonoBehaviour
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));
-                Debug.Log(gameObject.name + " 攻击造成 " + finalDamage + " 伤害");
             }
         }
     }
@@ -469,13 +495,18 @@ public abstract class EnemyAI : MonoBehaviour
         if (currentHealth <= 0) Die();
     }
 
-    // ⭐ 死亡（延迟销毁）
     protected virtual void Die()
     {
         isDead = true;
         if (healthBarInstance != null) healthBarInstance.SetActive(false);
         StopAgent();
         animator.SetTrigger("Die");
+
+        // ⭐ 从Tile中注销
+        if (ownerTile != null)
+        {
+            ownerTile.UnregisterEnemy(gameObject);
+        }
 
         int baseCoin = enemyData != null ? enemyData.coinReward : 10;
         int finalCoin = baseCoin;
@@ -485,7 +516,6 @@ public abstract class EnemyAI : MonoBehaviour
         SpawnCoin(finalCoin);
         if (player != null) player.AddKill();
 
-        // ⭐ 延迟销毁（播放完死亡动画后销毁）
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
         Destroy(gameObject, delay);
     }
@@ -519,6 +549,15 @@ public abstract class EnemyAI : MonoBehaviour
             targetIdleRotation = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * transform.rotation;
         }
         transform.rotation = Quaternion.Slerp(transform.rotation, targetIdleRotation, 0.5f * Time.deltaTime);
+    }
+
+    // ⭐ 当对象被销毁时，确保从Tile中注销
+    protected virtual void OnDestroy()
+    {
+        if (ownerTile != null && !isDead)
+        {
+            ownerTile.UnregisterEnemy(gameObject);
+        }
     }
 
     protected virtual void OnDrawGizmosSelected()
