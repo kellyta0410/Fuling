@@ -361,7 +361,6 @@ public class GameManager : MonoBehaviour
 
         if (OnGameOver != null)
         {
-            Debug.Log("🎯 触发 OnGameOver 事件");
             OnGameOver();
         }
 

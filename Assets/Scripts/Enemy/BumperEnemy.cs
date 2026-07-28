@@ -67,7 +67,6 @@ public class BumperEnemy : EnemyAI
             // ⭐ 平滑击退玩家（使用 CharacterController）
             StartCoroutine(SmoothPushPlayer(pushDuration, pushDistance));
 
-            Debug.Log(gameObject.name + " 冲锋造成 " + finalDamage + " 伤害");
         }
 
         StartCoroutine(ResetAttackCooldown());
@@ -80,7 +79,6 @@ public class BumperEnemy : EnemyAI
     {
         if (player == null || playerController == null)
         {
-            Debug.LogWarning("玩家或 CharacterController 为空，无法击退");
             yield break;
         }
 
@@ -183,8 +181,6 @@ public class BumperEnemy : EnemyAI
                     chargeStartPos = transform.position;
                     if (animator != null)
                         animator.SetTrigger("ChargeWindUp");
-
-                    Debug.Log($"[冲锋] 开始蓄力，目标位置: {chargeTarget}");
                 }
                 break;
 
@@ -207,8 +203,6 @@ public class BumperEnemy : EnemyAI
 
                     // 开始冲锋：忽略与玩家的物理碰撞
                     IgnorePlayerCollision(true);
-
-                    Debug.Log($"[冲锋] 蓄力完成，开始冲锋！速度: {chargeSpeed}, 最大距离: {chargeMaxDistance}, 最小距离: {chargeMinDistance}");
                 }
                 break;
 
@@ -262,7 +256,6 @@ public class BumperEnemy : EnemyAI
                     chargeState = ChargeState.Cooldown;
                     stateTimer = 0f;
                     if (isAgentValid) agent.isStopped = false;
-                    Debug.Log($"[冲锋] 硬直结束，进入冷却");
                 }
                 break;
 
@@ -290,7 +283,6 @@ public class BumperEnemy : EnemyAI
                 if (stateTimer >= chargeCooldown)
                 {
                     chargeState = ChargeState.Chasing;
-                    Debug.Log($"[冲锋] 冷却结束，恢复追击");
                 }
                 break;
         }
@@ -301,7 +293,6 @@ public class BumperEnemy : EnemyAI
     {
         if (enemyCollider == null || playerCollider == null)
         {
-            Debug.LogWarning($"[冲锋] 碰撞体为空！enemyCollider: {enemyCollider != null}, playerCollider: {playerCollider != null}");
             return;
         }
 
@@ -310,8 +301,6 @@ public class BumperEnemy : EnemyAI
 
         Physics.IgnoreCollision(enemyCollider, playerCollider, ignore);
         collisionIgnored = ignore;
-
-        Debug.Log($"[冲锋] 碰撞忽略: {(ignore ? "开启" : "关闭")}");
     }
 
     private bool IsBlocked()

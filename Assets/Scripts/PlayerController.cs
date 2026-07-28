@@ -73,6 +73,9 @@ public class PlayerController : MonoBehaviour
     // ==================== 摇杆控制 ====================
     private bool isJoystickEnabled = true;
 
+    // ⭐ 是否可以移动（倒计时控制）
+    private bool canMove = false;
+
     // ==================== 属性 ====================
     public float HealthPercent => currentHealth / maxHealth;
     public int GetCoins() => coins;
@@ -85,6 +88,23 @@ public class PlayerController : MonoBehaviour
         return currentHealth / maxHealth;
     }
 
+    // ⭐ 设置是否可以移动
+    public void SetCanMove(bool canMove)
+    {
+        this.canMove = canMove;
+        if (!canMove)
+        {
+            inputVector = Vector2.zero;
+            joystickInput = Vector2.zero;
+            keyboardInput = Vector2.zero;
+            if (isDragging)
+            {
+                isDragging = false;
+                if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
+            }
+        }
+    }
+
     // ==================== Unity 生命周期 ====================
 
     void Start()
@@ -94,13 +114,10 @@ public class PlayerController : MonoBehaviour
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
-        // 加载角色数据
         LoadCharacterData();
 
-        // 设置初始血量
         currentHealth = maxHealth;
 
-        // 设置地面层
         int groundLayerIndex = LayerMask.NameToLayer("Ground");
         if (groundLayerIndex != -1)
         {
@@ -111,32 +128,26 @@ public class PlayerController : MonoBehaviour
             groundLayer = ~0;
         }
 
-        // 平台设置
 #if UNITY_ANDROID || UNITY_IOS
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
         isJoystickEnabled = true;
 #else
-    if (joystickBg != null) joystickBg.gameObject.SetActive(false);
-    if (actionButton != null) actionButton.gameObject.SetActive(false);
-    isJoystickEnabled = false;
+        if (joystickBg != null) joystickBg.gameObject.SetActive(false);
+        if (actionButton != null) actionButton.gameObject.SetActive(false);
+        isJoystickEnabled = false;
 #endif
 
-        // ✅ 强制更新 UI（修复 EasyScene 血条不显示问题）
         if (uiManager != null)
         {
             uiManager.UpdateHealthUI();
             uiManager.UpdateCoinUI();
             uiManager.UpdateKillUI();
-            Debug.Log("✅ PlayerController: 强制更新 UI");
         }
-        else
-        {
-            Debug.LogWarning("⚠️ UIManager 为空，无法更新 UI");
-        }
-    }
 
-    // ==================== 角色数据加载 ====================
+        // ⭐ 默认不能移动（等倒计时结束）
+        canMove = false;
+    }
 
     void LoadCharacterData()
     {
@@ -154,7 +165,6 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 应用角色基础属性
         maxHealth = currentCharacterData.baseHealth;
         speed = currentCharacterData.baseSpeed;
         attackDamage = currentCharacterData.baseAttack;
@@ -162,14 +172,25 @@ public class PlayerController : MonoBehaviour
         attackCooldown = currentCharacterData.baseAttackCooldown;
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}");
-        Debug.Log($"血量: {maxHealth}, 速度: {speed}, 攻击: {attackDamage}");
     }
-
-    // ==================== Update ====================
 
     void Update()
     {
         if (isDead || isDying) return;
+
+        // ⭐ 如果不能移动，不处理输入
+        if (!canMove)
+        {
+            inputVector = Vector2.zero;
+            joystickInput = Vector2.zero;
+            keyboardInput = Vector2.zero;
+            if (isDragging)
+            {
+                isDragging = false;
+                if (joystickHandle != null) joystickHandle.anchoredPosition = Vector2.zero;
+            }
+            return;
+        }
 
 #if UNITY_ANDROID || UNITY_IOS
         if (isJoystickEnabled)
@@ -179,7 +200,6 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            // 如果摇杆被禁用，重置输入
             joystickInput = Vector2.zero;
             inputVector = Vector2.zero;
             if (isDragging)
@@ -302,8 +322,6 @@ public class PlayerController : MonoBehaviour
         UpdateAnimations();
     }
 
-    // ==================== 摇杆控制方法 ====================
-
     public void SetJoystickEnabled(bool enabled)
     {
 #if UNITY_ANDROID || UNITY_IOS
@@ -322,7 +340,6 @@ public class PlayerController : MonoBehaviour
             actionButton.gameObject.SetActive(enabled);
         }
 
-        // 如果禁用摇杆，重置输入状态
         if (!enabled)
         {
             isDragging = false;
@@ -334,8 +351,6 @@ public class PlayerController : MonoBehaviour
         }
 #endif
     }
-
-    // ==================== 攻击 ====================
 
     void PerformAction()
     {
@@ -376,13 +391,10 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ==================== 受伤 ====================
-
     public void TakeDamage(float damage)
     {
         if (isDead || isDying) return;
 
-        // animator.SetTrigger("Hit"); 
         StartCoroutine(SmoothDamage(damage));
     }
 
@@ -413,8 +425,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ==================== 死亡 ====================
-
     void Die()
     {
         if (isDead || isDying) return;
@@ -422,7 +432,6 @@ public class PlayerController : MonoBehaviour
         isDying = true;
         velocity = Vector3.zero;
 
-        // 放到地面
         PlaceOnGround();
 
         if (controller != null) controller.enabled = false;
@@ -501,15 +510,12 @@ public class PlayerController : MonoBehaviour
             uiManager.OnPlayerDied();
         }
 
-        // GameOver 时通知 GameManager
         GameManager gm = GameManager.Instance;
         if (gm != null)
         {
             gm.GameOver(false);
         }
     }
-
-    // ==================== 金币和击杀 ====================
 
     public void AddCoin(int amount)
     {
@@ -520,11 +526,8 @@ public class PlayerController : MonoBehaviour
     public void AddKill()
     {
         kills++;
-        Debug.Log($"击杀数: {kills}");
         if (uiManager != null) uiManager.OnPlayerKillChanged();
     }
-
-    // ==================== 动画 ====================
 
     void UpdateAnimations()
     {
@@ -534,10 +537,9 @@ public class PlayerController : MonoBehaviour
         float currentSpeed = horizontalVelocity.magnitude;
 
         animator.SetBool("IsMoving", currentSpeed > 0.05f);
+        animator.SetBool("IsGrounded", isGrounded);
         animator.SetFloat("Speed", currentSpeed);
     }
-
-    // ==================== 输入 ====================
 
     void HandleKeyboardInput()
     {
@@ -617,8 +619,6 @@ public class PlayerController : MonoBehaviour
             }
         }
     }
-
-    // ==================== 工具方法 ====================
 
     bool IsGrounded()
     {

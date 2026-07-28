@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.AI.Navigation;
@@ -12,7 +13,8 @@ public class InfiniteWorldManager : MonoBehaviour
 
     [Header("世界设置")]
     public float tileSize = 10f;
-    public int renderDistance = 2;
+    public int renderDistance = 3;
+    public int preGenerateDistance = 3;
     public int seed = 42;
 
     [Header("生成概率")]
@@ -20,25 +22,28 @@ public class InfiniteWorldManager : MonoBehaviour
     [Range(0, 100)] public int waterChance = 30;
     [Range(0, 100)] public int stoneChance = 30;
 
-    [Header("延迟销毁设置")]
-    public float destroyDelay = 30f;
+    [Header("性能优化")]
+    public int tilesPerFrame = 2;
 
     [Header("NavMesh")]
     public NavMeshSurface navMeshSurface;
+    public bool enableDynamicNavMesh = false;
 
     [Header("玩家")]
     public Transform player;
 
     private Dictionary<Vector2Int, Tile> activeTiles = new Dictionary<Vector2Int, Tile>();
-    private Dictionary<Vector2Int, float> pendingDestroyTiles = new Dictionary<Vector2Int, float>();
     private Dictionary<Vector2Int, List<GameObject>> tileEnemies = new Dictionary<Vector2Int, List<GameObject>>();
-
     private Vector2Int lastPlayerGrid;
     private System.Random random;
     private EnemySpawner enemySpawner;
 
-    private float lastNavMeshBakeTime = 0f;
-    private bool needsNavMeshBake = false;
+    private Queue<Vector2Int> pendingTiles = new Queue<Vector2Int>();
+    private bool isCreating = false;
+    private int createdThisFrame = 0;
+    private float lastCreateTime = 0f;
+
+    private bool navMeshBaked = false;
 
     void Start()
     {
@@ -54,14 +59,19 @@ public class InfiniteWorldManager : MonoBehaviour
 
         if (player != null)
         {
+            PreGenerateTiles();
             UpdateTiles(player.position);
         }
 
-        // ⭐ 初始烘焙
-        if (navMeshSurface != null)
+        if (navMeshSurface != null && !navMeshBaked && enableDynamicNavMesh)
         {
             navMeshSurface.BuildNavMesh();
-            Debug.Log("✅ 初始 NavMesh 烘焙完成");
+            navMeshBaked = true;
+            Debug.Log("✅ NavMesh 烘焙完成");
+        }
+        else
+        {
+            Debug.Log("ℹ️ NavMesh 动态烘焙已禁用（无限模式用直接追踪）");
         }
     }
 
@@ -74,28 +84,225 @@ public class InfiniteWorldManager : MonoBehaviour
         {
             UpdateTiles(player.position);
             lastPlayerGrid = currentGrid;
-            needsNavMeshBake = true;
-            lastNavMeshBakeTime = Time.time;
         }
 
-        UpdatePendingDestroyTiles();
+        if (pendingTiles.Count > 0 && !isCreating && Time.time - lastCreateTime > 0.1f)
+        {
+            lastCreateTime = Time.time;
+            StartCoroutine(CreateTilesCoroutine());
+        }
     }
 
-    void LateUpdate()
+    void PreGenerateTiles()
     {
-        // ⭐ 延迟烘焙NavMesh（避免卡顿）
-        if (needsNavMeshBake && Time.time - lastNavMeshBakeTime > 0.5f)
+        int preGenRange = preGenerateDistance;
+        int count = 0;
+
+        for (int x = -preGenRange; x <= preGenRange; x++)
         {
-            if (navMeshSurface != null)
+            for (int z = -preGenRange; z <= preGenRange; z++)
             {
-                navMeshSurface.BuildNavMesh();
-                needsNavMeshBake = false;
-                Debug.Log("🔄 NavMesh 已更新");
+                Vector2Int gridPos = new Vector2Int(x, z);
+                if (!activeTiles.ContainsKey(gridPos))
+                {
+                    CreateTileInstant(gridPos);
+                    count++;
+                }
+            }
+        }
+
+        Debug.Log($"✅ 预生成了 {count} 个Tile");
+    }
+
+    // ⭐ 修改：创建Tile时直接创建生成点
+    void CreateTileInstant(Vector2Int gridPos)
+    {
+        Vector3 worldPos = GridToWorld(gridPos);
+        TileType tileType = GetRandomTileType(gridPos);
+        GameObject tilePrefab = GetTilePrefab(tileType);
+
+        GameObject tileObj = Instantiate(tilePrefab, worldPos, Quaternion.identity);
+        tileObj.transform.parent = transform;
+
+        Tile tile = tileObj.GetComponent<Tile>();
+        if (tile != null)
+        {
+            tile.Initialize(gridPos, tileType);
+        }
+
+        tileObj.SetActive(false);
+        activeTiles.Add(gridPos, tile);
+        tileEnemies.Add(gridPos, new List<GameObject>());
+
+        // ⭐ 创建生成点（不管是否显示）
+        CreateSpawnPointsOnTile(tile);
+    }
+
+    IEnumerator CreateTilesCoroutine()
+    {
+        isCreating = true;
+        createdThisFrame = 0;
+
+        while (pendingTiles.Count > 0)
+        {
+            Vector2Int gridPos = pendingTiles.Dequeue();
+
+            if (!activeTiles.ContainsKey(gridPos))
+            {
+                CreateTileInstant(gridPos);
+                createdThisFrame++;
+            }
+
+            if (createdThisFrame >= tilesPerFrame)
+            {
+                createdThisFrame = 0;
+                yield return new WaitForEndOfFrame();
+                yield return null;
+            }
+        }
+
+        isCreating = false;
+    }
+
+    void UpdateTiles(Vector3 playerPosition)
+    {
+        Vector2Int playerGrid = WorldToGrid(playerPosition);
+
+        int showMinX = playerGrid.x - renderDistance;
+        int showMaxX = playerGrid.x + renderDistance;
+        int showMinZ = playerGrid.y - renderDistance;
+        int showMaxZ = playerGrid.y + renderDistance;
+
+        int genMinX = playerGrid.x - preGenerateDistance;
+        int genMaxX = playerGrid.x + preGenerateDistance;
+        int genMinZ = playerGrid.y - preGenerateDistance;
+        int genMaxZ = playerGrid.y + preGenerateDistance;
+
+        HashSet<Vector2Int> shouldShow = new HashSet<Vector2Int>();
+        for (int x = showMinX; x <= showMaxX; x++)
+        {
+            for (int z = showMinZ; z <= showMaxZ; z++)
+            {
+                shouldShow.Add(new Vector2Int(x, z));
+            }
+        }
+
+        HashSet<Vector2Int> shouldGenerate = new HashSet<Vector2Int>();
+        for (int x = genMinX; x <= genMaxX; x++)
+        {
+            for (int z = genMinZ; z <= genMaxZ; z++)
+            {
+                Vector2Int pos = new Vector2Int(x, z);
+                if (!activeTiles.ContainsKey(pos) && !pendingTiles.Contains(pos))
+                {
+                    shouldGenerate.Add(pos);
+                }
+            }
+        }
+
+        foreach (Vector2Int gridPos in shouldGenerate)
+        {
+            pendingTiles.Enqueue(gridPos);
+        }
+
+        List<Vector2Int> toRemove = new List<Vector2Int>();
+        foreach (var tile in activeTiles)
+        {
+            bool inShow = tile.Key.x >= showMinX && tile.Key.x <= showMaxX &&
+                          tile.Key.y >= showMinZ && tile.Key.y <= showMaxZ;
+            bool inGen = tile.Key.x >= genMinX && tile.Key.x <= genMaxX &&
+                         tile.Key.y >= genMinZ && tile.Key.y <= genMaxZ;
+
+            if (!inShow && !inGen)
+            {
+                toRemove.Add(tile.Key);
+            }
+        }
+
+        foreach (Vector2Int gridPos in toRemove)
+        {
+            DestroyTile(gridPos);
+        }
+
+        // ⭐ 确保所有显示的Tile都有生成点
+        foreach (Vector2Int gridPos in shouldShow)
+        {
+            if (activeTiles.ContainsKey(gridPos))
+            {
+                Tile tile = activeTiles[gridPos];
+
+                if (!tile.isActive)
+                {
+                    tile.Activate();
+                    CreateSpawnPointsOnTile(tile);
+                    Debug.Log($"✅ Tile {gridPos} 激活，创建生成点");
+                }
+                else
+                {
+                    // ⭐ 检查是否有生成点，没有就补创建
+                    bool hasSpawnPoint = false;
+                    if (enemySpawner != null)
+                    {
+                        foreach (var data in enemySpawner.spawnPoints)
+                        {
+                            if (data.point != null && data.point.parent == tile.transform)
+                            {
+                                hasSpawnPoint = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!hasSpawnPoint)
+                    {
+                        CreateSpawnPointsOnTile(tile);
+                        Debug.Log($"🔄 补创建Tile {gridPos} 的生成点");
+                    }
+                }
             }
         }
     }
 
-    // ... 其他方法保持不变 ...
+    // ⭐ DestroyTile（不销毁敌人）
+    void DestroyTile(Vector2Int gridPos)
+    {
+        if (activeTiles.ContainsKey(gridPos))
+        {
+            Tile tile = activeTiles[gridPos];
+
+            if (enemySpawner != null)
+            {
+                enemySpawner.spawnPoints.RemoveAll(data =>
+                    data.point != null && data.point.parent == tile.transform
+                );
+            }
+
+            // ⭐ 不销毁敌人！让敌人独立存在
+            // 敌人已经通过 EnemySpawner 设置为 parent = null
+            // 所以不会随着 Tile 销毁
+
+            Destroy(tile.gameObject);
+            activeTiles.Remove(gridPos);
+        }
+    }
+
+    void CreateSpawnPointsOnTile(Tile tile)
+    {
+        if (enemySpawner == null) return;
+
+        GameObject spawnPoint = new GameObject($"SpawnPoint_0");
+        spawnPoint.transform.parent = tile.transform;
+        spawnPoint.transform.localPosition = Vector3.zero;
+
+        EnemySpawner.SpawnPointData data = new EnemySpawner.SpawnPointData();
+        data.point = spawnPoint.transform;
+        data.activationRadius = 15f;
+        data.deactivationRadius = 20f;
+        data.spawnRadius = 2f;
+        data.tileType = tile.tileType;
+
+        enemySpawner.spawnPoints.Add(data);
+    }
 
     TileType GetRandomTileType(Vector2Int gridPos)
     {
@@ -119,166 +326,6 @@ public class InfiniteWorldManager : MonoBehaviour
             case TileType.Stone: return stoneTilePrefab;
             default: return grassTilePrefab;
         }
-    }
-
-    void UpdateTiles(Vector3 playerPosition)
-    {
-        Vector2Int playerGrid = WorldToGrid(playerPosition);
-
-        int minX = playerGrid.x - renderDistance;
-        int maxX = playerGrid.x + renderDistance;
-        int minZ = playerGrid.y - renderDistance;
-        int maxZ = playerGrid.y + renderDistance;
-
-        HashSet<Vector2Int> shouldShow = new HashSet<Vector2Int>();
-        for (int x = minX; x <= maxX; x++)
-        {
-            for (int z = minZ; z <= maxZ; z++)
-            {
-                shouldShow.Add(new Vector2Int(x, z));
-            }
-        }
-
-        foreach (Vector2Int gridPos in shouldShow)
-        {
-            if (!activeTiles.ContainsKey(gridPos) && !pendingDestroyTiles.ContainsKey(gridPos))
-            {
-                CreateTile(gridPos);
-            }
-            else if (pendingDestroyTiles.ContainsKey(gridPos))
-            {
-                pendingDestroyTiles.Remove(gridPos);
-                if (activeTiles.ContainsKey(gridPos) && !activeTiles[gridPos].isActive)
-                {
-                    activeTiles[gridPos].Activate();
-                    CreateSpawnPointsOnTile(activeTiles[gridPos]);
-                }
-            }
-        }
-
-        List<Vector2Int> toRemove = new List<Vector2Int>();
-        foreach (var tile in activeTiles)
-        {
-            if (!shouldShow.Contains(tile.Key))
-            {
-                RemoveSpawnPointsFromTile(tile.Value);
-
-                if (!pendingDestroyTiles.ContainsKey(tile.Key))
-                {
-                    pendingDestroyTiles.Add(tile.Key, destroyDelay);
-                    Debug.Log($"⏱️ Tile {tile.Key} 离开视野，{destroyDelay}秒后销毁");
-                }
-            }
-        }
-    }
-
-    void CreateTile(Vector2Int gridPos)
-    {
-        Vector3 worldPos = GridToWorld(gridPos);
-        TileType tileType = GetRandomTileType(gridPos);
-        GameObject tilePrefab = GetTilePrefab(tileType);
-
-        GameObject tileObj = Instantiate(tilePrefab, worldPos, Quaternion.identity);
-        tileObj.transform.parent = transform;
-
-        Tile tile = tileObj.GetComponent<Tile>();
-        if (tile != null)
-        {
-            tile.Initialize(gridPos, tileType);
-        }
-
-        tileObj.SetActive(true);
-        activeTiles.Add(gridPos, tile);
-        tileEnemies.Add(gridPos, new List<GameObject>());
-
-        CreateSpawnPointsOnTile(tile);
-
-        Debug.Log($"✅ 创建Tile {gridPos} ({tileType})");
-    }
-
-    void UpdatePendingDestroyTiles()
-    {
-        List<Vector2Int> toDestroy = new List<Vector2Int>();
-
-        foreach (var kvp in pendingDestroyTiles.ToList())
-        {
-            Vector2Int gridPos = kvp.Key;
-            float timer = kvp.Value;
-
-            timer -= Time.deltaTime;
-            pendingDestroyTiles[gridPos] = timer;
-
-            if (timer <= 0f)
-            {
-                toDestroy.Add(gridPos);
-            }
-        }
-
-        foreach (Vector2Int gridPos in toDestroy)
-        {
-            DestroyTile(gridPos);
-        }
-    }
-
-    void DestroyTile(Vector2Int gridPos)
-    {
-        if (activeTiles.ContainsKey(gridPos))
-        {
-            Tile tile = activeTiles[gridPos];
-
-            RemoveSpawnPointsFromTile(tile);
-
-            if (tileEnemies.ContainsKey(gridPos))
-            {
-                foreach (GameObject enemy in tileEnemies[gridPos])
-                {
-                    if (enemy != null)
-                    {
-                        Destroy(enemy);
-                    }
-                }
-                tileEnemies[gridPos].Clear();
-                tileEnemies.Remove(gridPos);
-            }
-
-            Destroy(tile.gameObject);
-            activeTiles.Remove(gridPos);
-
-            Debug.Log($"🗑️ 销毁Tile {gridPos}");
-        }
-
-        pendingDestroyTiles.Remove(gridPos);
-    }
-
-    void CreateSpawnPointsOnTile(Tile tile)
-    {
-        if (enemySpawner == null) return;
-
-        int spawnPointCount = 1;
-
-        float tileDisplayRadius = (renderDistance * tileSize) + (tileSize / 2f);
-
-        GameObject spawnPoint = new GameObject($"SpawnPoint_0");
-        spawnPoint.transform.parent = tile.transform;
-        spawnPoint.transform.localPosition = Vector3.zero;
-
-        EnemySpawner.SpawnPointData data = new EnemySpawner.SpawnPointData();
-        data.point = spawnPoint.transform;
-        data.activationRadius = tileDisplayRadius;
-        data.deactivationRadius = tileDisplayRadius + 1f;
-        data.spawnRadius = 2f;
-        data.tileType = tile.tileType;
-
-        enemySpawner.spawnPoints.Add(data);
-    }
-
-    void RemoveSpawnPointsFromTile(Tile tile)
-    {
-        if (enemySpawner == null) return;
-
-        enemySpawner.spawnPoints.RemoveAll(data =>
-            data.point != null && data.point.parent == tile.transform
-        );
     }
 
     public void RegisterEnemyToTile(GameObject enemy, Vector2Int tileGridPos)

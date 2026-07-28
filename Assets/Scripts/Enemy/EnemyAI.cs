@@ -49,59 +49,36 @@ public abstract class EnemyAI : MonoBehaviour
     public float loseTargetRange = 25f;
 
     [Header("群组行为（分离力）")]
-    [Tooltip("是否启用敌人之间的分离力（避免重叠）")]
     public bool enableSeparation = true;
-    [Tooltip("分离检测半径（敌人之间保持的距离）")]
     public float separationRadius = 1.5f;
-    [Tooltip("分离力强度（越大推开越快）")]
     public float separationForce = 3f;
-    [Tooltip("分离力平滑速度")]
     public float separationSmoothSpeed = 8f;
-
-    // ⭐ 新增：无限模式强制追击
-    [Header("无限模式设置")]
-    [Tooltip("无限模式下敌人永远追击玩家")]
-    public bool infiniteModeAlwaysChase = true;
 
     // 分离力相关
     private Vector3 separationVelocity = Vector3.zero;
     private Collider myCollider;
     private int enemyLayerMask;
 
-    // 缩放倍率（由 EnemySpawner 设置）
+    // 缩放倍率
     protected float currentSpeedMultiplier = 1f;
     protected float currentHealthMultiplier = 1f;
     protected float currentDamageMultiplier = 1f;
 
-    // 基础值
     protected float baseSpeed;
     protected float baseHealth;
     protected float baseAttackDamage;
 
     protected bool isHealthInitialized = false;
-
-    // 当前是否追击中（子类可读）
     protected bool isChasing = false;
 
-    // 待机随机旋转
     private float idleRotationTimer = 0f;
     private float idleRotationInterval = 3f;
     private Quaternion targetIdleRotation;
 
-    // NavMeshAgent 有效性
     protected bool isAgentValid = false;
 
-    // ⭐ 休眠状态
-    private bool isSleeping = false;
-    private float nextSleepCheck = 0f;
-    private Vector3 lastKnownPlayerPosition;
-    private bool hasPlayerPosition = false;
-
-    // Tile引用
-    private Tile parentTile = null;
-
-    // ⭐ 是否为无限模式
-    private bool isInfiniteMode = false;
+    // 无限模式
+    private bool useDirectChase = false;
 
     // ---------- 生命周期 ----------
     protected virtual void Start()
@@ -112,14 +89,12 @@ public abstract class EnemyAI : MonoBehaviour
         myCollider = GetComponent<Collider>();
 
         isAgentValid = agent != null && agent.isOnNavMesh;
-
-        // 设置敌人 Layer 检测
         enemyLayerMask = LayerMask.GetMask("Enemy");
 
-        // ⭐ 检测是否为无限模式
+        // 检测无限模式
         if (GameManager.Instance != null)
         {
-            isInfiniteMode = GameManager.Instance.IsInfiniteMode();
+            useDirectChase = GameManager.Instance.IsInfiniteMode();
         }
 
         if (enemyData != null)
@@ -134,7 +109,7 @@ public abstract class EnemyAI : MonoBehaviour
                 isHealthInitialized = true;
             }
 
-            if (isAgentValid)
+            if (isAgentValid && !useDirectChase)
             {
                 agent.speed = baseSpeed;
                 agent.stoppingDistance = enemyData.attackRange * 0.85f;
@@ -148,7 +123,6 @@ public abstract class EnemyAI : MonoBehaviour
         }
         else
         {
-            // 默认值
             baseSpeed = 2f;
             baseHealth = 50f;
             baseAttackDamage = 10f;
@@ -157,30 +131,16 @@ public abstract class EnemyAI : MonoBehaviour
                 currentHealth = 50f;
                 isHealthInitialized = true;
             }
-            if (isAgentValid)
-            {
-                agent.speed = 2f;
-                agent.stoppingDistance = 1.5f * 0.85f;
-                agent.radius = 0.4f;
-                agent.height = 2f;
-                agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
-                agent.avoidancePriority = Random.Range(0, 100);
-                agent.isStopped = true;
-            }
         }
 
         CreateHealthBar();
         ApplyCurrentMultipliers();
 
         isChasing = false;
-        // 待机随机旋转
         targetIdleRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
         idleRotationInterval = Random.Range(2f, 5f);
         idleRotationTimer = 0f;
 
-        parentTile = GetComponentInParent<Tile>();
-
-        // 子类可做额外初始化
         OnStart();
     }
 
@@ -195,22 +155,14 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 休眠检查
-        if (!isAttacking)
+        // 无限模式：直接追踪
+        if (useDirectChase && player != null && !player.IsDead())
         {
-            if (Time.time >= nextSleepCheck)
-            {
-                nextSleepCheck = Time.time + 2f;
-                CheckSleepState();
-            }
-        }
-
-        if (isSleeping)
-        {
-            UpdateHealthBarPosition();
+            DirectChaseUpdate();
             return;
         }
 
+        // 普通模式：NavMesh寻路
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -236,7 +188,6 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
-        // 攻击冷却
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -249,23 +200,11 @@ public abstract class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
-        // ⭐ 无限模式：永远追击玩家
-        if (isInfiniteMode && infiniteModeAlwaysChase)
-        {
-            // 只要有玩家，就追击（无论距离）
-            isChasing = true;
-        }
-        else
-        {
-            // 普通模式：范围检测
-            if (distance <= detectionRange) isChasing = true;
-            else if (distance > loseTargetRange) isChasing = false;
-        }
+        if (distance <= detectionRange) isChasing = true;
+        else if (distance > loseTargetRange) isChasing = false;
 
-        // 子类可自定义移动逻辑
         HandleMovement();
 
-        // 应用分离力
         if (enableSeparation && isChasing && !isAttacking)
         {
             ApplySeparation();
@@ -275,110 +214,60 @@ public abstract class EnemyAI : MonoBehaviour
         UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
     }
 
-    // ⭐ 检查休眠状态
-    private void CheckSleepState()
+    // ⭐ 直接追踪更新（无限模式专用）
+    void DirectChaseUpdate()
     {
-        if (player == null) return;
+        if (player == null || isDead) return;
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
-        bool tileInactive = parentTile != null && !parentTile.isActive;
 
-        // ⭐ 无限模式：永远不进入休眠
-        if (isInfiniteMode && infiniteModeAlwaysChase)
+        // 攻击冷却
+        if (!canAttack)
         {
-            // 如果正在休眠，唤醒
-            if (isSleeping)
+            attackCooldownTimer += Time.deltaTime;
+            if (attackCooldownTimer >= enemyData.attackCooldown)
             {
-                WakeUp();
+                canAttack = true;
+                attackCooldownTimer = 0f;
             }
+        }
+
+        // 攻击检测
+        if (distance <= enemyData.attackRange && canAttack && IsFacingPlayer())
+        {
+            PerformAttack();
             return;
         }
 
-        bool shouldSleep = tileInactive || distance > 60f;
-        bool shouldWake = !tileInactive && distance < 50f;
-
-        if (shouldSleep && !isSleeping)
+        // ⭐ 停止距离（碰到玩家就停，不会推着玩家走）
+        float stopDistance = 0.8f;
+        if (distance < stopDistance)
         {
-            EnterSleep();
-        }
-        else if (shouldWake && isSleeping)
-        {
-            WakeUp();
-        }
-    }
-
-    protected virtual void EnterSleep()
-    {
-        isSleeping = true;
-
-        if (isAgentValid && agent != null && agent.isOnNavMesh)
-        {
-            agent.isStopped = true;
-            agent.ResetPath();
-        }
-
-        if (player != null)
-        {
-            lastKnownPlayerPosition = player.transform.position;
-            hasPlayerPosition = true;
-        }
-
-        if (animator != null)
-        {
-            animator.speed = 0f;
-        }
-
-        if (healthBarInstance != null)
-        {
-            healthBarInstance.SetActive(false);
-        }
-    }
-
-    protected virtual void WakeUp()
-    {
-        isSleeping = false;
-
-        if (isAgentValid && agent != null && agent.isOnNavMesh)
-        {
-            agent.isStopped = false;
-        }
-
-        if (animator != null)
-        {
-            animator.speed = 1f;
-        }
-
-        if (healthBarInstance != null)
-        {
-            healthBarInstance.SetActive(true);
-        }
-    }
-
-    public void SetTileActive(bool active)
-    {
-        // ⭐ 无限模式：不进入休眠
-        if (isInfiniteMode && infiniteModeAlwaysChase)
-        {
+            // 只面向玩家，不移动
+            Vector3 lookTarget = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
+            transform.LookAt(lookTarget);
+            UpdateAnimations(0f, false);
             return;
         }
 
-        if (!active && !isSleeping)
-        {
-            EnterSleep();
-        }
-        else if (active && isSleeping)
-        {
-            if (player != null)
-            {
-                float distance = Vector3.Distance(transform.position, player.transform.position);
-                if (distance < 50f)
-                {
-                    WakeUp();
-                }
-            }
-        }
+        // 直接走向玩家
+        Vector3 direction = (player.transform.position - transform.position).normalized;
+        float speed = baseSpeed * currentSpeedMultiplier;
+        Vector3 targetPosition = transform.position + direction * speed * Time.deltaTime;
+
+        targetPosition.y = transform.position.y;
+        transform.position = targetPosition;
+
+        // 面向玩家
+        Vector3 lookTarget2 = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
+        transform.LookAt(lookTarget2);
+
+        UpdateAnimations(speed, true);
+        isChasing = true;
+        UpdateHealthBarPosition();
     }
 
+    // 应用分离力
     private void ApplySeparation()
     {
         if (myCollider == null) return;
@@ -396,19 +285,32 @@ public abstract class EnemyAI : MonoBehaviour
 
             if (dist < separationRadius && dist > 0.01f)
             {
+                // 距离越近力越大
                 float strength = 1f - (dist / separationRadius);
                 force += dir.normalized * strength * separationForce;
                 count++;
             }
         }
 
-        if (count > 0 && isAgentValid && agent != null && agent.isOnNavMesh)
+        if (count > 0)
         {
+            // 平滑加速
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
-            agent.Move(separationVelocity * Time.deltaTime);
+
+            // 应用分离力（无限模式直接移动）
+            if (useDirectChase)
+            {
+                // ⭐ 乘大一点让分离效果更明显
+                transform.position += separationVelocity * Time.deltaTime * 3f;
+            }
+            else if (isAgentValid && agent != null && agent.isOnNavMesh)
+            {
+                agent.Move(separationVelocity * Time.deltaTime * 3f);
+            }
         }
         else
         {
+            // 没有附近敌人时，逐渐停止
             separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
         }
     }
@@ -430,7 +332,7 @@ public abstract class EnemyAI : MonoBehaviour
     {
         if (enemyData == null) return;
         UpdateHealthBar();
-        if (isAgentValid)
+        if (isAgentValid && !useDirectChase)
             agent.speed = baseSpeed * currentSpeedMultiplier;
     }
 
@@ -543,7 +445,6 @@ public abstract class EnemyAI : MonoBehaviour
         }
     }
 
-    // 受伤
     public void TakeDamageImmediate(int damage)
     {
         if (isDead || enemyData == null) return;
@@ -568,6 +469,7 @@ public abstract class EnemyAI : MonoBehaviour
         if (currentHealth <= 0) Die();
     }
 
+    // ⭐ 死亡（延迟销毁）
     protected virtual void Die()
     {
         isDead = true;
@@ -583,6 +485,7 @@ public abstract class EnemyAI : MonoBehaviour
         SpawnCoin(finalCoin);
         if (player != null) player.AddKill();
 
+        // ⭐ 延迟销毁（播放完死亡动画后销毁）
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;
         Destroy(gameObject, delay);
     }

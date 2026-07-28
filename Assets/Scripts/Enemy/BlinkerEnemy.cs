@@ -102,7 +102,6 @@ public class BlinkerEnemy : EnemyAI
                     if (IsFacingPlayer())
                     {
                         PerformAttack();
-                        Debug.Log($"[Blinker] 贴脸直接攻击！距离: {distance:F1}m");
                     }
                     return;
                 }
@@ -131,8 +130,6 @@ public class BlinkerEnemy : EnemyAI
                     {
                         ShowGroundIndicator();
                     }
-
-                    Debug.Log($"[Blinker] 蓄力！距离: {distance:F1}m");
                 }
                 break;
 
@@ -160,7 +157,6 @@ public class BlinkerEnemy : EnemyAI
                         hasAttacked = true;
                         blinkState = BlinkState.Cooldown;
                         stateTimer = 0f;
-                        Debug.Log($"[Blinker] 蓄力中贴脸，取消瞬移直接攻击！");
                     }
                     return;
                 }
@@ -174,7 +170,6 @@ public class BlinkerEnemy : EnemyAI
                     // 进入瞬移前等待
                     blinkState = BlinkState.Blinking;
                     stateTimer = 0f;
-                    Debug.Log($"[Blinker] 蓄力完成，等待 {postBlinkDelay}s 后瞬移");
                 }
                 break;
 
@@ -186,7 +181,6 @@ public class BlinkerEnemy : EnemyAI
                     PerformBlinkToPlayer();
                     blinkState = BlinkState.PostBlink;
                     stateTimer = 0f;
-                    Debug.Log($"[Blinker] 瞬移！");
                 }
                 break;
 
@@ -198,13 +192,11 @@ public class BlinkerEnemy : EnemyAI
                 {
                     PerformAttack();
                     hasAttacked = true;
-                    Debug.Log($"[Blinker] 瞬移攻击！距离: {distAfterBlink:F1}m");
                 }
 
                 // 立即进入冷却
                 blinkState = BlinkState.Cooldown;
                 stateTimer = 0f;
-                Debug.Log($"[Blinker] 冷却 {blinkCooldown}s");
                 break;
 
             case BlinkState.Cooldown:
@@ -342,9 +334,7 @@ public class BlinkerEnemy : EnemyAI
         Vector3 faceDir = (player.transform.position - transform.position).normalized;
         faceDir.y = 0;
         if (faceDir != Vector3.zero)
-            transform.rotation = Quaternion.LookRotation(faceDir);
-
-        Debug.Log($"[Blinker] 瞬移到距离玩家 {distanceToPlayerAfterBlink:F1}m 处");
+            transform.rotation = Quaternion.LookRotation(faceDir);;
     }
 
     private void RotateTowardPlayer()
