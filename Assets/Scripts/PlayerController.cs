@@ -534,7 +534,6 @@ public class PlayerController : MonoBehaviour
         float currentSpeed = horizontalVelocity.magnitude;
 
         animator.SetBool("IsMoving", currentSpeed > 0.05f);
-        animator.SetBool("IsGrounded", isGrounded);
         animator.SetFloat("Speed", currentSpeed);
     }
 

@@ -23,6 +23,10 @@ public class GameManager : MonoBehaviour
     public float currentSpeedMultiplier;
     public float currentHealthMultiplier;
     public float currentDamageMultiplier;
+    public int currentMaxEnemyCount;
+
+    [Header("无限世界（可选）")]
+    public InfiniteWorldManager worldManager;
 
     private float timeLimit;
     private float remainingTime;
@@ -30,9 +34,8 @@ public class GameManager : MonoBehaviour
     private float gameStartTime = 0f;
     private bool isGameRunning = false;
     private bool isGameOver = false;
-    private bool hasProcessedGameOver = false;  // ✅ 防止重复处理
+    private bool hasProcessedGameOver = false;
 
-    // 事件
     public System.Action<float, float> OnTimerUpdated;
     public System.Action<bool> OnTimerVisibilityChanged;
     public System.Action OnGameOver;
@@ -47,7 +50,9 @@ public class GameManager : MonoBehaviour
         if (enemySpawner == null)
             enemySpawner = FindObjectOfType<EnemySpawner>();
 
-        // ✅ 方案1：完全依赖 Inspector 拖拽，不自动加载
+        if (worldManager == null)
+            worldManager = FindObjectOfType<InfiniteWorldManager>();
+
         if (currentDifficulty != null && enemySpawner != null)
         {
             ApplyCurrentDifficultyToSpawner();
@@ -63,7 +68,7 @@ public class GameManager : MonoBehaviour
     {
         isGameRunning = true;
         isGameOver = false;
-        hasProcessedGameOver = false;  // ✅ 重置标记
+        hasProcessedGameOver = false;
         scalingLevel = 0;
         scalingTimer = 0f;
         gameStartTime = Time.time;
@@ -82,9 +87,24 @@ public class GameManager : MonoBehaviour
                 currentSpeedMultiplier = 1f;
                 currentHealthMultiplier = 1f;
                 currentDamageMultiplier = 1f;
+                currentMaxEnemyCount = currentDifficulty.maxEnemyCount;
 
                 Debug.Log($"✅ 无限模式启动，场景: {SceneManager.GetActiveScene().name}");
                 Debug.Log($"   基础生成间隔: {currentSpawnInterval}秒");
+                Debug.Log($"   基础敌人上限: {currentMaxEnemyCount}");
+
+                if (worldManager != null)
+                {
+                    worldManager.gameObject.SetActive(true);
+                    Debug.Log("✅ 无限世界管理器已激活");
+                }
+
+                // ⭐ 通知UIManager进入计时模式（正计时）
+                UIManager uiManager = FindObjectOfType<UIManager>();
+                if (uiManager != null)
+                {
+                    uiManager.SetTimerMode(true);
+                }
             }
             else
             {
@@ -93,6 +113,19 @@ public class GameManager : MonoBehaviour
                 currentSpeedMultiplier = 1f;
                 currentHealthMultiplier = 1f;
                 currentDamageMultiplier = 1f;
+                currentMaxEnemyCount = currentDifficulty.maxEnemyCount;
+
+                if (worldManager != null)
+                {
+                    worldManager.gameObject.SetActive(false);
+                }
+
+                // ⭐ 通知UIManager进入倒计时模式
+                UIManager uiManager = FindObjectOfType<UIManager>();
+                if (uiManager != null)
+                {
+                    uiManager.SetTimerMode(false);
+                }
             }
 
             ApplyCurrentDifficultyToSpawner();
@@ -185,11 +218,21 @@ public class GameManager : MonoBehaviour
                 currentDifficulty.damageMultiplierMax
             );
 
+            // 敌人上限成长
+            if (currentDifficulty.enableMaxLimitScaling)
+            {
+                currentMaxEnemyCount = Mathf.Min(
+                    currentDifficulty.maxEnemyCount + (scalingLevel * currentDifficulty.maxEnemyCountStep),
+                    currentDifficulty.maxEnemyCountMax
+                );
+            }
+
             ApplyCurrentDifficultyToSpawner();
 
             Debug.Log($"🔄 无限模式成长 - 等级: {scalingLevel}");
             Debug.Log($"   生成间隔: {currentSpawnInterval}秒");
             Debug.Log($"   每次生成: {currentSpawnPerInterval}个");
+            Debug.Log($"   敌人上限: {currentMaxEnemyCount}");
             Debug.Log($"   速度倍率: {currentSpeedMultiplier:F2}");
             Debug.Log($"   血量倍率: {currentHealthMultiplier:F2}");
             Debug.Log($"   攻击倍率: {currentDamageMultiplier:F2}");
@@ -211,7 +254,7 @@ public class GameManager : MonoBehaviour
                 currentHealthMultiplier,
                 currentDamageMultiplier,
                 currentDifficulty.enableMaxLimit,
-                currentDifficulty.maxEnemyCount,
+                currentMaxEnemyCount,
                 currentDifficulty.enableCooldown,
                 currentDifficulty.cooldownTime,
                 currentDifficulty.allowedEnemyPrefabs
@@ -244,7 +287,6 @@ public class GameManager : MonoBehaviour
 
     public void GameOver(bool isWin)
     {
-        // ✅ 防止重复调用
         if (isGameOver)
         {
             Debug.Log("⚠️ GameOver 已经执行过，跳过本次调用");
@@ -266,7 +308,6 @@ public class GameManager : MonoBehaviour
         isGameOver = true;
         hasProcessedGameOver = true;
 
-        // ========== 获取游戏数据 ==========
         int coins = 0;
         int kills = 0;
 
@@ -282,7 +323,6 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("⚠️ 找不到 PlayerController！");
         }
 
-        // 计算游戏时间
         float timeToSave = 0f;
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
@@ -295,21 +335,18 @@ public class GameManager : MonoBehaviour
         }
         Debug.Log($"🎯 游戏时间: {timeToSave:F1}秒");
 
-        // ========== 保存数据到 GameDataManager ==========
         GameDataManager dataManager = GameDataManager.Instance;
         if (dataManager != null)
         {
             Debug.Log($"🎯 GameDataManager 存在，开始保存数据...");
             Debug.Log($"🎯 累加前总金币: {dataManager.TotalCoins}");
 
-            // 1. 更新最高纪录
             if (currentDifficulty != null)
             {
                 dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
                 Debug.Log($"🎯 已更新 {currentDifficulty.difficultyName} 模式的最高纪录");
             }
 
-            // 2. 累加总金币
             dataManager.AddCoins(coins);
             Debug.Log($"🎯 累加后总金币: {dataManager.TotalCoins}");
         }
@@ -322,7 +359,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // ========== 触发事件 ==========
         if (OnGameOver != null)
         {
             Debug.Log("🎯 触发 OnGameOver 事件");
@@ -333,7 +369,6 @@ public class GameManager : MonoBehaviour
         Debug.Log($"🏁 {currentDifficulty?.difficultyName ?? "未知"} - 金币: {coins}, 击杀: {kills}, 时间: {timeToSave:F1}s");
     }
 
-    // ✅ 降级方案：直接使用 PlayerPrefs
     void SaveBestRecord(string difficultyName, int coins, int kills, float time)
     {
         string coinsKey = difficultyName + "_BestCoins";
@@ -419,18 +454,21 @@ public class GameManager : MonoBehaviour
         return currentDamageMultiplier;
     }
 
+    public int GetCurrentMaxEnemyCount()
+    {
+        return currentMaxEnemyCount;
+    }
+
     public bool IsGameRunning()
     {
         return isGameRunning && !isGameOver;
     }
 
-    // ✅ 新增：检查是否已经 GameOver
     public bool IsGameOver()
     {
         return isGameOver;
     }
 
-    // ✅ 新增：重置游戏状态（用于重新开始）
     public void ResetGameState()
     {
         isGameRunning = false;
@@ -439,6 +477,7 @@ public class GameManager : MonoBehaviour
         scalingLevel = 0;
         scalingTimer = 0f;
         gameStartTime = 0f;
+        currentMaxEnemyCount = currentDifficulty != null ? currentDifficulty.maxEnemyCount : 30;
         Debug.Log("🔄 游戏状态已重置");
     }
 }

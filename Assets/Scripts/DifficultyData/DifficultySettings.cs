@@ -45,6 +45,15 @@ public class DifficultySettings : ScriptableObject
     public bool enableMaxLimit = true;
     public int maxEnemyCount = 30;
 
+    // ⭐ 新增：容量限制成长
+    [Header("容量限制成长（无限模式）")]
+    [Tooltip("是否开启上限成长")]
+    public bool enableMaxLimitScaling = true;
+    [Tooltip("每级增加的上限数量")]
+    public int maxEnemyCountStep = 2;
+    [Tooltip("上限最大值")]
+    public int maxEnemyCountMax = 100;
+
     [Header("冷却")]
     public bool enableCooldown = true;
     public float cooldownTime = 10f;
@@ -53,7 +62,7 @@ public class DifficultySettings : ScriptableObject
     public List<GameObject> allowedEnemyPrefabs;
 
     [Header("无限模式 - 成长上限")]
-    public int maxScalingLevel = 100;  // 最大成长等级
+    public int maxScalingLevel = 100;
 
     public bool IsInfiniteMode()
     {

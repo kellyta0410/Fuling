@@ -16,7 +16,7 @@ MonoBehaviour:
   sceneName: Easy
   mode: 0
   timeLimit: 180
-  enableScaling: 1
+  enableScaling: 0
   scalingInterval: 30
   spawnIntervalMin: 0.3
   spawnPerIntervalMax: 5
@@ -33,6 +33,9 @@ MonoBehaviour:
   enemySpeedMultiplier: 1
   enableMaxLimit: 1
   maxEnemyCount: 30
+  enableMaxLimitScaling: 1
+  maxEnemyCountStep: 2
+  maxEnemyCountMax: 100
   enableCooldown: 1
   cooldownTime: 10
   allowedEnemyPrefabs:

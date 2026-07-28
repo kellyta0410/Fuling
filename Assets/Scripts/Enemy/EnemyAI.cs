@@ -58,6 +58,11 @@ public abstract class EnemyAI : MonoBehaviour
     [Tooltip("分离力平滑速度")]
     public float separationSmoothSpeed = 8f;
 
+    // ⭐ 新增：无限模式强制追击
+    [Header("无限模式设置")]
+    [Tooltip("无限模式下敌人永远追击玩家")]
+    public bool infiniteModeAlwaysChase = true;
+
     // 分离力相关
     private Vector3 separationVelocity = Vector3.zero;
     private Collider myCollider;
@@ -86,6 +91,18 @@ public abstract class EnemyAI : MonoBehaviour
     // NavMeshAgent 有效性
     protected bool isAgentValid = false;
 
+    // ⭐ 休眠状态
+    private bool isSleeping = false;
+    private float nextSleepCheck = 0f;
+    private Vector3 lastKnownPlayerPosition;
+    private bool hasPlayerPosition = false;
+
+    // Tile引用
+    private Tile parentTile = null;
+
+    // ⭐ 是否为无限模式
+    private bool isInfiniteMode = false;
+
     // ---------- 生命周期 ----------
     protected virtual void Start()
     {
@@ -98,6 +115,12 @@ public abstract class EnemyAI : MonoBehaviour
 
         // 设置敌人 Layer 检测
         enemyLayerMask = LayerMask.GetMask("Enemy");
+
+        // ⭐ 检测是否为无限模式
+        if (GameManager.Instance != null)
+        {
+            isInfiniteMode = GameManager.Instance.IsInfiniteMode();
+        }
 
         if (enemyData != null)
         {
@@ -155,6 +178,8 @@ public abstract class EnemyAI : MonoBehaviour
         idleRotationInterval = Random.Range(2f, 5f);
         idleRotationTimer = 0f;
 
+        parentTile = GetComponentInParent<Tile>();
+
         // 子类可做额外初始化
         OnStart();
     }
@@ -167,6 +192,22 @@ public abstract class EnemyAI : MonoBehaviour
         {
             StopAgent();
             if (healthBarInstance != null) healthBarInstance.SetActive(false);
+            return;
+        }
+
+        // 休眠检查
+        if (!isAttacking)
+        {
+            if (Time.time >= nextSleepCheck)
+            {
+                nextSleepCheck = Time.time + 2f;
+                CheckSleepState();
+            }
+        }
+
+        if (isSleeping)
+        {
+            UpdateHealthBarPosition();
             return;
         }
 
@@ -208,29 +249,136 @@ public abstract class EnemyAI : MonoBehaviour
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
 
-        // 范围检测
-        if (distance <= detectionRange) isChasing = true;
-        else if (distance > loseTargetRange) isChasing = false;
+        // ⭐ 无限模式：永远追击玩家
+        if (isInfiniteMode && infiniteModeAlwaysChase)
+        {
+            // 只要有玩家，就追击（无论距离）
+            isChasing = true;
+        }
+        else
+        {
+            // 普通模式：范围检测
+            if (distance <= detectionRange) isChasing = true;
+            else if (distance > loseTargetRange) isChasing = false;
+        }
 
         // 子类可自定义移动逻辑
         HandleMovement();
 
-        // ⭐ 应用分离力（在移动之后）
+        // 应用分离力
         if (enableSeparation && isChasing && !isAttacking)
         {
             ApplySeparation();
         }
 
-        // 更新血条位置（始终显示）
         UpdateHealthBarPosition();
-
-        // 动画更新（子类可重写）
         UpdateAnimations(GetCurrentSpeed(), isChasing && !isAttacking);
     }
 
-    /// <summary>
-    /// ⭐ 应用分离力（防止敌人互相重叠）
-    /// </summary>
+    // ⭐ 检查休眠状态
+    private void CheckSleepState()
+    {
+        if (player == null) return;
+
+        float distance = Vector3.Distance(transform.position, player.transform.position);
+        bool tileInactive = parentTile != null && !parentTile.isActive;
+
+        // ⭐ 无限模式：永远不进入休眠
+        if (isInfiniteMode && infiniteModeAlwaysChase)
+        {
+            // 如果正在休眠，唤醒
+            if (isSleeping)
+            {
+                WakeUp();
+            }
+            return;
+        }
+
+        bool shouldSleep = tileInactive || distance > 60f;
+        bool shouldWake = !tileInactive && distance < 50f;
+
+        if (shouldSleep && !isSleeping)
+        {
+            EnterSleep();
+        }
+        else if (shouldWake && isSleeping)
+        {
+            WakeUp();
+        }
+    }
+
+    protected virtual void EnterSleep()
+    {
+        isSleeping = true;
+
+        if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.ResetPath();
+        }
+
+        if (player != null)
+        {
+            lastKnownPlayerPosition = player.transform.position;
+            hasPlayerPosition = true;
+        }
+
+        if (animator != null)
+        {
+            animator.speed = 0f;
+        }
+
+        if (healthBarInstance != null)
+        {
+            healthBarInstance.SetActive(false);
+        }
+    }
+
+    protected virtual void WakeUp()
+    {
+        isSleeping = false;
+
+        if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
+        }
+
+        if (animator != null)
+        {
+            animator.speed = 1f;
+        }
+
+        if (healthBarInstance != null)
+        {
+            healthBarInstance.SetActive(true);
+        }
+    }
+
+    public void SetTileActive(bool active)
+    {
+        // ⭐ 无限模式：不进入休眠
+        if (isInfiniteMode && infiniteModeAlwaysChase)
+        {
+            return;
+        }
+
+        if (!active && !isSleeping)
+        {
+            EnterSleep();
+        }
+        else if (active && isSleeping)
+        {
+            if (player != null)
+            {
+                float distance = Vector3.Distance(transform.position, player.transform.position);
+                if (distance < 50f)
+                {
+                    WakeUp();
+                }
+            }
+        }
+    }
+
     private void ApplySeparation()
     {
         if (myCollider == null) return;
@@ -256,20 +404,18 @@ public abstract class EnemyAI : MonoBehaviour
 
         if (count > 0 && isAgentValid && agent != null && agent.isOnNavMesh)
         {
-            // 平滑应用分离力
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
             agent.Move(separationVelocity * Time.deltaTime);
         }
         else
         {
-            // 逐渐归零
             separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
         }
     }
 
     // ---------- 子类需要重写的方法 ----------
-    protected abstract void HandleMovement();   // 移动逻辑（追击、瞬移、冲撞等）
-    protected virtual void HandleAttack() { }   // 攻击触发（子类决定何时攻击）
+    protected abstract void HandleMovement();
+    protected virtual void HandleAttack() { }
 
     // ---------- 公共方法 ----------
     public void ApplyScalingMultipliers(float speedMult, float healthMult, float damageMult)
@@ -288,20 +434,17 @@ public abstract class EnemyAI : MonoBehaviour
             agent.speed = baseSpeed * currentSpeedMultiplier;
     }
 
-    // 停止Agent（安全）
     protected void StopAgent()
     {
         if (isAgentValid && agent != null && agent.isOnNavMesh)
             agent.isStopped = true;
     }
 
-    // 获取当前速度（供子类调用）
     protected float GetCurrentSpeed()
     {
         return isAgentValid ? agent.velocity.magnitude : 0f;
     }
 
-    // 面向检测
     protected bool IsFacingPlayer()
     {
         if (player == null) return false;
@@ -312,7 +455,6 @@ public abstract class EnemyAI : MonoBehaviour
         return Vector3.Angle(forward, dir) <= facingAngleThreshold;
     }
 
-    // 攻击执行（子类调用）
     protected virtual void PerformAttack()
     {
         if (!canAttack || isDead || isAttacking) return;
@@ -464,7 +606,6 @@ public abstract class EnemyAI : MonoBehaviour
         animator.SetBool("IsMoving", isMoving);
     }
 
-    // 待机旋转（基类提供，子类可调用）
     protected void IdleRotation()
     {
         idleRotationTimer += Time.deltaTime;
@@ -477,7 +618,6 @@ public abstract class EnemyAI : MonoBehaviour
         transform.rotation = Quaternion.Slerp(transform.rotation, targetIdleRotation, 0.5f * Time.deltaTime);
     }
 
-    // 可视化调试
     protected virtual void OnDrawGizmosSelected()
     {
         if (enemyData == null || !enemyData.showGizmos) return;
@@ -494,7 +634,6 @@ public abstract class EnemyAI : MonoBehaviour
         Gizmos.DrawLine(transform.position, transform.position + left * fwd * 2f);
         Gizmos.DrawLine(transform.position, transform.position + right * fwd * 2f);
 
-        // ⭐ 显示分离力检测范围（半透明绿色）
         if (enableSeparation)
         {
             Gizmos.color = new Color(0, 1, 0, 0.15f);

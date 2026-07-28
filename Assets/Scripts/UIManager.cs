@@ -39,6 +39,10 @@ public class UIManager : MonoBehaviour
     private Vector2 timerOriginalPosition;
     private float timeLimit;
 
+    // 计时器模式
+    private bool isTimerMode = false;  // false=倒计时, true=正计时
+    private float elapsedTime = 0f;
+
     void Start()
     {
         if (player == null) player = FindObjectOfType<PlayerController>();
@@ -77,12 +81,39 @@ public class UIManager : MonoBehaviour
         UpdateCoinUI();
         UpdateKillUI();
 
+        // 检测是否为无限模式
+        if (gameManager != null && gameManager.IsInfiniteMode())
+        {
+            isTimerMode = true;
+            elapsedTime = 0f;
+            if (timerText != null)
+            {
+                timerText.gameObject.SetActive(true);
+                timerText.text = "00:00";
+                timerText.color = Color.white;  // ⭐ 固定白色
+            }
+        }
+
         if (player == null || player.GetHealthPercent() <= 0)
         {
             StartCoroutine(DelayedUIUpdate());
         }
 
         Time.timeScale = 1f;
+    }
+
+    void Update()
+    {
+        UpdateKillUI();
+
+        // 无限模式：手动更新计时器
+        if (isTimerMode && timerText != null && timerText.gameObject.activeSelf)
+        {
+            elapsedTime += Time.deltaTime;
+            UpdateTimerDisplay(elapsedTime);
+        }
+
+        if (Input.GetKeyDown(KeyCode.R)) RestartGame();
     }
 
     IEnumerator DelayedUIUpdate()
@@ -109,10 +140,28 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    void Update()
+    // ⭐ 公共方法：设置计时模式
+    public void SetTimerMode(bool isInfinite)
     {
-        UpdateKillUI();
-        if (Input.GetKeyDown(KeyCode.R)) RestartGame();
+        isTimerMode = isInfinite;
+
+        if (isInfinite)
+        {
+            elapsedTime = 0f;
+            if (timerText != null)
+            {
+                timerText.gameObject.SetActive(true);
+                timerText.text = "00:00";
+                timerText.color = Color.white;  // ⭐ 固定白色
+            }
+        }
+        else
+        {
+            if (timerText != null)
+            {
+                timerText.color = Color.white;
+            }
+        }
     }
 
     void LoadSettings()
@@ -208,12 +257,25 @@ public class UIManager : MonoBehaviour
 
     public void SetTimerVisibility(bool visible)
     {
-        if (timerText != null) timerText.gameObject.SetActive(visible);
+        if (timerText == null) return;
+
+        // 无限模式：始终显示计时器
+        if (isTimerMode)
+        {
+            timerText.gameObject.SetActive(true);
+            return;
+        }
+
+        timerText.gameObject.SetActive(visible);
     }
 
+    // 倒计时更新（普通模式用）
     public void UpdateTimerUI(float remaining, float limit)
     {
         if (timerText == null) return;
+
+        // 如果是无限模式，不处理倒计时
+        if (isTimerMode) return;
 
         timeLimit = limit;
         int min = Mathf.FloorToInt(remaining / 60);
@@ -242,6 +304,19 @@ public class UIManager : MonoBehaviour
         if (remaining <= 0) { timerText.color = new Color(1f, 0.2f, 0.2f, 1f); timerText.text = "00:00"; }
     }
 
+    // 正计时显示（无限模式用）
+    void UpdateTimerDisplay(float time)
+    {
+        if (timerText == null) return;
+
+        int min = Mathf.FloorToInt(time / 60);
+        int sec = Mathf.FloorToInt(time % 60);
+        timerText.text = $"{min:00}:{sec:00}";
+
+        // ⭐ 无限模式：保持白色，不变化颜色
+        timerText.color = Color.white;
+    }
+
     // ==================== GameOver ====================
 
     public void OnGameOver() => ShowGameOver();
@@ -253,15 +328,20 @@ public class UIManager : MonoBehaviour
         if (settingsPanel != null) settingsPanel.SetActive(false);
         gameOverPanel.SetActive(true);
 
-        // ✅ 只获取数据显示，不进行累加
         int coins = player != null ? player.GetCoins() : 0;
         int kills = player != null ? player.GetKills() : 0;
 
-        if (finalCoinText != null) finalCoinText.text = $"Coins: {coins}";
-        if (finalKillText != null) finalKillText.text = $"Kills: {kills}";
+        // 如果是无限模式，显示总时间
+        string timeText = "";
+        if (isTimerMode)
+        {
+            int min = Mathf.FloorToInt(elapsedTime / 60);
+            int sec = Mathf.FloorToInt(elapsedTime % 60);
+            timeText = $"\nTime: {min:00}:{sec:00}";
+        }
 
-        // ✅ 删除所有累加代码！GameManager 已经处理了
-        // 不需要在这里调用 AddCoins 或 UpdateRecord
+        if (finalCoinText != null) finalCoinText.text = $"Coins: {coins}";
+        if (finalKillText != null) finalKillText.text = $"Kills: {kills}{timeText}";
 
         Time.timeScale = 0f;
 
