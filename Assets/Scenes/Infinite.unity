@@ -453,7 +453,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 667670080}
-  - component: {fileID: 667670079}
+  - component: {fileID: 667670081}
   m_Layer: 0
   m_Name: EnemySpawner
   m_TagString: Untagged
@@ -461,7 +461,22 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &667670079
+--- !u!4 &667670080
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667670078}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &667670081
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -480,35 +495,26 @@ MonoBehaviour:
   useDifficultySettings: 1
   initialSpawnCount: 2
   spawnOnStart: 1
+  initialWaveCount: 30
+  minSpawnDistance: 8
+  maxSpawnDistance: 20
   defaultSpawnRadius: 5
   navMeshSampleRadius: 5
   maxSpawnAttempts: 30
   enemyWeights:
   - enemyPrefab: {fileID: 2051455957182502511, guid: c7149de1882fe0f4d9b109749982959b,
       type: 3}
-    weight: 7
+    weight: 8.5
   - enemyPrefab: {fileID: 2051455957182502511, guid: 40a5ef2c7bae0f248ab67a341df39511,
       type: 3}
-    weight: 2
+    weight: 1
   - enemyPrefab: {fileID: 2051455957182502511, guid: 36bf8170fb708bd4688f81f836519cbe,
       type: 3}
-    weight: 1
+    weight: 0.5
   showDebugLogs: 1
---- !u!4 &667670080
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 667670078}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  infiniteRangeMultiplier: 2.5
+  rebuildDelay: 1.5
+  autoRebuildOnTileGenerated: 1
 --- !u!1 &693154765
 GameObject:
   m_ObjectHideFlags: 0
@@ -2348,7 +2354,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentDifficulty: {fileID: 11400000, guid: d5105edb7b30cd940a7d3bad358a3c47, type: 2}
-  enemySpawner: {fileID: 667670079}
+  enemySpawner: {fileID: 0}
   easyConfig: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   normalConfig: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   hardConfig: {fileID: 11400000, guid: e4769ee8dacc85243a7a48ab19bd35d0, type: 2}
@@ -8992,7 +8998,7 @@ MonoBehaviour:
   musicValueText: {fileID: 3358665743258879826}
   sfxValueText: {fileID: 5928436656551915148}
   player: {fileID: 6511803897245467767}
-  enemySpawner: {fileID: 667670079}
+  enemySpawner: {fileID: 0}
   gameManager: {fileID: 2193500737830442626}
 --- !u!114 &8995355993875367613
 MonoBehaviour:

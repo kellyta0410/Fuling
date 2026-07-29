@@ -24,15 +24,15 @@ MonoBehaviour:
   healthMultiplierMax: 3
   damageMultiplierMax: 2
   spawnIntervalStep: 0.05
-  spawnPerIntervalStep: 0.1
+  spawnPerIntervalStep: 0
   speedMultiplierStep: 0.03
   healthMultiplierStep: 0.04
   damageMultiplierStep: 0.02
   spawnInterval: 5
-  spawnPerInterval: 1
+  spawnPerInterval: 2
   enemySpeedMultiplier: 1
   enableMaxLimit: 1
-  maxEnemyCount: 10
+  maxEnemyCount: 50
   enableMaxLimitScaling: 1
   maxEnemyCountStep: 2
   maxEnemyCountMax: 100
@@ -43,3 +43,9 @@ MonoBehaviour:
   - {fileID: 2051455957182502511, guid: 40a5ef2c7bae0f248ab67a341df39511, type: 3}
   - {fileID: 2051455957182502511, guid: 36bf8170fb708bd4688f81f836519cbe, type: 3}
   maxScalingLevel: 100
+  detectionRangeBase: 30
+  detectionRangeStep: 2
+  detectionRangeMax: 60
+  loseTargetRangeBase: 40
+  loseTargetRangeStep: 2
+  loseTargetRangeMax: 80

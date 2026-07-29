@@ -212,18 +212,19 @@ MonoBehaviour:
   facingAngleThreshold: 45
   detectionRange: 20
   loseTargetRange: 30
+  infiniteDetectionRange: 30
+  infiniteLoseTargetRange: 40
   enableSeparation: 1
   separationRadius: 1.5
   separationForce: 3
   separationSmoothSpeed: 8
-  stopDistance: 1.2
   ownerTile: {fileID: 0}
   windUpDistance: 10
-  windUpDuration: 1.2
+  windUpDuration: 3
   chargeSpeed: 30
-  chargeMaxDistance: 50
+  chargeMaxDistance: 25
   chargeMinDistance: 5
-  recoveryDuration: 0.6
-  chargeCooldown: 3.5
+  recoveryDuration: 1
+  chargeCooldown: 25
   pushDuration: 0.2
-  pushDistance: 2
+  pushDistance: 3
