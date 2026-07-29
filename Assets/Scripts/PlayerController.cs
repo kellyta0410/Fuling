@@ -76,6 +76,10 @@ public class PlayerController : MonoBehaviour
     // ⭐ 是否可以移动（倒计时控制）
     private bool canMove = false;
 
+    // ==================== BUFF 系统支持 ====================
+    private float baseSpeed;      // 存储原始速度
+    private int baseAttack;       // 存储原始攻击力
+
     // ==================== 属性 ====================
     public float HealthPercent => currentHealth / maxHealth;
     public int GetCoins() => coins;
@@ -170,6 +174,10 @@ public class PlayerController : MonoBehaviour
         attackDamage = currentCharacterData.baseAttack;
         attackRange = currentCharacterData.baseAttackRange;
         attackCooldown = currentCharacterData.baseAttackCooldown;
+
+        // ===== BUFF 系统：备份原始值 =====
+        baseSpeed = speed;
+        baseAttack = attackDamage;
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}");
     }
@@ -528,6 +536,36 @@ public class PlayerController : MonoBehaviour
         kills++;
         if (uiManager != null) uiManager.OnPlayerKillChanged();
     }
+
+    // ==================== BUFF 系统接口 ====================
+
+    /// <summary> 治疗：增加固定血量（不超过最大生命值） </summary>
+    public void Heal(float amount)
+    {
+        currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
+        if (uiManager != null) uiManager.UpdateHealthUI();
+    }
+
+    /// <summary> 治疗：恢复满血 </summary>
+    public void RestoreFullHealth()
+    {
+        currentHealth = maxHealth;
+        if (uiManager != null) uiManager.UpdateHealthUI();
+    }
+
+    /// <summary> 应用速度倍率（例如 1.2 表示提升 20%） </summary>
+    public void ApplySpeedMultiplier(float multiplier)
+    {
+        speed = baseSpeed * multiplier;
+    }
+
+    /// <summary> 应用攻击力加成（例如 5 表示增加 5 点） </summary>
+    public void ApplyAttackAdditive(int additive)
+    {
+        attackDamage = baseAttack + additive;
+    }
+
+    // ==================== 原有方法（未改动） ====================
 
     void UpdateAnimations()
     {
