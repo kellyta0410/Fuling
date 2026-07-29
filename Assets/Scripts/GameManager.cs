@@ -80,7 +80,6 @@ public class GameManager : MonoBehaviour
 
             bool isInfinite = currentDifficulty.IsInfiniteMode();
 
-            // 基础数值初始化
             currentSpawnInterval = currentDifficulty.spawnInterval;
             currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
             currentSpeedMultiplier = 1f;
@@ -109,7 +108,7 @@ public class GameManager : MonoBehaviour
                 UIManager uiManager = FindObjectOfType<UIManager>();
                 if (uiManager != null)
                 {
-                    uiManager.SetTimerMode(true); // 正计时模式
+                    uiManager.SetTimerMode(true);
                 }
             }
             else
@@ -128,12 +127,11 @@ public class GameManager : MonoBehaviour
                 UIManager uiManager = FindObjectOfType<UIManager>();
                 if (uiManager != null)
                 {
-                    uiManager.SetTimerMode(false); // 倒计时模式
+                    uiManager.SetTimerMode(false);
                 }
             }
 
             ApplyCurrentDifficultyToSpawner();
-            // ⭐ 仅在启动时通知一次 UI 显隐，不要放到 Update 里每帧通知
             NotifyTimerVisibility();
 
             string timeDisplay = isInfinite ? "无限" : timeLimit + "秒";
@@ -145,7 +143,6 @@ public class GameManager : MonoBehaviour
     {
         if (!isGameRunning || isGameOver) return;
 
-        // ⭐ 无限模式：只更新成长机制，不跑倒计时逻辑
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
             if (currentDifficulty.enableScaling)
@@ -155,7 +152,6 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // ⭐ 普通模式：倒计时逻辑
         remainingTime -= Time.deltaTime;
 
         if (OnTimerUpdated != null)
@@ -195,7 +191,6 @@ public class GameManager : MonoBehaviour
                 currentDifficulty.spawnIntervalMin
             );
 
-            // ⭐ 修正计算：使用直接相加，不再出现 float 四舍五入变成 0 的问题
             currentSpawnPerInterval = Mathf.Min(
                 currentDifficulty.spawnPerInterval + (scalingLevel * currentDifficulty.spawnPerIntervalStep),
                 currentDifficulty.spawnPerIntervalMax
@@ -216,7 +211,6 @@ public class GameManager : MonoBehaviour
                 currentDifficulty.damageMultiplierMax
             );
 
-            // 敌人上限成长
             if (currentDifficulty.enableMaxLimitScaling)
             {
                 currentMaxEnemyCount = Mathf.Min(
@@ -409,6 +403,25 @@ public class GameManager : MonoBehaviour
     public float GetCurrentHealthMultiplier() => currentHealthMultiplier;
     public float GetCurrentDamageMultiplier() => currentDamageMultiplier;
     public int GetCurrentMaxEnemyCount() => currentMaxEnemyCount;
+
+    // ⭐ 以下动态范围方法已被 EnemyAI 弃用，但保留以防其他脚本使用（若不使用可删除）
+    public float GetCurrentDetectionRange()
+    {
+        if (!IsInfiniteMode() || currentDifficulty == null)
+            return 0f;
+        float level = Mathf.Clamp(scalingLevel, 0, currentDifficulty.maxScalingLevel);
+        float range = currentDifficulty.detectionRangeBase + level * currentDifficulty.detectionRangeStep;
+        return Mathf.Min(range, currentDifficulty.detectionRangeMax);
+    }
+
+    public float GetCurrentLoseRange()
+    {
+        if (!IsInfiniteMode() || currentDifficulty == null)
+            return 0f;
+        float level = Mathf.Clamp(scalingLevel, 0, currentDifficulty.maxScalingLevel);
+        float range = currentDifficulty.loseTargetRangeBase + level * currentDifficulty.loseTargetRangeStep;
+        return Mathf.Min(range, currentDifficulty.loseTargetRangeMax);
+    }
 
     public bool IsGameRunning() => isGameRunning && !isGameOver;
     public bool IsGameOver() => isGameOver;

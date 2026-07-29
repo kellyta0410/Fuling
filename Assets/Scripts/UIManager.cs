@@ -98,8 +98,6 @@ public class UIManager : MonoBehaviour
         {
             StartCoroutine(DelayedUIUpdate());
         }
-
-        Time.timeScale = 1f;
     }
 
     void Update()
@@ -364,7 +362,6 @@ public class UIManager : MonoBehaviour
 
     public void RestartGame()
     {
-        Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 

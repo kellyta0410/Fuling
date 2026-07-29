@@ -1,6 +1,7 @@
-﻿using UnityEngine;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using Unity.AI.Navigation;
+using UnityEngine;
 using UnityEngine.AI;
 
 public class EnemySpawner : MonoBehaviour
@@ -32,6 +33,10 @@ public class EnemySpawner : MonoBehaviour
     [Header("调试")]
     public bool showDebugLogs = true;
 
+    [Header("NavMesh 烘焙设置")]
+    public float rebuildDelay = 1.5f;
+    public bool autoRebuildOnTileGenerated = true;
+
     private float currentSpawnInterval = 2f;
     private int currentSpawnPerInterval = 1;
     private bool enableMaxLimit = false;
@@ -46,10 +51,14 @@ public class EnemySpawner : MonoBehaviour
     private bool initialSpawnDone = false;
     private bool canSpawn = false;
 
-    // 缓存组件引用，避免 Update 中频繁 Find 开销
     private CountdownManager countdownManager;
     private InfiniteWorldManager worldManager;
     private float cleanupTimer = 0f;
+
+    // NavMeshSurface 引用
+    private NavMeshSurface navMeshSurface;
+    private bool pendingRebuild = false;
+    private Coroutine rebuildCoroutine = null;
 
     [System.Serializable]
     public class SpawnPointData
@@ -87,7 +96,6 @@ public class EnemySpawner : MonoBehaviour
 
     void Start()
     {
-        // 预先获取并缓存全局管理器
         countdownManager = FindObjectOfType<CountdownManager>();
         worldManager = FindObjectOfType<InfiniteWorldManager>();
 
@@ -96,11 +104,9 @@ public class EnemySpawner : MonoBehaviour
 
     void Update()
     {
-        // 1. 如果游戏正在倒计时，直接跳过逻辑
         if (countdownManager != null && countdownManager.IsCountingDown()) return;
         if (!canSpawn || enemyPrefabs == null || enemyPrefabs.Count == 0 || playerTarget == null) return;
 
-        // 2. 降低清理频率：每 1 秒才遍历清理一次已被销毁的敌人对象，避免每帧 GC
         cleanupTimer += Time.deltaTime;
         if (cleanupTimer >= 1.0f)
         {
@@ -108,25 +114,21 @@ public class EnemySpawner : MonoBehaviour
             CleanupDeadEnemies();
         }
 
-        // 3. 处理每个生成点的激活、冷却与生成逻辑
         ProcessSpawnPoints();
     }
 
     void ProcessSpawnPoints()
     {
-        // 倒序遍历，方便中途安全移除失效的生成点
         for (int i = spawnPoints.Count - 1; i >= 0; i--)
         {
             SpawnPointData spawnData = spawnPoints[i];
 
-            // 自动清理被销毁的动态 Tile 生成点
             if (spawnData.point == null)
             {
                 spawnPoints.RemoveAt(i);
                 continue;
             }
 
-            // 父级 Tile 停用状态检查
             if (spawnData.point.parent != null)
             {
                 Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
@@ -135,7 +137,6 @@ public class EnemySpawner : MonoBehaviour
 
             float distance = Vector3.Distance(spawnData.point.position, playerTarget.position);
 
-            // 处理生成点冷却计时
             if (spawnData.isOnCooldown)
             {
                 spawnData.cooldownTimer -= Time.deltaTime;
@@ -145,11 +146,10 @@ public class EnemySpawner : MonoBehaviour
                 }
             }
 
-            // 进入/离开范围的状态切换
             if (distance <= spawnData.activationRadius && !spawnData.isActive)
             {
                 spawnData.isActive = true;
-                spawnData.spawnTimer = 0f; // 重置计时器，统一由后续定时逻辑控制
+                spawnData.spawnTimer = 0f;
             }
             else if (distance > spawnData.deactivationRadius && spawnData.isActive)
             {
@@ -157,7 +157,6 @@ public class EnemySpawner : MonoBehaviour
                 spawnData.spawnTimer = 0f;
             }
 
-            // 激活且未冷却时的生成逻辑
             if (spawnData.isActive && !spawnData.isOnCooldown)
             {
                 if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) continue;
@@ -177,7 +176,6 @@ public class EnemySpawner : MonoBehaviour
 
                     if (toSpawn > 0)
                     {
-                        // 开始协程分帧生成
                         StartCoroutine(Routine_SpawnEnemies(spawnData, toSpawn));
 
                         if (enableCooldown)
@@ -191,19 +189,13 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 🌟 核心优化：使用协程进行错峰生成，避免单帧 Instantiate 过多导致瞬间卡顿
-    /// </summary>
     IEnumerator Routine_SpawnEnemies(SpawnPointData spawnData, int count)
     {
         float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : defaultSpawnRadius;
 
         for (int i = 0; i < count; i++)
         {
-            // 如果生成点中途被销毁，中断生成
             if (spawnData.point == null) yield break;
-
-            // 再次检查上限限制（防止协程等待期间场上敌人超标）
             if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) yield break;
 
             GameObject enemyPrefab = GetWeightedRandomEnemy();
@@ -218,10 +210,27 @@ public class EnemySpawner : MonoBehaviour
                     spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
                 }
 
+                if (!IsPositionValid(spawnPos))
+                {
+                    Debug.LogWarning($"无法找到有效NavMesh位置，使用原始生成点 {spawnData.point.position}");
+                    spawnPos = spawnData.point.position;
+                }
+
                 GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.Euler(0, Random.Range(0, 360), 0));
                 enemy.transform.parent = null;
 
-                // 注册敌人到对应的 Tile
+                // ⭐ 强制吸附 NavMesh
+                NavMeshAgent agent = enemy.GetComponent<NavMeshAgent>();
+                if (agent != null)
+                {
+                    agent.Warp(spawnPos);
+                    if (!agent.isOnNavMesh)
+                    {
+                        Debug.LogWarning($"敌人 {enemy.name} 不在 NavMesh 上，尝试再次 Warp");
+                        agent.Warp(spawnPos);
+                    }
+                }
+
                 if (spawnData.point != null && spawnData.point.parent != null)
                 {
                     Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
@@ -236,7 +245,6 @@ public class EnemySpawner : MonoBehaviour
                     RegisterEnemyToTile(enemy, gridPos);
                 }
 
-                // 统一应用难度属性加成
                 EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
                 if (enemyScript != null)
                 {
@@ -253,7 +261,6 @@ public class EnemySpawner : MonoBehaviour
                 globalTotalSpawned++;
             }
 
-            // 关键：每生成一个敌人，微小停顿一帧/几毫秒，把 CPU 压力平摊开
             if (count > 1)
             {
                 yield return new WaitForSeconds(0.05f);
@@ -325,7 +332,6 @@ public class EnemySpawner : MonoBehaviour
 
     private void CleanupDeadEnemies()
     {
-        // 倒序遍历清理，不使用匿名 Lambda 表达式，零额外的 GC 垃圾
         for (int i = allActiveEnemies.Count - 1; i >= 0; i--)
         {
             if (allActiveEnemies[i] == null)
@@ -366,8 +372,78 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
+    // ---------- NavMesh 烘焙相关 ----------
+    private void EnsureNavMeshSurfaceExists()
+    {
+        if (navMeshSurface == null)
+        {
+            navMeshSurface = FindObjectOfType<NavMeshSurface>();
+            if (navMeshSurface == null)
+            {
+                Debug.Log("未找到 NavMeshSurface，正在创建...");
+                GameObject surfaceObj = new GameObject("NavMeshSurface (Runtime)");
+                navMeshSurface = surfaceObj.AddComponent<NavMeshSurface>();
+                navMeshSurface.layerMask = ~0;
+                navMeshSurface.collectObjects = CollectObjects.Children;
+                navMeshSurface.defaultArea = 0;
+            }
+        }
+    }
+
+    public void BuildNavMeshImmediate()
+    {
+        EnsureNavMeshSurfaceExists();
+        if (navMeshSurface != null)
+        {
+            Debug.Log("🔄 立即烘焙 NavMesh...");
+            navMeshSurface.BuildNavMesh();
+            Debug.Log("✅ NavMesh 烘焙完成！");
+        }
+    }
+
+    public void RequestNavMeshRebuild()
+    {
+        if (pendingRebuild) return;
+
+        pendingRebuild = true;
+        if (rebuildCoroutine != null) StopCoroutine(rebuildCoroutine);
+        rebuildCoroutine = StartCoroutine(DelayedRebuild());
+    }
+
+    private IEnumerator DelayedRebuild()
+    {
+        yield return new WaitForSeconds(rebuildDelay);
+
+        pendingRebuild = false;
+        rebuildCoroutine = null;
+
+        EnsureNavMeshSurfaceExists();
+        if (navMeshSurface != null)
+        {
+            Debug.Log("🔄 延迟烘焙 NavMesh...");
+            navMeshSurface.BuildNavMesh();
+            Debug.Log("✅ NavMesh 烘焙完成！");
+        }
+    }
+
+    // 外部调用 - 在生成新 Tile 后触发
+    public void OnTileGenerated()
+    {
+        if (autoRebuildOnTileGenerated)
+        {
+            RequestNavMeshRebuild();
+        }
+    }
+
+    // ---------- 原有公共方法 ----------
     public void EnableSpawning()
     {
+        EnsureNavMeshSurfaceExists();
+        if (navMeshSurface != null && !navMeshSurface.navMeshData)
+        {
+            BuildNavMeshImmediate();
+        }
+
         canSpawn = true;
         if (showDebugLogs) Debug.Log("✅ 敌人生成已启用！");
 
@@ -384,48 +460,6 @@ public class EnemySpawner : MonoBehaviour
     }
 
     public bool IsSpawningEnabled() => canSpawn;
-
-    void InitializeSpawner()
-    {
-        if (playerTarget == null)
-        {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null) playerTarget = player.transform;
-            else Debug.LogWarning("未找到 Tag 为 Player 的对象");
-        }
-
-        if (spawnPoints.Count == 0) AutoFindSpawnPoints();
-
-        if (currentDifficulty == null && GameManager.Instance != null)
-        {
-            currentDifficulty = GameManager.Instance.currentDifficulty;
-        }
-
-        if (useDifficultySettings && currentDifficulty != null)
-        {
-            currentSpawnInterval = currentDifficulty.spawnInterval;
-            currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
-            enableMaxLimit = currentDifficulty.enableMaxLimit;
-            maxEnemyCount = currentDifficulty.maxEnemyCount;
-            enableCooldown = currentDifficulty.enableCooldown;
-            cooldownTime = currentDifficulty.cooldownTime;
-
-            if (currentDifficulty.allowedEnemyPrefabs != null && currentDifficulty.allowedEnemyPrefabs.Count > 0)
-            {
-                enemyPrefabs = new List<GameObject>(currentDifficulty.allowedEnemyPrefabs);
-
-                if (enemyWeights.Count == 0)
-                {
-                    UpdateWeightList();
-                }
-            }
-        }
-
-        if (enemyPrefabs == null || enemyPrefabs.Count == 0)
-        {
-            Debug.LogError("没有敌人预制体！");
-        }
-    }
 
     public void ApplyScalingParameters(
         float spawnInterval,
@@ -456,7 +490,7 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    void UpdateWeightList()
+    public void UpdateWeightList()
     {
         enemyWeights.Clear();
         foreach (GameObject prefab in enemyPrefabs)
@@ -468,7 +502,7 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    void AutoFindSpawnPoints()
+    public void AutoFindSpawnPoints()
     {
         GameObject[] foundPoints = GameObject.FindGameObjectsWithTag("EnemySpawn");
         foreach (GameObject point in foundPoints)
@@ -500,14 +534,14 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    Vector3 GetRandomPositionAroundPoint(Vector3 center, float radius)
+    public Vector3 GetRandomPositionAroundPoint(Vector3 center, float radius)
     {
         float angle = Random.Range(0f, Mathf.PI * 2f);
         float distance = Mathf.Sqrt(Random.Range(0f, 1f)) * radius;
         return new Vector3(center.x + Mathf.Cos(angle) * distance, center.y, center.z + Mathf.Sin(angle) * distance);
     }
 
-    Vector3 GetValidNavMeshPosition(Vector3 position, float sampleRadius)
+    public Vector3 GetValidNavMeshPosition(Vector3 position, float sampleRadius)
     {
         NavMeshHit hit;
         if (NavMesh.SamplePosition(position, out hit, sampleRadius, NavMesh.AllAreas)) return hit.position;
@@ -515,7 +549,7 @@ public class EnemySpawner : MonoBehaviour
         return position;
     }
 
-    bool IsPositionValid(Vector3 position)
+    public bool IsPositionValid(Vector3 position)
     {
         NavMeshHit hit;
         return NavMesh.SamplePosition(position, out hit, 1f, NavMesh.AllAreas);
@@ -523,7 +557,7 @@ public class EnemySpawner : MonoBehaviour
 
     public void ClearAllEnemies()
     {
-        StopAllCoroutines(); // 停止所有生成协程
+        StopAllCoroutines();
 
         foreach (GameObject enemy in allActiveEnemies)
         {
@@ -599,6 +633,50 @@ public class EnemySpawner : MonoBehaviour
         string limitInfo = enableMaxLimit ? allActiveEnemies.Count + "/" + maxEnemyCount : "无限 " + allActiveEnemies.Count;
         string cooldownInfo = enableCooldown ? " | 冷却中: " + coolingCount : "";
         return "活跃: " + activeCount + "/" + spawnPoints.Count + " | 敌人: " + limitInfo + cooldownInfo;
+    }
+
+    void InitializeSpawner()
+    {
+        if (playerTarget == null)
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null) playerTarget = player.transform;
+            else Debug.LogWarning("未找到 Tag 为 Player 的对象");
+        }
+
+        if (spawnPoints.Count == 0) AutoFindSpawnPoints();
+
+        if (currentDifficulty == null && GameManager.Instance != null)
+        {
+            currentDifficulty = GameManager.Instance.currentDifficulty;
+        }
+
+        if (useDifficultySettings && currentDifficulty != null)
+        {
+            currentSpawnInterval = currentDifficulty.spawnInterval;
+            currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
+            enableMaxLimit = currentDifficulty.enableMaxLimit;
+            maxEnemyCount = currentDifficulty.maxEnemyCount;
+            enableCooldown = currentDifficulty.enableCooldown;
+            cooldownTime = currentDifficulty.cooldownTime;
+
+            if (currentDifficulty.allowedEnemyPrefabs != null && currentDifficulty.allowedEnemyPrefabs.Count > 0)
+            {
+                enemyPrefabs = new List<GameObject>(currentDifficulty.allowedEnemyPrefabs);
+
+                if (enemyWeights.Count == 0)
+                {
+                    UpdateWeightList();
+                }
+            }
+        }
+
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0)
+        {
+            Debug.LogError("没有敌人预制体！");
+        }
+
+        EnsureNavMeshSurfaceExists();
     }
 
     void OnDrawGizmosSelected()

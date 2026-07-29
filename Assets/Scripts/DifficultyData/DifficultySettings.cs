@@ -31,7 +31,6 @@ public class DifficultySettings : ScriptableObject
     public float damageMultiplierMax = 2f;
 
     public float spawnIntervalStep = 0.05f;
-    // ⭐ 修正：步长设为 int，确保等级提升时能精准增加整数个敌人
     public int spawnPerIntervalStep = 1;
     public float speedMultiplierStep = 0.03f;
     public float healthMultiplierStep = 0.04f;
@@ -47,11 +46,8 @@ public class DifficultySettings : ScriptableObject
     public int maxEnemyCount = 30;
 
     [Header("容量限制成长（无限模式）")]
-    [Tooltip("是否开启上限成长")]
     public bool enableMaxLimitScaling = true;
-    [Tooltip("每级增加的上限数量")]
     public int maxEnemyCountStep = 2;
-    [Tooltip("上限最大值")]
     public int maxEnemyCountMax = 100;
 
     [Header("冷却")]
@@ -63,6 +59,17 @@ public class DifficultySettings : ScriptableObject
 
     [Header("无限模式 - 成长上限")]
     public int maxScalingLevel = 100;
+
+    // ⭐ 以下范围成长字段目前未被 EnemyAI 使用（EnemyAI 改用 Inspector 固定值）
+    // 若以后需要动态范围可启用
+    [Header("无限模式 - 追击范围成长（可选）")]
+    public float detectionRangeBase = 30f;
+    public float detectionRangeStep = 2f;
+    public float detectionRangeMax = 60f;
+
+    public float loseTargetRangeBase = 40f;
+    public float loseTargetRangeStep = 2f;
+    public float loseTargetRangeMax = 80f;
 
     public bool IsInfiniteMode()
     {
