@@ -1,9 +1,18 @@
 ﻿using UnityEngine;
+using System.Collections.Generic;
 
 public class RandomBuffSpawner : MonoBehaviour
 {
+    [System.Serializable]
+    public class BuffEntry
+    {
+        public BuffDataSO buffData;
+        [Range(0, 100)]
+        public int weight = 1;
+    }
+
     [Header("生成配置")]
-    public BuffDataSO[] buffPool;
+    public BuffEntry[] buffPool; // 在Inspector里配置每个Buff和权重
     public float spawnRadius = 12f;
     public float spawnInterval = 6f;
     public int maxBuffCount = 5;
@@ -16,10 +25,6 @@ public class RandomBuffSpawner : MonoBehaviour
     public LayerMask groundMask;
     public float checkRadius = 0.8f;
     public int maxRetries = 10;
-
-    // 新增：模型高度偏移（根据你的模型大小调整，确保模型底部刚好在地面上）
-    [Header("生成高度调整")]
-    public float heightOffset = 0.5f; // 模型中心到地面的距离
 
     private float timer;
 
@@ -45,13 +50,45 @@ public class RandomBuffSpawner : MonoBehaviour
 
     void SpawnBuff()
     {
+        // 1. 总数限制
         BuffPickupItem[] existing = FindObjectsOfType<BuffPickupItem>();
         if (existing.Length >= maxBuffCount) return;
 
-        if (buffPool == null || buffPool.Length == 0) return;
-        BuffDataSO selected = buffPool[Random.Range(0, buffPool.Length)];
-        if (selected == null || selected.pickupPrefab == null) return;
+        // 2. 从 buffPool 中按权重随机选择（忽略权重为0的项）
+        List<BuffEntry> candidates = new List<BuffEntry>();
+        int totalWeight = 0;
+        foreach (var entry in buffPool)
+        {
+            if (entry.buffData != null && entry.weight > 0)
+            {
+                candidates.Add(entry);
+                totalWeight += entry.weight;
+            }
+        }
+        if (candidates.Count == 0 || totalWeight == 0) return;
 
+        int randomValue = Random.Range(0, totalWeight);
+        int accumulated = 0;
+        BuffDataSO selected = null;
+        foreach (var entry in candidates)
+        {
+            accumulated += entry.weight;
+            if (randomValue < accumulated)
+            {
+                selected = entry.buffData;
+                break;
+            }
+        }
+        if (selected == null) selected = candidates[0].buffData;
+
+        // 检查预制体
+        if (selected.pickupPrefab == null)
+        {
+            Debug.LogWarning($"Buff {selected.buffName} 没有指定 pickupPrefab！");
+            return;
+        }
+
+        // 3. 寻找安全生成点（带重试）
         Vector3 finalSpawnPos = Vector3.zero;
         bool foundValidSpot = false;
 
@@ -60,26 +97,21 @@ public class RandomBuffSpawner : MonoBehaviour
             Vector2 randomCircle = Random.insideUnitCircle * spawnRadius;
             Vector3 candidatePos = new Vector3(
                 player.position.x + randomCircle.x,
-                player.position.y + 5f, // 从玩家上方5米开始射线
+                player.position.y + 5f,
                 player.position.z + randomCircle.y
             );
 
-            // 射线检测地面
             if (Physics.Raycast(candidatePos, Vector3.down, out RaycastHit hit, 20f, groundMask))
             {
-                // 地面高度 + 偏移量（让模型底部贴地）
-                candidatePos.y = hit.point.y + heightOffset;
+                candidatePos.y = hit.point.y + 0.6f;
             }
             else
             {
-                // 没打到地面 -> 放弃此次尝试
                 continue;
             }
 
-            // 障碍物检测
             if (!Physics.CheckSphere(candidatePos, checkRadius, obstacleMask))
             {
-                // 可选：检测与玩家之间是否有遮挡
                 Vector3 dirToPlayer = (player.position - candidatePos).normalized;
                 float distToPlayer = Vector3.Distance(player.position, candidatePos);
                 if (!Physics.Raycast(candidatePos, dirToPlayer, distToPlayer, obstacleMask))
@@ -97,7 +129,7 @@ public class RandomBuffSpawner : MonoBehaviour
             return;
         }
 
-        // 实例化
+        // 4. 实例化
         GameObject newBuff = Instantiate(selected.pickupPrefab, finalSpawnPos, Quaternion.identity);
         BuffPickupItem pickup = newBuff.GetComponent<BuffPickupItem>();
         if (pickup == null) pickup = newBuff.AddComponent<BuffPickupItem>();

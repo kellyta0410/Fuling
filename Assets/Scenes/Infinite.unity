@@ -769,9 +769,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   buffPool:
-  - {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
-  - {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
-  - {fileID: 11400000, guid: b3c100088aec0a9448b1bd543780eae5, type: 2}
+  - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
+    weight: 7
+  - buffData: {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
+    weight: 5
+  - buffData: {fileID: 11400000, guid: b3c100088aec0a9448b1bd543780eae5, type: 2}
+    weight: 10
   spawnRadius: 8
   spawnInterval: 5
   maxBuffCount: 5
@@ -784,7 +787,6 @@ MonoBehaviour:
     m_Bits: 136
   checkRadius: 0.8
   maxRetries: 10
-  heightOffset: 0.5
 --- !u!1 &1952976256
 GameObject:
   m_ObjectHideFlags: 0
