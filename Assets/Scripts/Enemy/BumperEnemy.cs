@@ -7,8 +7,8 @@ public class BumperEnemy : EnemyAI
     private enum ChargeState { Chasing, WindUp, Charging, Recovery, Cooldown }
     private ChargeState chargeState = ChargeState.Chasing;
     private float stateTimer = 0f;
-    private Vector3 chargeTarget;
-    private Vector3 chargeStartPos;
+    private Vector3 chargeTarget;      // 冲锋目标点（蓄力结束时锁定）
+    private Vector3 chargeStartPos;    // 冲锋起点
 
     private Collider enemyCollider;
     private Collider playerCollider;
@@ -30,6 +30,8 @@ public class BumperEnemy : EnemyAI
     public float recoveryDuration = 0.6f;
     [Tooltip("冲锋冷却时间（秒），防止连续冲锋")]
     public float chargeCooldown = 3.5f;
+    [Tooltip("蓄力结束后，冲锋前的停顿时间（秒），让玩家有反应时间")]
+    public float chargeStartDelay = 0.4f;
 
     [Header("击退参数")]
     [Tooltip("玩家被击退的持续时间（秒）")]
@@ -151,15 +153,13 @@ public class BumperEnemy : EnemyAI
                     chargeState = ChargeState.WindUp;
                     stateTimer = 0f;
                     StopAgent();
-                    // ✅ 进入蓄力时不锁定目标，只记录起始位置（后续会更新）
-                    chargeStartPos = transform.position;  // 保留，但冲锋开始时会被覆盖
                     if (animator != null)
                         animator.SetTrigger("ChargeWindUp");
                 }
                 break;
 
             case ChargeState.WindUp:
-                // ✅ 蓄力过程中：持续面向玩家
+                // 蓄力时：持续面向玩家（实时更新）
                 StopAgent();
                 Vector3 dirToTarget = (player.transform.position - transform.position).normalized;
                 dirToTarget.y = 0;
@@ -170,46 +170,73 @@ public class BumperEnemy : EnemyAI
                 if (stateTimer >= windUpDuration)
                 {
                     chargeState = ChargeState.Charging;
-                    stateTimer = 0f;
+                    stateTimer = 0f;                        // 重置计时器，用于冲锋延迟
                     if (isAgentValid) agent.isStopped = true;
                     if (animator != null)
                         animator.SetTrigger("ChargeStart");
 
-                    // ✅ 蓄力结束时，记录冲锋起点和终点（基于当前玩家位置，也就是当前面朝方向）
+                    // 锁定冲锋方向（基于当前玩家位置）
                     chargeStartPos = transform.position;
-                    chargeTarget = player.transform.position;   // 固定目标点，冲锋时不更新
+                    chargeTarget = player.transform.position;
 
                     IgnorePlayerCollision(true);
                 }
                 break;
 
             case ChargeState.Charging:
-                // ✅ 冲锋：使用蓄力结束时锁定的方向，直线冲锋，不跟踪玩家
+                // 更新计时器
+                stateTimer += Time.deltaTime;
+
+                // ========== 停顿阶段：锁定朝向，静止不动 ==========
+                if (stateTimer < chargeStartDelay)
+                {
+                    // ✅ 不旋转（保持蓄力结束时的朝向），不移动，不检测障碍物
+                    // 完全静止，让玩家看到敌人“瞄准”了某个方向
+                    break;
+                }
+
+                // ========== 冲锋阶段：直线冲刺 ==========
+                // 计算固定方向（蓄力结束时锁定的方向）
                 Vector3 dir = (chargeTarget - chargeStartPos).normalized;
                 dir.y = 0;
+
+                // 1. 检测前方障碍物（每帧检测，忽略玩家和敌人）
+                if (IsBlocked())
+                {
+                    Debug.Log($"[冲锋] 撞到障碍物，立即停止！");
+                    chargeState = ChargeState.Recovery;
+                    stateTimer = 0f;
+                    if (isAgentValid) agent.isStopped = false;
+                    if (animator != null)
+                        animator.SetTrigger("ChargeEnd");
+                    IgnorePlayerCollision(false);
+                    break;
+                }
+
                 float distanceTraveled = Vector3.Distance(transform.position, chargeStartPos);
 
+                // 2. 距离判定（最小距离内不结束，防止原地停止）
                 if (distanceTraveled >= chargeMinDistance)
                 {
-                    if (distanceTraveled >= chargeMaxDistance || IsBlocked())
+                    if (distanceTraveled >= chargeMaxDistance)
                     {
-                        Debug.Log($"[冲锋] 冲锋结束！已冲距离: {distanceTraveled:F1}m");
-
+                        Debug.Log($"[冲锋] 冲锋结束！已达最大距离: {distanceTraveled:F1}m");
                         chargeState = ChargeState.Recovery;
                         stateTimer = 0f;
                         if (isAgentValid) agent.isStopped = false;
                         if (animator != null)
                             animator.SetTrigger("ChargeEnd");
-
                         IgnorePlayerCollision(false);
                         break;
                     }
                 }
 
+                // 3. 移动
                 transform.position += dir * chargeSpeed * Time.deltaTime;
                 if (dir != Vector3.zero)
                     transform.rotation = Quaternion.LookRotation(dir);
 
+                // 4. 撞击玩家
                 float currentDistance = Vector3.Distance(transform.position, player.transform.position);
                 if (currentDistance <= enemyData.attackRange && canAttack)
                 {
@@ -269,12 +296,16 @@ public class BumperEnemy : EnemyAI
 
     private bool IsBlocked()
     {
+        float checkDistance = 1.2f;
+        float radius = 0.4f;
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+
         RaycastHit hit;
-        if (Physics.Raycast(transform.position + Vector3.up * 0.5f, transform.forward, out hit, 1.5f))
+        if (Physics.SphereCast(origin, radius, transform.forward, out hit, checkDistance))
         {
             if (!hit.collider.CompareTag("Player") && !hit.collider.CompareTag("Enemy"))
             {
-                Debug.Log($"[冲锋] 撞到障碍物: {hit.collider.name}");
+                Debug.Log($"[冲锋] 检测到障碍物: {hit.collider.name}");
                 return true;
             }
         }
@@ -305,7 +336,7 @@ public class BumperEnemy : EnemyAI
 
 #if UNITY_EDITOR
         UnityEditor.Handles.Label(transform.position + Vector3.up * 3.5f,
-            $"蓄力: {windUpDistance:F1}m\n冲锋: {chargeMinDistance:F1} ~ {chargeMaxDistance:F1}m\n击退: {pushDistance:F1}m");
+            $"蓄力: {windUpDistance:F1}m\n冲锋: {chargeMinDistance:F1} ~ {chargeMaxDistance:F1}m\n击退: {pushDistance:F1}m\n延迟: {chargeStartDelay:F1}s");
 #endif
     }
 }

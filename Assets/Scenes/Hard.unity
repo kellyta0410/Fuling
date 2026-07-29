@@ -888,7 +888,7 @@ GameObject:
   - component: {fileID: 4182550799534400486}
   - component: {fileID: 1052873267974682990}
   - component: {fileID: 3453430239710844431}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1410,7 +1410,7 @@ GameObject:
   - component: {fileID: 4319669076484481049}
   - component: {fileID: 642889804393186583}
   - component: {fileID: 4482275992384490549}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube (3)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3739,7 +3739,7 @@ GameObject:
   - component: {fileID: 3812969543914947875}
   - component: {fileID: 7701908586711194835}
   - component: {fileID: 1871651337451466110}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5662,11 +5662,17 @@ MonoBehaviour:
   useDifficultySettings: 1
   initialSpawnCount: 1
   spawnOnStart: 1
+  initialWaveCount: 50
+  minSpawnDistance: 8
+  maxSpawnDistance: 20
   defaultSpawnRadius: 5
   navMeshSampleRadius: 5
   maxSpawnAttempts: 30
   enemyWeights: []
   showDebugLogs: 1
+  infiniteRangeMultiplier: 2.5
+  rebuildDelay: 1.5
+  autoRebuildOnTileGenerated: 1
 --- !u!114 &5081658581063102864
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6845,7 +6851,7 @@ GameObject:
   - component: {fileID: 7856845416050491556}
   - component: {fileID: 4380251860541308495}
   - component: {fileID: 5621488011886344402}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube (4)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9421,6 +9427,7 @@ GameObject:
   m_Component:
   - component: {fileID: 233422764473163174}
   - component: {fileID: 9023595788974492072}
+  - component: {fileID: 9023595788974492073}
   m_Layer: 0
   m_Name: Virtual Camera
   m_TagString: Untagged
@@ -9978,6 +9985,31 @@ MonoBehaviour:
         m_Calls: []
   m_LegacyBlendHint: 0
   m_ComponentOwner: {fileID: 4497339275467960473}
+--- !u!114 &9023595788974492073
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8753919783859019764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a4812ea6d7228c45ad25d0a030ed768, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  player: {fileID: 4014722327288531488}
+  fadeSpeed: 8
+  targetAlpha: 0.5
+  wallLayer:
+    serializedVersion: 2
+    m_Bits: 64
+  playerOffsets:
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0.5, z: 0}
+  - {x: 0, y: -0.5, z: 0}
+  - {x: 0.3, y: 0, z: 0}
+  - {x: -0.3, y: 0, z: 0}
+  minHitsToFade: 2
 --- !u!224 &9049058777360833842
 RectTransform:
   m_ObjectHideFlags: 0

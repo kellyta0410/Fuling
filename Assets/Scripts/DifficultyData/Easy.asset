@@ -24,11 +24,11 @@ MonoBehaviour:
   healthMultiplierMax: 3
   damageMultiplierMax: 2
   spawnIntervalStep: 0.05
-  spawnPerIntervalStep: 0.1
+  spawnPerIntervalStep: 0
   speedMultiplierStep: 0.03
   healthMultiplierStep: 0.04
   damageMultiplierStep: 0.02
-  spawnInterval: 2
+  spawnInterval: 3
   spawnPerInterval: 3
   enemySpeedMultiplier: 1
   enableMaxLimit: 1
@@ -41,3 +41,9 @@ MonoBehaviour:
   allowedEnemyPrefabs:
   - {fileID: 2051455957182502511, guid: c7149de1882fe0f4d9b109749982959b, type: 3}
   maxScalingLevel: 100
+  detectionRangeBase: 30
+  detectionRangeStep: 2
+  detectionRangeMax: 60
+  loseTargetRangeBase: 40
+  loseTargetRangeStep: 2
+  loseTargetRangeMax: 80
