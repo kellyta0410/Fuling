@@ -13,13 +13,14 @@ MonoBehaviour:
   m_Name: Mei
   m_EditorClassIdentifier: 
   characterName: Mei
-  description: 
-  portrait: {fileID: 0}
-  prefab: {fileID: 0}
-  unlockCost: 100
+  avatarSprite: {fileID: 0}
+  fullBodySprite: {fileID: 0}
   baseHealth: 100
-  baseSpeed: 4
   baseAttack: 20
+  baseSpeed: 4
+  baseDefense: 5
   baseAttackRange: 2
   baseAttackCooldown: 1
-  skills: []
+  unlockCost: 0
+  normalAttackConfig: {fileID: 11400000, guid: a880dc0aa151ed445a596fdf1464788f, type: 2}
+  skillAttackConfig: {fileID: 11400000, guid: bd744ac6885b0ec4eb37c87fdc76595c, type: 2}

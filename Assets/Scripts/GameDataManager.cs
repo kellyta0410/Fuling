@@ -14,7 +14,7 @@ public class GameDataManager : MonoBehaviour
     public string selectedCharacterName = "";
     public List<string> unlockedCharacterNames = new List<string>();
 
-    [Header("技能数据（暂时保留）")]
+    [Header("技能数据")]
     public List<SkillSaveEntry> skillLevels = new List<SkillSaveEntry>();
 
     [Header("默认值")]
@@ -22,7 +22,6 @@ public class GameDataManager : MonoBehaviour
     public int startingCoins = 100;
 
     private CharacterData currentCharacter;
-    private Dictionary<string, SkillData> skillCache = new Dictionary<string, SkillData>();
 
     public event System.Action OnDataChanged;
 
@@ -55,34 +54,22 @@ public class GameDataManager : MonoBehaviour
 
     void Awake()
     {
-        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-        int instanceID = gameObject.GetInstanceID();
-
-        Debug.Log($"🎮 GameDataManager.Awake() - 场景: {sceneName}, 实例ID: {instanceID}, Instance: {(Instance != null ? Instance.gameObject.GetInstanceID().ToString() : "空")}");
-
         if (Instance != null)
         {
             if (Instance == this)
             {
-                Debug.Log($"✅ GameDataManager 实例已存在，保留 (场景: {sceneName})");
                 LoadData();
                 return;
             }
-
-            Debug.Log($"⚠️ GameDataManager 已存在，销毁当前对象 (场景: {sceneName})");
             Destroy(gameObject);
             return;
         }
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        Debug.Log($"✅ GameDataManager 实例创建 (场景: {sceneName})，DontDestroyOnLoad 已设置");
 
-        LoadAllSkills();
         LoadData();
         InitializeDefaultData();
-
-        Debug.Log($"✅ GameDataManager 初始化完成，总金币: {totalCoins}");
     }
 
     // ==================== 初始化 ====================
@@ -106,24 +93,6 @@ public class GameDataManager : MonoBehaviour
         {
             currentCharacter = GetCharacterData(selectedCharacterName);
         }
-    }
-
-    // ==================== 加载技能 ====================
-
-    void LoadAllSkills()
-    {
-        skillCache.Clear();
-        SkillData[] allSkills = Resources.LoadAll<SkillData>("Skills");
-
-        foreach (SkillData skill in allSkills)
-        {
-            if (!skillCache.ContainsKey(skill.skillID))
-            {
-                skillCache.Add(skill.skillID, skill);
-            }
-        }
-
-        Debug.Log($"加载了 {skillCache.Count} 个技能");
     }
 
     // ==================== 角色管理 ====================
@@ -153,10 +122,7 @@ public class GameDataManager : MonoBehaviour
     public bool UnlockCharacter(CharacterData character)
     {
         if (character == null) return false;
-        if (IsCharacterUnlocked(character))
-        {
-            return true;
-        }
+        if (IsCharacterUnlocked(character)) return true;
 
         if (TotalCoins < character.unlockCost)
         {
@@ -190,9 +156,6 @@ public class GameDataManager : MonoBehaviour
 
     // ==================== 记录管理 ====================
 
-    /// <summary>
-    /// 获取指定难度的最佳记录
-    /// </summary>
     public GameRecord GetRecord(string difficultyName)
     {
         GameRecord record = new GameRecord
@@ -203,7 +166,6 @@ public class GameDataManager : MonoBehaviour
             bestTime = PlayerPrefs.GetFloat($"{difficultyName}_BestTime", 0f)
         };
 
-        // 🔥 新增：读取完整一局的数据
         record.recordCoins = PlayerPrefs.GetInt($"{difficultyName}_RecordCoins", record.bestCoins);
         record.recordKills = PlayerPrefs.GetInt($"{difficultyName}_RecordKills", record.bestKills);
         record.recordTime = PlayerPrefs.GetFloat($"{difficultyName}_RecordTime", record.bestTime);
@@ -211,12 +173,8 @@ public class GameDataManager : MonoBehaviour
         return record;
     }
 
-    /// <summary>
-    /// 更新记录 - 击杀优先 > 金币次之 > 时间越短越好
-    /// </summary>
     public void UpdateRecord(string difficultyName, int coins, int kills, float time)
     {
-        // 获取当前最佳记录
         GameRecord currentBest = GetRecord(difficultyName);
 
         bool isBetter = false;
@@ -224,52 +182,38 @@ public class GameDataManager : MonoBehaviour
 
         if (!hasRecord)
         {
-            // 没有记录 → 直接保存
             isBetter = true;
             Debug.Log($"📝 首次记录！难度: {difficultyName}");
         }
         else
         {
-            // 🥇 第一优先级：击杀数（越多越好）
             if (kills > currentBest.bestKills)
             {
                 isBetter = true;
                 Debug.Log($"🏆 击杀更多！{kills} > {currentBest.bestKills}");
             }
-            // 🥈 第二优先级：金币数（越多越好）
             else if (kills == currentBest.bestKills && coins > currentBest.bestCoins)
             {
                 isBetter = true;
                 Debug.Log($"🏆 击杀相同，金币更多！{coins} > {currentBest.bestCoins}");
             }
-            // 🥉 第三优先级：存活时间（越短越好，效率更高）
             else if (kills == currentBest.bestKills && coins == currentBest.bestCoins && time < currentBest.bestTime)
             {
                 isBetter = true;
                 Debug.Log($"🏆 击杀和金币相同，时间更短！{time:F2} < {currentBest.bestTime:F2}");
             }
-            else
-            {
-                Debug.Log($"当前记录保持: 击杀: {currentBest.bestKills} | 金币: {currentBest.bestCoins} | 时间: {currentBest.bestTime:F2}秒");
-            }
         }
 
-        // 如果是新纪录，保存
         if (isBetter)
         {
-            // 保存最佳值
             PlayerPrefs.SetInt($"{difficultyName}_BestCoins", coins);
             PlayerPrefs.SetInt($"{difficultyName}_BestKills", kills);
             PlayerPrefs.SetFloat($"{difficultyName}_BestTime", time);
-
-            // 🔥 保存完整一局的数据（用于显示详细记录）
             PlayerPrefs.SetInt($"{difficultyName}_RecordCoins", coins);
             PlayerPrefs.SetInt($"{difficultyName}_RecordKills", kills);
             PlayerPrefs.SetFloat($"{difficultyName}_RecordTime", time);
-
             PlayerPrefs.Save();
             OnDataChanged?.Invoke();
-
             Debug.Log($"🎉 新纪录！{difficultyName} | 击杀: {kills} | 金币: {coins} | 时间: {time:F2}秒");
         }
     }
@@ -293,10 +237,11 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    public SkillData GetSkillData(string skillID)
+    // ==================== 通知数据变化 ====================
+
+    public void NotifyDataChanged()
     {
-        skillCache.TryGetValue(skillID, out SkillData data);
-        return data;
+        OnDataChanged?.Invoke();
     }
 
     // ==================== 数据持久化 ====================
@@ -317,7 +262,7 @@ public class GameDataManager : MonoBehaviour
         public int level;
     }
 
-    void SaveData()
+    public void SaveData()
     {
         PlayerSaveData data = new PlayerSaveData
         {
@@ -329,14 +274,11 @@ public class GameDataManager : MonoBehaviour
 
         PlayerPrefs.SetString("PlayerData", JsonUtility.ToJson(data));
         PlayerPrefs.Save();
-
         Debug.Log($"💾 数据已保存，总金币: {totalCoins}");
     }
 
     void LoadData()
     {
-        Debug.Log($"📂 LoadData 被调用，当前总金币: {totalCoins}");
-
         if (!PlayerPrefs.HasKey("PlayerData"))
         {
             Debug.Log("📂 没有找到保存的数据");
@@ -352,7 +294,6 @@ public class GameDataManager : MonoBehaviour
             unlockedCharacterNames = data.unlockedCharacters ?? new List<string>();
             selectedCharacterName = data.selectedCharacter ?? "";
             skillLevels = data.skills ?? new List<SkillSaveEntry>();
-
             Debug.Log($"📂 数据加载完成，总金币: {totalCoins}");
         }
         else
@@ -373,6 +314,22 @@ public class GameDataManager : MonoBehaviour
         OnDataChanged?.Invoke();
         Debug.Log("所有数据已重置");
     }
+
+    // ==================== 获取技能总加成 ====================
+
+    public UpgradeLevelData GetSkillTotalBonus(string skillType, string characterName, UpgradeConfigSO config)
+    {
+        var result = new UpgradeLevelData();
+        if (config == null || string.IsNullOrEmpty(characterName)) return result;
+
+        string skillID = $"{skillType}_{characterName}";
+        var entry = skillLevels.Find(s => s.skillID == skillID);
+        int level = entry != null ? entry.level : 0;
+
+        if (level <= 0) return result;
+
+        return config.GetTotalBonus(level);
+    }
 }
 
 // ==================== GameRecord 结构体 ====================
@@ -384,8 +341,6 @@ public class GameRecord
     public int bestCoins;
     public int bestKills;
     public float bestTime;
-
-    // 🔥 新增：完整一局的数据（用于显示详细记录）
     public int recordCoins;
     public int recordKills;
     public float recordTime;

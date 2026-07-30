@@ -1,7 +1,5 @@
 ﻿using System.Collections;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
@@ -77,8 +75,8 @@ public class PlayerController : MonoBehaviour
     private bool canMove = false;
 
     // ==================== BUFF 系统支持 ====================
-    private float baseSpeed;      // 存储原始速度
-    private int baseAttack;       // 存储原始攻击力
+    private float baseSpeed;
+    private int baseAttack;
 
     // ==================== 属性 ====================
     public float HealthPercent => currentHealth / maxHealth;
@@ -92,7 +90,6 @@ public class PlayerController : MonoBehaviour
         return currentHealth / maxHealth;
     }
 
-    // ⭐ 设置是否可以移动
     public void SetCanMove(bool canMove)
     {
         this.canMove = canMove;
@@ -149,7 +146,6 @@ public class PlayerController : MonoBehaviour
             uiManager.UpdateKillUI();
         }
 
-        // ⭐ 默认不能移动（等倒计时结束）
         canMove = false;
     }
 
@@ -175,18 +171,47 @@ public class PlayerController : MonoBehaviour
         attackRange = currentCharacterData.baseAttackRange;
         attackCooldown = currentCharacterData.baseAttackCooldown;
 
-        // ===== BUFF 系统：备份原始值 =====
         baseSpeed = speed;
         baseAttack = attackDamage;
 
-        Debug.Log($"加载角色: {currentCharacterData.characterName}");
+        // ===== 应用普通攻击升级加成 =====
+        string characterName = currentCharacterData.characterName;
+        var normalConfig = currentCharacterData.normalAttackConfig;
+
+        if (normalConfig != null)
+        {
+            var normalBonus = dataManager.GetSkillTotalBonus("NormalAttack", characterName, normalConfig);
+            attackDamage += normalBonus.attackBonus;
+            attackRange += normalBonus.attackRangeBonus;
+            speed += normalBonus.speedBonus;
+            attackCooldown -= normalBonus.cooldownReductionBonus;
+            if (attackCooldown < 0.1f) attackCooldown = 0.1f;
+
+            baseSpeed = speed;
+            baseAttack = attackDamage;
+        }
+
+        // ===== 应用技能攻击升级加成 =====
+        var skillConfig = currentCharacterData.skillAttackConfig;
+
+        if (skillConfig != null)
+        {
+            var skillBonus = dataManager.GetSkillTotalBonus("SkillAttack", characterName, skillConfig);
+            attackDamage += skillBonus.attackBonus;
+            attackRange += skillBonus.attackRangeBonus;
+            // 技能攻击也可以加速度、冷却等
+            // speed += skillBonus.speedBonus;
+
+            baseAttack = attackDamage;
+        }
+
+        Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");
     }
 
     void Update()
     {
         if (isDead || isDying) return;
 
-        // ⭐ 如果不能移动，不处理输入
         if (!canMove)
         {
             inputVector = Vector2.zero;
@@ -221,7 +246,6 @@ public class PlayerController : MonoBehaviour
         inputVector = keyboardInput;
 #endif
 
-        // 攻击冷却
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
@@ -232,7 +256,6 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 攻击计时
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -244,7 +267,6 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 移动
         Vector3 moveDir = GetMoveDirection(inputVector);
         float inputMagnitude = Mathf.Clamp01(inputVector.magnitude);
 
@@ -254,7 +276,6 @@ public class PlayerController : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
         }
 
-        // 地面检测
         isGrounded = IsGrounded();
 
         if (isGrounded && !wasGrounded)
@@ -272,7 +293,6 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        // 移动逻辑
         float currentSpeed = isAttacking ? speed * 0.3f : speed;
         if (isGrounded)
         {
@@ -313,7 +333,6 @@ public class PlayerController : MonoBehaviour
         velocity.y -= gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
 
-        // 地面吸附
         if (isGrounded && velocity.y <= 0)
         {
             if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, 1.5f, groundLayer))
@@ -539,33 +558,29 @@ public class PlayerController : MonoBehaviour
 
     // ==================== BUFF 系统接口 ====================
 
-    /// <summary> 治疗：增加固定血量（不超过最大生命值） </summary>
     public void Heal(float amount)
     {
         currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
         if (uiManager != null) uiManager.UpdateHealthUI();
     }
 
-    /// <summary> 治疗：恢复满血 </summary>
     public void RestoreFullHealth()
     {
         currentHealth = maxHealth;
         if (uiManager != null) uiManager.UpdateHealthUI();
     }
 
-    /// <summary> 应用速度倍率（例如 1.2 表示提升 20%） </summary>
     public void ApplySpeedMultiplier(float multiplier)
     {
         speed = baseSpeed * multiplier;
     }
 
-    /// <summary> 应用攻击力加成（例如 5 表示增加 5 点） </summary>
     public void ApplyAttackAdditive(int additive)
     {
         attackDamage = baseAttack + additive;
     }
 
-    // ==================== 原有方法（未改动） ====================
+    // ==================== 原有方法 ====================
 
     void UpdateAnimations()
     {
