@@ -132,7 +132,7 @@ public class PlayerController : MonoBehaviour
             groundLayer = ~0;
         }
 
-#if UNITY_ANDROID || UNITY_IOS
+#if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
         isJoystickEnabled = true;
@@ -200,7 +200,7 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-#if UNITY_ANDROID || UNITY_IOS
+#if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         if (isJoystickEnabled)
         {
             HandleTouchInput();
@@ -332,7 +332,7 @@ public class PlayerController : MonoBehaviour
 
     public void SetJoystickEnabled(bool enabled)
     {
-#if UNITY_ANDROID || UNITY_IOS
+#if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         isJoystickEnabled = enabled;
 
         if (joystickBg != null)
