@@ -19,10 +19,11 @@ public class CinemachineWallXRay : MonoBehaviour
         new Vector3(0.3f, 0, 0),   // 右侧
         new Vector3(-0.3f, 0, 0)   // 左侧
     };
-    [Tooltip("至少需要多少条射线命中同一面墙，才认为该墙遮挡玩家（建议设为2或3）")]
+    [Tooltip("至少需要多少条射线命中同一面墙，才认为该墙遮挡玩家")]
     public int minHitsToFade = 2;
 
-    private Dictionary<Transform, WallData> activeWalls = new Dictionary<Transform, WallData>();
+    private Transform currentFadingWall = null;  // 当前正在半透明的墙壁（只存一个）
+    private WallData currentWallData = null;
 
     private class WallData
     {
@@ -56,76 +57,91 @@ public class CinemachineWallXRay : MonoBehaviour
             }
         }
 
-        // 确定需要半透明的墙壁：命中次数 >= minHitsToFade
-        HashSet<Transform> wallsToFade = new HashSet<Transform>();
+        // 找出命中次数 >= minHitsToFade 的墙壁中，距离最近的那个
+        Transform targetWall = null;
+        float minDistance = float.MaxValue;
+
         foreach (var kvp in hitCounts)
         {
             if (kvp.Value >= minHitsToFade)
-                wallsToFade.Add(kvp.Key);
-        }
-
-        // 处理这些墙壁：如果还未加入字典则创建，并淡化
-        foreach (Transform wall in wallsToFade)
-        {
-            Renderer renderer = wall.GetComponent<Renderer>();
-            if (renderer == null) continue;
-
-            if (!activeWalls.ContainsKey(wall))
             {
-                Material mat = renderer.material;
-                mat.shader = Shader.Find("Custom/XRayWall");
-                WallData data = new WallData
+                float dist = Vector3.Distance(transform.position, kvp.Key.position);
+                if (dist < minDistance)
                 {
-                    material = mat,
-                    originalColor = mat.color,
-                    currentAlpha = 1f
-                };
-                activeWalls.Add(wall, data);
+                    minDistance = dist;
+                    targetWall = kvp.Key;
+                }
             }
-
-            WallData wallData = activeWalls[wall];
-            wallData.currentAlpha = Mathf.Lerp(wallData.currentAlpha, targetAlpha, Time.deltaTime * fadeSpeed);
-            Color color = wallData.originalColor;
-            color.a = wallData.currentAlpha;
-            wallData.material.color = color;
-            wallData.material.SetFloat("_Transparency", wallData.currentAlpha);
         }
 
-        // 恢复没有被选中的墙壁（即不在 wallsToFade 中）
-        List<Transform> toRemove = new List<Transform>();
-        foreach (var kvp in activeWalls)
+        // 处理目标墙壁（淡化）
+        if (targetWall != null)
         {
-            Transform wall = kvp.Key;
-            if (!wallsToFade.Contains(wall))
+            Renderer renderer = targetWall.GetComponent<Renderer>();
+            if (renderer != null)
             {
-                WallData wallData = kvp.Value;
-                wallData.currentAlpha = Mathf.Lerp(wallData.currentAlpha, 1f, Time.deltaTime * fadeSpeed);
-                Color color = wallData.originalColor;
-                color.a = wallData.currentAlpha;
-                wallData.material.color = color;
-                wallData.material.SetFloat("_Transparency", wallData.currentAlpha);
+                // 如果当前没有半透明墙壁，或者换了新墙壁
+                if (currentFadingWall != targetWall)
+                {
+                    // 如果有旧的，先恢复
+                    if (currentFadingWall != null && currentWallData != null)
+                    {
+                        Color originalCol = currentWallData.originalColor;
+                        originalCol.a = 1f;
+                        currentWallData.material.color = originalCol;
+                        currentWallData.material.SetFloat("_Transparency", 1f);
+                    }
 
-                if (wallData.currentAlpha > 0.99f)
-                    toRemove.Add(wall);
+                    // 初始化新墙壁
+                    Material mat = renderer.material;
+                    mat.shader = Shader.Find("Custom/XRayWall");
+                    currentWallData = new WallData
+                    {
+                        material = mat,
+                        originalColor = mat.color,
+                        currentAlpha = 1f
+                    };
+                    currentFadingWall = targetWall;
+                }
+
+                // 淡化
+                currentWallData.currentAlpha = Mathf.Lerp(currentWallData.currentAlpha, targetAlpha, Time.deltaTime * fadeSpeed);
+                Color newColor = currentWallData.originalColor;
+                newColor.a = currentWallData.currentAlpha;
+                currentWallData.material.color = newColor;
+                currentWallData.material.SetFloat("_Transparency", currentWallData.currentAlpha);
             }
         }
-
-        foreach (Transform wall in toRemove)
+        else
         {
-            activeWalls.Remove(wall);
+            // 没有需要半透明的墙壁，恢复当前的
+            if (currentFadingWall != null && currentWallData != null)
+            {
+                currentWallData.currentAlpha = Mathf.Lerp(currentWallData.currentAlpha, 1f, Time.deltaTime * fadeSpeed);
+                Color restoreColor = currentWallData.originalColor;
+                restoreColor.a = currentWallData.currentAlpha;
+                currentWallData.material.color = restoreColor;
+                currentWallData.material.SetFloat("_Transparency", currentWallData.currentAlpha);
+
+                if (currentWallData.currentAlpha > 0.99f)
+                {
+                    currentFadingWall = null;
+                    currentWallData = null;
+                }
+            }
         }
     }
 
     void OnDestroy()
     {
-        foreach (var kvp in activeWalls)
+        if (currentWallData != null)
         {
-            WallData data = kvp.Value;
-            Color color = data.originalColor;
-            color.a = 1f;
-            data.material.color = color;
-            data.material.SetFloat("_Transparency", 1f);
+            Color finalColor = currentWallData.originalColor;
+            finalColor.a = 1f;
+            currentWallData.material.color = finalColor;
+            currentWallData.material.SetFloat("_Transparency", 1f);
         }
-        activeWalls.Clear();
+        currentFadingWall = null;
+        currentWallData = null;
     }
 }
