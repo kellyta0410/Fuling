@@ -1126,7 +1126,7 @@ RectTransform:
   m_GameObject: {fileID: 3776268776489254596}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8880365909708592094}
@@ -1139,10 +1139,10 @@ RectTransform:
   m_Father: {fileID: 7223004483196564472}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_Pivot: {x: 0, y: 0}
 --- !u!4 &569889389278418152
 Transform:
   m_ObjectHideFlags: 0
@@ -1428,18 +1428,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2836108109781588785}
   m_CullTransparentMesh: 1
---- !u!114 &878529084246963097
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6752851702259497036}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!137 &895158104387656465
 SkinnedMeshRenderer:
   m_ObjectHideFlags: 0
@@ -2122,7 +2110,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6429246128924842039}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -2360,6 +2348,7 @@ GameObject:
   - component: {fileID: 7989968401210388826}
   - component: {fileID: 2231793058728201795}
   - component: {fileID: 8544355286026592807}
+  - component: {fileID: 8544355286026592808}
   m_Layer: 5
   m_Name: SettingsPanel
   m_TagString: Untagged
@@ -4102,6 +4091,7 @@ GameObject:
   - component: {fileID: 567352805408079701}
   - component: {fileID: 9014363153232855468}
   - component: {fileID: 4033781619463360621}
+  - component: {fileID: 9014363153232855469}
   m_Layer: 5
   m_Name: In-game Control
   m_TagString: Untagged
@@ -7268,6 +7258,7 @@ GameObject:
   - component: {fileID: 4157508493295674698}
   - component: {fileID: 8282536442034432660}
   - component: {fileID: 2160162606053408035}
+  - component: {fileID: 8282536442034432661}
   m_Layer: 5
   m_Name: End Panel
   m_TagString: Untagged
@@ -8101,7 +8092,6 @@ GameObject:
   - component: {fileID: 5772427608002303702}
   - component: {fileID: 3575370225346055532}
   - component: {fileID: 412197123612935756}
-  - component: {fileID: 878529084246963097}
   m_Layer: 5
   m_Name: HUD
   m_TagString: Untagged
@@ -9352,6 +9342,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6044179425762728411}
   m_CullTransparentMesh: 1
+--- !u!114 &8282536442034432661
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6044179425762728411}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &8282570536605915054
 GameObject:
   m_ObjectHideFlags: 0
@@ -9735,6 +9737,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &8544355286026592808
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1859522363469371223}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &8601974654771543120
 Transform:
   m_ObjectHideFlags: 0
@@ -9938,6 +9952,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3776268776489254596}
   m_CullTransparentMesh: 1
+--- !u!114 &9014363153232855469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3776268776489254596}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &9029943948733000385
 Transform:
   m_ObjectHideFlags: 0
