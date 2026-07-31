@@ -4,38 +4,35 @@ using System.Collections.Generic;
 public class InfiniteWorldManager : MonoBehaviour
 {
     [Header("核心设置")]
-    public Tile[] tilePrefabs;           // 3种Tile预制体
+    public Tile[] tilePrefabs;
     public Transform playerTarget;
-    public float tileSize = 10f;         // 与预制体实际尺寸一致
+    public float tileSize = 10f;
 
     [Header("生成与销毁范围")]
-    public int spawnRadius = 5;          // 方形生成半径（格数）
-    public int destroyRadius = 7;        // 方形销毁半径（必须 > spawnRadius）
+    public int spawnRadius = 5;
+    public int destroyRadius = 7;
 
     [Header("Tile生成权重")]
-    public float[] tileWeights = new float[] { 1f, 1f, 1f }; // 与预制体匹配的权重数组
+    public float[] tileWeights = new float[] { 1f, 1f, 1f };
 
     [Header("生成点过滤")]
-    public int minSpawnDistance = 1;     // 过滤玩家周围区域
+    public int minSpawnDistance = 1;
 
     [Header("调试")]
     public bool showDebugLogs = true;
     public bool showGizmos = true;
 
-    // Tile管理
     private Dictionary<Vector2Int, Tile> activeTiles = new Dictionary<Vector2Int, Tile>();
     private Vector2Int lastPlayerGridPos;
     private bool isInitialized = false;
 
-    // GC 性能优化缓存集合（避免重复 new 垃圾回收）
     private HashSet<Vector2Int> neededPositionsCache = new HashSet<Vector2Int>();
     private List<Vector2Int> toRemoveCache = new List<Vector2Int>();
 
-    // 引用
-    private EnemySpawner enemySpawner;
+    private EnemySpawner normalSpawner;
+    private InfiniteEnemySpawner infiniteSpawner;
     private NavMeshUpdater navUpdater;
 
-    // 用于预测移动方向
     private Vector3 previousPlayerPos;
 
     void Start()
@@ -46,7 +43,8 @@ public class InfiniteWorldManager : MonoBehaviour
             if (player != null) playerTarget = player.transform;
         }
 
-        enemySpawner = FindObjectOfType<EnemySpawner>();
+        normalSpawner = FindObjectOfType<EnemySpawner>();
+        infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
         navUpdater = FindObjectOfType<NavMeshUpdater>();
 
         if (tilePrefabs == null || tilePrefabs.Length == 0)
@@ -56,7 +54,6 @@ public class InfiniteWorldManager : MonoBehaviour
         }
 
         previousPlayerPos = playerTarget.position;
-        // 延迟一帧执行初始生成，确保其他组件挂载就绪
         Invoke(nameof(InitialGenerate), 0.1f);
     }
 
@@ -74,7 +71,6 @@ public class InfiniteWorldManager : MonoBehaviour
         if (playerTarget == null || tilePrefabs == null || tilePrefabs.Length == 0 || !isInitialized)
             return;
 
-        // 检测玩家是否移动到了新的网格格子里
         Vector2Int currentGrid = WorldToGrid(playerTarget.position);
         if (currentGrid != lastPlayerGridPos)
         {
@@ -88,7 +84,6 @@ public class InfiniteWorldManager : MonoBehaviour
     {
         Vector2Int playerGrid = WorldToGrid(playerTarget.position);
 
-        // ⭐ 1.【先销毁】：把超出 destroyRadius 的旧 Tile 立即清理掉，释放资源
         toRemoveCache.Clear();
         foreach (var kvp in activeTiles)
         {
@@ -99,10 +94,8 @@ public class InfiniteWorldManager : MonoBehaviour
         foreach (var pos in toRemoveCache)
             DestroyTile(pos);
 
-        // ⭐ 2.【算范围】：计算玩家当前周围需要的 Tile 坐标集合
         GetPositionsInRadius(playerGrid, spawnRadius, neededPositionsCache);
 
-        // ⭐ 3.【预预测】：根据玩家移动方向提前生成前方 Tile，防止边缘看穿
         Vector3 moveDelta = playerTarget.position - previousPlayerPos;
         if (moveDelta.sqrMagnitude > 0.01f)
         {
@@ -117,7 +110,6 @@ public class InfiniteWorldManager : MonoBehaviour
             }
         }
 
-        // ⭐ 4.【无限制生成】：只要缺的 Tile，直接全部刷出，不再有数量闸门卡死
         foreach (var pos in neededPositionsCache)
         {
             if (!activeTiles.ContainsKey(pos))
@@ -126,7 +118,6 @@ public class InfiniteWorldManager : MonoBehaviour
             }
         }
 
-        // 5. 更新 Tile 激活状态（近处激活，远观暂停）
         foreach (var kvp in activeTiles)
         {
             int gridDistance = GetChebyshevDistance(kvp.Key, playerGrid);
@@ -136,16 +127,23 @@ public class InfiniteWorldManager : MonoBehaviour
                 kvp.Value.Deactivate();
         }
 
-        // 6. 更新敌人生成点
-        if (enemySpawner != null)
-            enemySpawner.UpdateSpawnPoints(GetAllSpawnPoints());
+        // 更新两个生成器的生成点
+        UpdateAllSpawners();
 
-        // 7. 请求 NavMesh 异步防抖更新
         if (navUpdater != null)
             navUpdater.RequestUpdate();
     }
 
-    // ---------- 核心逻辑辅助方法 ----------
+    void UpdateAllSpawners()
+    {
+        List<Transform> allPoints = GetAllSpawnPoints();
+
+        if (normalSpawner != null && normalSpawner.gameObject.activeSelf)
+            normalSpawner.UpdateSpawnPoints(allPoints);
+
+        if (infiniteSpawner != null && infiniteSpawner.gameObject.activeSelf)
+            infiniteSpawner.UpdateSpawnPoints(allPoints);
+    }
 
     void GetPositionsInRadius(Vector2Int center, int radius, HashSet<Vector2Int> result)
     {
@@ -159,7 +157,6 @@ public class InfiniteWorldManager : MonoBehaviour
         }
     }
 
-    // 切比雪夫距离（方形区域判定，避免圆形欧氏距离导致角落 Tile 频繁被刷掉）
     int GetChebyshevDistance(Vector2Int a, Vector2Int b)
     {
         return Mathf.Max(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));
@@ -227,8 +224,6 @@ public class InfiniteWorldManager : MonoBehaviour
             if (showDebugLogs) Debug.Log($"🗑️ 销毁Tile: {gridPos}");
         }
     }
-
-    // ---------- 供外部调用的公共接口 ----------
 
     public List<Transform> GetAllSpawnPoints()
     {

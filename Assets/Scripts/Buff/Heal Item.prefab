@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5070177709082645749}
   - component: {fileID: 8027564854094223745}
   - component: {fileID: 6058877979488118618}
+  - component: {fileID: -4275734267334720072}
   m_Layer: 0
   m_Name: Heal Item
   m_TagString: Untagged
@@ -121,9 +122,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3342c8345465e4f44beb015aa50f39b1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotateSpeed: 60
-  floatAmplitude: 0.3
-  floatFrequency: 1.5
   buffData: {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
 --- !u!54 &6058877979488118618
 Rigidbody:
@@ -152,3 +150,22 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &-4275734267334720072
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4823333273514622846}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3ec58c38d374e6489e7c60c4a6aefa0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  lifeTime: 30
+  floatAmplitude: 0.3
+  floatSpeed: 1.5
+  rotateSpeed: 60
+  flashStartTime: 5
+  flashInterval: 0.3
+  destroyEffectPrefab: {fileID: 0}

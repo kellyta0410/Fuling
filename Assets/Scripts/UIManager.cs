@@ -34,19 +34,21 @@ public class UIManager : MonoBehaviour
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
+    public InfiniteEnemySpawner infiniteSpawner;
     public GameManager gameManager;
 
     private Vector2 timerOriginalPosition;
     private float timeLimit;
 
     // 计时器模式
-    private bool isTimerMode = false;  // false=倒计时, true=正计时
+    private bool isTimerMode = false;
     private float elapsedTime = 0f;
 
     void Start()
     {
         if (player == null) player = FindObjectOfType<PlayerController>();
         if (enemySpawner == null) enemySpawner = FindObjectOfType<EnemySpawner>();
+        if (infiniteSpawner == null) infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
         if (gameManager == null) gameManager = GameManager.Instance;
 
         if (restartButton != null) restartButton.onClick.AddListener(RestartGame);
@@ -90,7 +92,7 @@ public class UIManager : MonoBehaviour
             {
                 timerText.gameObject.SetActive(true);
                 timerText.text = "00:00";
-                timerText.color = Color.white;  // ⭐ 固定白色
+                timerText.color = Color.white;
             }
         }
 
@@ -138,7 +140,6 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // ⭐ 公共方法：设置计时模式
     public void SetTimerMode(bool isInfinite)
     {
         isTimerMode = isInfinite;
@@ -150,7 +151,7 @@ public class UIManager : MonoBehaviour
             {
                 timerText.gameObject.SetActive(true);
                 timerText.text = "00:00";
-                timerText.color = Color.white;  // ⭐ 固定白色
+                timerText.color = Color.white;
             }
         }
         else
@@ -250,7 +251,10 @@ public class UIManager : MonoBehaviour
     public void UpdateKillUI()
     {
         if (enemyCountText != null && player != null)
+        {
+            // 显示击杀数
             enemyCountText.text = $"Kills: {player.GetKills()}";
+        }
     }
 
     public void SetTimerVisibility(bool visible)
@@ -299,7 +303,11 @@ public class UIManager : MonoBehaviour
             timerText.rectTransform.anchoredPosition = timerOriginalPosition;
         }
 
-        if (remaining <= 0) { timerText.color = new Color(1f, 0.2f, 0.2f, 1f); timerText.text = "00:00"; }
+        if (remaining <= 0)
+        {
+            timerText.color = new Color(1f, 0.2f, 0.2f, 1f);
+            timerText.text = "00:00";
+        }
     }
 
     // 正计时显示（无限模式用）
@@ -311,7 +319,6 @@ public class UIManager : MonoBehaviour
         int sec = Mathf.FloorToInt(time % 60);
         timerText.text = $"{min:00}:{sec:00}";
 
-        // ⭐ 无限模式：保持白色，不变化颜色
         timerText.color = Color.white;
     }
 
@@ -329,7 +336,6 @@ public class UIManager : MonoBehaviour
         int coins = player != null ? player.GetCoins() : 0;
         int kills = player != null ? player.GetKills() : 0;
 
-        // 如果是无限模式，显示总时间
         string timeText = "";
         if (isTimerMode)
         {

@@ -82,7 +82,7 @@ public abstract class EnemyAI : MonoBehaviour
     protected bool isAgentValid = false;
 
     // 无限模式标志
-    private bool useDirectChase = false;
+    protected bool useDirectChase = false;
 
     // 所属Tile
     [Header("所属Tile")]
@@ -99,14 +99,13 @@ public abstract class EnemyAI : MonoBehaviour
         isAgentValid = agent != null && agent.isOnNavMesh;
         enemyLayerMask = LayerMask.GetMask("Enemy");
 
-        // ⭐ 强制将敌人位置修正到 NavMesh 上（防止卡在 Tile 内部）
+        // 强制将敌人位置修正到 NavMesh 上
         if (isAgentValid)
         {
             NavMeshHit hit;
             if (NavMesh.SamplePosition(transform.position, out hit, 3f, NavMesh.AllAreas))
             {
                 Vector3 fixedPos = hit.position;
-                // 如果采样点与原点高度差不太大，则使用采样点（一般保持y不变会卡地，建议使用采样高度）
                 transform.position = fixedPos;
                 agent.Warp(fixedPos);
                 Debug.Log($"{name} 已吸附到 NavMesh 位置: {fixedPos}");
@@ -256,7 +255,7 @@ public abstract class EnemyAI : MonoBehaviour
         UpdateAnimations(currentSpeed, isMovingState);
     }
 
-    // 分离力（保持不变）
+    // ---------- 分离力 ----------
     private void ApplySeparation()
     {
         if (myCollider == null) return;
@@ -311,12 +310,37 @@ public abstract class EnemyAI : MonoBehaviour
         ApplyCurrentMultipliers();
     }
 
+    /// <summary>
+    /// 单独更新速度倍率（用于压力系统实时调整）
+    /// </summary>
+    public void UpdateSpeedMultiplier(float newSpeedMultiplier)
+    {
+        currentSpeedMultiplier = newSpeedMultiplier;
+
+        if (isAgentValid && !useDirectChase && agent != null)
+        {
+            agent.speed = baseSpeed * currentSpeedMultiplier;
+        }
+    }
+
+    /// <summary>
+    /// 获取当前速度倍率
+    /// </summary>
+    public float GetCurrentSpeedMultiplier()
+    {
+        return currentSpeedMultiplier;
+    }
+
     protected virtual void ApplyCurrentMultipliers()
     {
         if (enemyData == null) return;
+
         UpdateHealthBar();
-        if (isAgentValid && !useDirectChase)
+
+        if (isAgentValid && !useDirectChase && agent != null)
+        {
             agent.speed = baseSpeed * currentSpeedMultiplier;
+        }
     }
 
     protected void StopAgent()
@@ -327,7 +351,7 @@ public abstract class EnemyAI : MonoBehaviour
 
     protected float GetCurrentSpeed()
     {
-        return isAgentValid ? agent.velocity.magnitude : 0f;
+        return isAgentValid && agent != null ? agent.velocity.magnitude : 0f;
     }
 
     protected bool IsFacingPlayer()
@@ -372,7 +396,7 @@ public abstract class EnemyAI : MonoBehaviour
         }
     }
 
-    // 血条相关（保持不变）
+    // ---------- 血条 ----------
     protected virtual void CreateHealthBar()
     {
         if (healthBarPrefab == null) return;

@@ -12,7 +12,7 @@ public class RandomBuffSpawner : MonoBehaviour
     }
 
     [Header("生成配置")]
-    public BuffEntry[] buffPool; // 在Inspector里配置每个Buff和权重
+    public BuffEntry[] buffPool;
     public float spawnRadius = 12f;
     public float spawnInterval = 6f;
     public int maxBuffCount = 5;
@@ -26,7 +26,13 @@ public class RandomBuffSpawner : MonoBehaviour
     public float checkRadius = 0.8f;
     public int maxRetries = 10;
 
+    [Header("自动销毁配置")]
+    public float despawnDistance = 30f;
+    public float buffLifeTime = 30f;
+    public float cleanupInterval = 2f;
+
     private float timer;
+    private float cleanupTimer;
 
     void Start()
     {
@@ -46,15 +52,20 @@ public class RandomBuffSpawner : MonoBehaviour
             timer = 0f;
             SpawnBuff();
         }
+
+        cleanupTimer += Time.deltaTime;
+        if (cleanupTimer >= cleanupInterval)
+        {
+            cleanupTimer = 0f;
+            CleanupBuffs();
+        }
     }
 
     void SpawnBuff()
     {
-        // 1. 总数限制
         BuffPickupItem[] existing = FindObjectsOfType<BuffPickupItem>();
         if (existing.Length >= maxBuffCount) return;
 
-        // 2. 从 buffPool 中按权重随机选择（忽略权重为0的项）
         List<BuffEntry> candidates = new List<BuffEntry>();
         int totalWeight = 0;
         foreach (var entry in buffPool)
@@ -81,14 +92,12 @@ public class RandomBuffSpawner : MonoBehaviour
         }
         if (selected == null) selected = candidates[0].buffData;
 
-        // 检查预制体
         if (selected.pickupPrefab == null)
         {
             Debug.LogWarning($"Buff {selected.buffName} 没有指定 pickupPrefab！");
             return;
         }
 
-        // 3. 寻找安全生成点（带重试）
         Vector3 finalSpawnPos = Vector3.zero;
         bool foundValidSpot = false;
 
@@ -129,11 +138,15 @@ public class RandomBuffSpawner : MonoBehaviour
             return;
         }
 
-        // 4. 实例化
         GameObject newBuff = Instantiate(selected.pickupPrefab, finalSpawnPos, Quaternion.identity);
         BuffPickupItem pickup = newBuff.GetComponent<BuffPickupItem>();
         if (pickup == null) pickup = newBuff.AddComponent<BuffPickupItem>();
         pickup.buffData = selected;
+
+        // 【新增】添加AutoDestroyBuff组件
+        AutoDestroyBuff autoDestroy = newBuff.GetComponent<AutoDestroyBuff>();
+        if (autoDestroy == null) autoDestroy = newBuff.AddComponent<AutoDestroyBuff>();
+        autoDestroy.Initialize(buffLifeTime);
 
         newBuff.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
@@ -145,12 +158,50 @@ public class RandomBuffSpawner : MonoBehaviour
         }
     }
 
+    void CleanupBuffs()
+    {
+        if (player == null) return;
+
+        BuffPickupItem[] buffs = FindObjectsOfType<BuffPickupItem>();
+        List<GameObject> toDestroy = new List<GameObject>();
+
+        foreach (var buff in buffs)
+        {
+            if (buff == null) continue;
+
+            float distance = Vector3.Distance(player.position, buff.transform.position);
+
+            if (distance > despawnDistance)
+            {
+                toDestroy.Add(buff.gameObject);
+                Debug.Log($"销毁远处Buff: {buff.buffData?.buffName ?? "Unknown"} (距离: {distance:F1})");
+            }
+        }
+
+        foreach (var obj in toDestroy)
+        {
+            Destroy(obj);
+        }
+
+        if (toDestroy.Count > 0)
+        {
+            BuffPickupItem[] remaining = FindObjectsOfType<BuffPickupItem>();
+            if (remaining.Length < maxBuffCount)
+            {
+                SpawnBuff();
+            }
+        }
+    }
+
     void OnDrawGizmosSelected()
     {
         if (player != null)
         {
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(player.position, spawnRadius);
+
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(player.position, despawnDistance);
         }
     }
 }

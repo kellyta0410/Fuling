@@ -4,7 +4,7 @@ using Unity.AI.Navigation;
 using UnityEngine;
 using UnityEngine.AI;
 
-public class EnemySpawner : MonoBehaviour
+public class InfiniteEnemySpawner : MonoBehaviour
 {
     [Header("核心设置")]
     [HideInInspector]
@@ -18,26 +18,21 @@ public class EnemySpawner : MonoBehaviour
     public DifficultySettings currentDifficulty;
     public bool useDifficultySettings = true;
 
-    [Header("普通模式参数")]
-    public float spawnInterval = 2f;
-    public int spawnPerInterval = 1;
-    public int initialSpawnCount = 2;
-    public bool spawnOnStart = true;
-    public float defaultSpawnRadius = 5f;
+    [Header("无限模式参数")]
+    public int initialWaveCount = 50;
+    public float minSpawnDistance = 8f;
+    public float maxSpawnDistance = 20f;
+    public float infiniteRangeMultiplier = 2.5f;
+    public int enemiesPerSpawnPoint = 2;
 
-    [Header("普通模式 - 压力系统（倒计时变难）")]
-    public bool enableCountdownPressure = true;
-    public AnimationCurve spawnIntervalCurve;
-    public AnimationCurve spawnCountCurve;
-    public AnimationCurve speedMultiplierCurve;
-    public float minSpawnInterval = 0.3f;
-    public int maxSpawnPerInterval = 5;
-    public float maxSpeedMultiplier = 3f;
-
-    [Header("普通模式 - 最终阶段")]
-    public bool enableFinalPhase = true;
-    public float finalPhaseThreshold = 0.8f;
-    public int finalPhaseExtraEnemies = 3;
+    [Header("无限模式 - 难度递增（时间驱动）")]
+    public bool enableDifficultyScaling = true;
+    public float difficultyIncreaseInterval = 30f;
+    public float minSpawnIntervalLimit = 0.5f;
+    public int maxSpawnPerIntervalLimit = 10;
+    public float maxSpeedMultiplierLimit = 5f;
+    public float maxHealthMultiplierLimit = 5f;
+    public float maxDamageMultiplierLimit = 3f;
 
     [Header("NavMesh 设置")]
     public float navMeshSampleRadius = 5f;
@@ -64,8 +59,9 @@ public class EnemySpawner : MonoBehaviour
 
     private bool initialSpawnDone = false;
     private bool canSpawn = false;
-    private bool isFinalPhaseActive = false;
-    private float lastSpeedMultiplier = 1f;
+    private float globalSpawnTimer = 0f;
+    private float difficultyTimer = 0f;
+    private int difficultyLevel = 0;
 
     private CountdownManager countdownManager;
     private InfiniteWorldManager worldManager;
@@ -107,7 +103,6 @@ public class EnemySpawner : MonoBehaviour
     void Awake()
     {
         canSpawn = false;
-        InitializePressureCurves();
     }
 
     void Start()
@@ -129,79 +124,55 @@ public class EnemySpawner : MonoBehaviour
             CleanupDeadEnemies();
         }
 
-        // 更新压力参数（倒计时越接近结束越难）
-        if (enableCountdownPressure)
+        // 无限模式：所有生成点始终激活
+        foreach (SpawnPointData spawnData in spawnPoints)
         {
-            UpdatePressureParameters();
+            spawnData.isActive = true;
         }
 
-        // 检查最终阶段
-        if (enableFinalPhase)
+        // 难度递增（时间驱动）
+        if (enableDifficultyScaling)
         {
-            CheckFinalPhase();
+            UpdateDifficultyScaling();
         }
 
-        ProcessSpawnPoints();
+        ProcessInfiniteMode();
     }
 
-    void ProcessSpawnPoints()
+    void ProcessInfiniteMode()
     {
-        // 清理无效生成点
-        for (int i = spawnPoints.Count - 1; i >= 0; i--)
-        {
-            SpawnPointData spawnData = spawnPoints[i];
-            if (spawnData.point == null)
-            {
-                spawnPoints.RemoveAt(i);
-                continue;
-            }
-
-            // 检查父Tile是否激活
-            if (spawnData.point.parent != null)
-            {
-                Tile parentTile = spawnData.point.parent.GetComponent<Tile>();
-                if (parentTile != null && !parentTile.isActive)
-                {
-                    spawnData.isActive = false;
-                    continue;
-                }
-            }
-
-            // 根据距离激活/停用
-            float distance = Vector3.Distance(spawnData.point.position, playerTarget.position);
-            if (distance <= spawnData.activationRadius && !spawnData.isActive)
-                spawnData.isActive = true;
-            else if (distance > spawnData.deactivationRadius && spawnData.isActive)
-                spawnData.isActive = false;
-
-            if (spawnData.isOnCooldown)
-            {
-                spawnData.cooldownTimer -= Time.deltaTime;
-                if (spawnData.cooldownTimer <= 0f)
-                    spawnData.isOnCooldown = false;
-            }
-        }
-
-        // 正常模式生成逻辑
+        List<SpawnPointData> availablePoints = new List<SpawnPointData>();
         foreach (SpawnPointData spawnData in spawnPoints)
         {
             if (spawnData.point == null) continue;
             if (!spawnData.isActive || spawnData.isOnCooldown) continue;
-            if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) continue;
+            if (enableMaxLimit && allActiveEnemies.Count >= maxEnemyCount) break;
+            availablePoints.Add(spawnData);
+        }
+        if (availablePoints.Count == 0) return;
 
-            spawnData.spawnTimer += Time.deltaTime;
-            if (spawnData.spawnTimer >= currentSpawnInterval)
+        // 按距离排序，优先使用最近的生成点（保持敌人靠近玩家）
+        availablePoints.Sort((a, b) =>
+        {
+            float da = Vector3.Distance(a.point.position, playerTarget.position);
+            float db = Vector3.Distance(b.point.position, playerTarget.position);
+            return da.CompareTo(db);
+        });
+
+        globalSpawnTimer += Time.deltaTime;
+        if (globalSpawnTimer >= currentSpawnInterval)
+        {
+            globalSpawnTimer = 0f;
+            int toSpawn = currentSpawnPerInterval;
+            if (enableMaxLimit)
+                toSpawn = Mathf.Min(toSpawn, maxEnemyCount - allActiveEnemies.Count);
+            if (toSpawn > 0)
             {
-                spawnData.spawnTimer = 0f;
-                int toSpawn = currentSpawnPerInterval;
-                if (enableMaxLimit)
+                int count = Mathf.Min(toSpawn, availablePoints.Count);
+                for (int i = 0; i < count; i++)
                 {
-                    int maxSpawn = maxEnemyCount - allActiveEnemies.Count;
-                    toSpawn = Mathf.Min(toSpawn, maxSpawn);
-                }
-                if (toSpawn > 0)
-                {
-                    StartCoroutine(Routine_SpawnEnemies(spawnData, toSpawn));
+                    SpawnPointData spawnData = availablePoints[i];
+                    StartCoroutine(Routine_SpawnEnemies(spawnData, enemiesPerSpawnPoint));
                     if (enableCooldown)
                     {
                         spawnData.isOnCooldown = true;
@@ -214,7 +185,7 @@ public class EnemySpawner : MonoBehaviour
 
     IEnumerator Routine_SpawnEnemies(SpawnPointData spawnData, int count)
     {
-        float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : defaultSpawnRadius;
+        float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : 5f;
 
         for (int i = 0; i < count; i++)
         {
@@ -289,115 +260,96 @@ public class EnemySpawner : MonoBehaviour
         return enemyPrefabs.Count > 0 ? enemyPrefabs[0] : null;
     }
 
-    void PerformInitialSpawn()
+    IEnumerator SpawnInitialWave()
     {
-        if (enemyPrefabs == null || enemyPrefabs.Count == 0) return;
-
-        foreach (SpawnPointData spawnData in spawnPoints)
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0 || playerTarget == null)
         {
-            if (spawnData.point == null) continue;
-
-            int spawnCount = initialSpawnCount;
-            if (enableMaxLimit)
-            {
-                int maxSpawn = maxEnemyCount - allActiveEnemies.Count;
-                spawnCount = Mathf.Min(spawnCount, maxSpawn);
-            }
-            if (spawnCount > 0)
-            {
-                StartCoroutine(Routine_SpawnEnemies(spawnData, spawnCount));
-                spawnData.hasSpawnedOnce = true;
-                if (enableCooldown)
-                {
-                    spawnData.isOnCooldown = true;
-                    spawnData.cooldownTimer = cooldownTime;
-                }
-            }
+            yield break;
         }
+
+        int spawned = 0;
+        int attempts = 0;
+        int maxAttempts = initialWaveCount * 10;
+
+        while (spawned < initialWaveCount && attempts < maxAttempts)
+        {
+            attempts++;
+
+            float angle = Random.Range(0f, Mathf.PI * 2f);
+            float distance = Random.Range(minSpawnDistance, maxSpawnDistance);
+            Vector3 offset = new Vector3(Mathf.Cos(angle) * distance, 0, Mathf.Sin(angle) * distance);
+            Vector3 spawnPos = playerTarget.position + offset;
+
+            spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
+            if (!IsPositionValid(spawnPos))
+            {
+                spawnPos = playerTarget.position + offset;
+                spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius * 2f);
+                if (!IsPositionValid(spawnPos))
+                    continue;
+            }
+
+            float distToPlayer = Vector3.Distance(spawnPos, playerTarget.position);
+            if (distToPlayer < minSpawnDistance) continue;
+
+            GameObject enemyPrefab = GetWeightedRandomEnemy();
+            if (enemyPrefab == null) continue;
+
+            GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.Euler(0, Random.Range(0, 360), 0));
+            enemy.transform.parent = null;
+
+            NavMeshAgent agent = enemy.GetComponent<NavMeshAgent>();
+            if (agent != null) agent.Warp(spawnPos);
+
+            RegisterEnemyToTile(enemy, spawnPos);
+
+            EnemyAI enemyScript = enemy.GetComponent<EnemyAI>();
+            if (enemyScript != null)
+                enemyScript.ApplyScalingMultipliers(currentSpeedMultiplier, currentHealthMultiplier, currentDamageMultiplier);
+
+            allActiveEnemies.Add(enemy);
+            globalTotalSpawned++;
+            spawned++;
+
+            if (spawned % 10 == 0)
+                yield return null;
+        }
+
+        if (showDebugLogs) Debug.Log($"🎯 [无限模式] 初始波次生成完成：{spawned} 个敌人");
         initialSpawnDone = true;
+        yield return null;
     }
 
-    // ---------- 压力系统（倒计时越来越难） ----------
-    void InitializePressureCurves()
+    // ---------- 难度递增系统 ----------
+    void UpdateDifficultyScaling()
     {
-        if (spawnIntervalCurve == null || spawnIntervalCurve.keys.Length == 0)
+        difficultyTimer += Time.deltaTime;
+        if (difficultyTimer >= difficultyIncreaseInterval)
         {
-            spawnIntervalCurve = new AnimationCurve();
-            spawnIntervalCurve.AddKey(0f, 2f);      // 开始：2秒间隔
-            spawnIntervalCurve.AddKey(0.5f, 1f);    // 50%时间：1秒间隔
-            spawnIntervalCurve.AddKey(1f, 0.3f);    // 结束：0.3秒间隔
-        }
+            difficultyTimer = 0f;
+            difficultyLevel++;
 
-        if (spawnCountCurve == null || spawnCountCurve.keys.Length == 0)
-        {
-            spawnCountCurve = new AnimationCurve();
-            spawnCountCurve.AddKey(0f, 1f);         // 开始：每波1个
-            spawnCountCurve.AddKey(0.5f, 2f);       // 50%时间：每波2个
-            spawnCountCurve.AddKey(1f, 5f);         // 结束：每波5个
-        }
+            // 增加难度：间隔变短、每波变多、属性变强
+            currentSpawnInterval = Mathf.Max(minSpawnIntervalLimit, currentSpawnInterval * 0.92f);
+            currentSpawnPerInterval = Mathf.Min(maxSpawnPerIntervalLimit, currentSpawnPerInterval + 1);
+            currentSpeedMultiplier = Mathf.Min(maxSpeedMultiplierLimit, currentSpeedMultiplier * 1.08f);
+            currentHealthMultiplier = Mathf.Min(maxHealthMultiplierLimit, currentHealthMultiplier * 1.05f);
+            currentDamageMultiplier = Mathf.Min(maxDamageMultiplierLimit, currentDamageMultiplier * 1.05f);
 
-        if (speedMultiplierCurve == null || speedMultiplierCurve.keys.Length == 0)
-        {
-            speedMultiplierCurve = new AnimationCurve();
-            speedMultiplierCurve.AddKey(0f, 1f);    // 开始：正常速度
-            speedMultiplierCurve.AddKey(0.5f, 1.5f);// 50%时间：1.5倍
-            speedMultiplierCurve.AddKey(1f, 3f);    // 结束：3倍速度
-        }
-    }
+            // 更新所有已存在的敌人属性
+            UpdateAllEnemyMultipliers();
 
-    float GetPressureFactor()
-    {
-        if (countdownManager == null) return 0f;
-
-        // 通过 GameManager 获取倒计时进度
-        if (GameManager.Instance != null)
-        {
-            float elapsed = GameManager.Instance.GetElapsedTime();
-            float totalTime = 0f;
-
-            // 从 DifficultySettings 获取总时间
-            if (currentDifficulty != null)
-                totalTime = currentDifficulty.timeLimit;
-
-            if (totalTime <= 0) return 0f;
-            return Mathf.Clamp01(elapsed / totalTime);
-        }
-        return 0f;
-    }
-
-    void UpdatePressureParameters()
-    {
-        float pressure = GetPressureFactor();
-
-        float intervalValue = spawnIntervalCurve.Evaluate(pressure);
-        float countValue = spawnCountCurve.Evaluate(pressure);
-        float speedValue = speedMultiplierCurve.Evaluate(pressure);
-
-        currentSpawnInterval = Mathf.Max(minSpawnInterval, intervalValue);
-        currentSpawnPerInterval = Mathf.Min(maxSpawnPerInterval, Mathf.RoundToInt(countValue));
-        currentSpeedMultiplier = Mathf.Min(maxSpeedMultiplier, speedValue);
-
-        // 高压时禁用冷却，让敌人疯狂生成
-        if (pressure > 0.8f)
-            enableCooldown = false;
-        else
-            enableCooldown = true;
-
-        // 更新现有敌人速度
-        if (Mathf.Abs(currentSpeedMultiplier - lastSpeedMultiplier) > 0.05f)
-        {
-            UpdateExistingEnemySpeeds();
-            lastSpeedMultiplier = currentSpeedMultiplier;
-        }
-
-        if (showDebugLogs && Time.frameCount % 60 == 0)
-        {
-            Debug.Log($"⏱️ [普通模式] 压力: {pressure:P0} | 间隔: {currentSpawnInterval:F2}s | " +
-                     $"每波: {currentSpawnPerInterval} | 速度: {currentSpeedMultiplier:F2}x");
+            if (showDebugLogs)
+            {
+                Debug.Log($"📈 [无限模式] 难度提升！等级: {difficultyLevel} | " +
+                         $"间隔: {currentSpawnInterval:F2}s | 每波: {currentSpawnPerInterval} | " +
+                         $"速度: {currentSpeedMultiplier:F2}x | 血量: {currentHealthMultiplier:F2}x | " +
+                         $"伤害: {currentDamageMultiplier:F2}x | 总敌人: {allActiveEnemies.Count}");
+            }
         }
     }
 
-    void UpdateExistingEnemySpeeds()
+    void UpdateAllEnemyMultipliers()
     {
         foreach (GameObject enemy in allActiveEnemies)
         {
@@ -405,39 +357,7 @@ public class EnemySpawner : MonoBehaviour
             EnemyAI ai = enemy.GetComponent<EnemyAI>();
             if (ai != null)
             {
-                // 使用 ApplyScalingMultipliers 更新所有属性
                 ai.ApplyScalingMultipliers(currentSpeedMultiplier, currentHealthMultiplier, currentDamageMultiplier);
-            }
-        }
-    }
-
-    void CheckFinalPhase()
-    {
-        float pressure = GetPressureFactor();
-        bool shouldBeFinal = pressure >= finalPhaseThreshold;
-
-        if (shouldBeFinal && !isFinalPhaseActive)
-        {
-            isFinalPhaseActive = true;
-            OnFinalPhaseStart();
-        }
-    }
-
-    void OnFinalPhaseStart()
-    {
-        Debug.Log("🔥🔥🔥 [普通模式] 最终阶段开始！敌人大军来袭！🔥🔥🔥");
-        StartCoroutine(SpawnFinalWave());
-    }
-
-    IEnumerator SpawnFinalWave()
-    {
-        yield return new WaitForSeconds(1f);
-        foreach (SpawnPointData spawnData in spawnPoints)
-        {
-            if (spawnData.isActive)
-            {
-                StartCoroutine(Routine_SpawnEnemies(spawnData, finalPhaseExtraEnemies));
-                yield return new WaitForSeconds(0.2f);
             }
         }
     }
@@ -559,19 +479,18 @@ public class EnemySpawner : MonoBehaviour
             BuildNavMeshImmediate();
 
         canSpawn = true;
-        if (showDebugLogs) Debug.Log("✅ 普通模式敌人生成已启用！");
+        if (showDebugLogs) Debug.Log("♾️ 无限模式敌人生成已启用！");
 
-        if (spawnOnStart && !initialSpawnDone)
+        if (!initialSpawnDone)
         {
-            PerformInitialSpawn();
-            initialSpawnDone = true;
+            StartCoroutine(SpawnInitialWave());
         }
     }
 
     public void DisableSpawning()
     {
         canSpawn = false;
-        if (showDebugLogs) Debug.Log("⏸️ 普通模式敌人生成已禁用");
+        if (showDebugLogs) Debug.Log("⏸️ 无限模式敌人生成已禁用");
     }
 
     public bool IsSpawningEnabled() => canSpawn;
@@ -607,7 +526,7 @@ public class EnemySpawner : MonoBehaviour
             UpdateWeightList();
         }
 
-        if (showDebugLogs) Debug.Log($"📋 普通模式参数已更新: 间隔={spawnInterval}s, 每波={spawnPerInterval}, 速度={speedMultiplier}x");
+        if (showDebugLogs) Debug.Log($"📋 无限模式参数已更新: 间隔={spawnInterval}s, 每波={spawnPerInterval}, 速度={speedMultiplier}x");
     }
 
     public void ApplyDifficultySettings(DifficultySettings settings)
@@ -629,17 +548,23 @@ public class EnemySpawner : MonoBehaviour
             UpdateWeightList();
         }
 
-        // 普通模式特定设置
-        if (settings.mode == GameMode.Normal)
+        // 无限模式特定设置
+        if (settings.mode == GameMode.Infinite)
         {
-            spawnInterval = settings.spawnInterval;
-            spawnPerInterval = settings.spawnPerInterval;
+            minSpawnIntervalLimit = settings.spawnIntervalMin;
+            maxSpawnPerIntervalLimit = settings.spawnPerIntervalMax;
+            maxSpeedMultiplierLimit = settings.speedMultiplierMax;
+            maxHealthMultiplierLimit = settings.healthMultiplierMax;
+            maxDamageMultiplierLimit = settings.damageMultiplierMax;
+            difficultyIncreaseInterval = settings.scalingInterval;
+            enableDifficultyScaling = settings.enableScaling;
         }
 
-        currentSpawnInterval = spawnInterval;
-        currentSpawnPerInterval = spawnPerInterval;
+        // 初始值
+        currentSpawnInterval = settings.spawnInterval;
+        currentSpawnPerInterval = settings.spawnPerInterval;
 
-        if (showDebugLogs) Debug.Log($"📋 已应用难度设置: {settings.difficultyName}");
+        if (showDebugLogs) Debug.Log($"📋 已应用无限模式难度设置: {settings.difficultyName}");
     }
 
     public void UpdateWeightList()
@@ -705,7 +630,7 @@ public class EnemySpawner : MonoBehaviour
             }
             else
             {
-                spawnData.spawnRadius = defaultSpawnRadius;
+                spawnData.spawnRadius = 5f;
             }
         }
     }
@@ -749,7 +674,14 @@ public class EnemySpawner : MonoBehaviour
         globalTotalSpawned = 0;
         initialSpawnDone = false;
         canSpawn = false;
-        isFinalPhaseActive = false;
+        difficultyLevel = 0;
+        difficultyTimer = 0f;
+        globalSpawnTimer = 0f;
+        currentSpawnInterval = 2f;
+        currentSpawnPerInterval = 1;
+        currentSpeedMultiplier = 1f;
+        currentHealthMultiplier = 1f;
+        currentDamageMultiplier = 1f;
         foreach (SpawnPointData spawnData in spawnPoints)
         {
             spawnData.isActive = false;
@@ -779,7 +711,7 @@ public class EnemySpawner : MonoBehaviour
             spawnPoints.Add(data);
         }
         ApplyTileSizeToSpawnPoints();
-        if (showDebugLogs) Debug.Log($"🔄 普通模式生成点已更新：{spawnPoints.Count} 个生成点");
+        if (showDebugLogs) Debug.Log($"🔄 无限模式生成点已更新：{spawnPoints.Count} 个生成点");
     }
 
     public string GetStats()
@@ -792,8 +724,8 @@ public class EnemySpawner : MonoBehaviour
             if (spawnData.isOnCooldown) coolingCount++;
         }
         string limitInfo = enableMaxLimit ? allActiveEnemies.Count + "/" + maxEnemyCount : "无限 " + allActiveEnemies.Count;
-        float pressure = GetPressureFactor();
-        return $"活跃: {activeCount}/{spawnPoints.Count} | 敌人: {limitInfo} | 压力: {pressure:P0}";
+        return $"活跃: {activeCount}/{spawnPoints.Count} | 敌人: {limitInfo} | " +
+               $"等级: {difficultyLevel} | 间隔: {currentSpawnInterval:F2}s";
     }
 
     void InitializeSpawner()
@@ -834,17 +766,12 @@ public class EnemySpawner : MonoBehaviour
             else Gizmos.color = Color.blue;
             Gizmos.DrawSphere(spawnData.point.position, 0.5f);
 
-            float activation = spawnData.activationRadius;
-            float deactivation = spawnData.deactivationRadius;
+            float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : 5f;
+            Gizmos.color = new Color(1f, 0f, 1f, 0.2f);
+            Gizmos.DrawWireSphere(spawnData.point.position, spawnRadius * infiniteRangeMultiplier);
 
-            Gizmos.color = new Color(0f, 1f, 0f, 0.2f);
-            Gizmos.DrawWireSphere(spawnData.point.position, activation);
-            Gizmos.color = new Color(1f, 0f, 0f, 0.15f);
-            Gizmos.DrawWireSphere(spawnData.point.position, deactivation);
-
-            float spawnRadius = spawnData.spawnRadius > 0 ? spawnData.spawnRadius : defaultSpawnRadius;
-            Gizmos.color = new Color(1f, 0f, 1f, 0.15f);
-            Gizmos.DrawWireSphere(spawnData.point.position, spawnRadius);
+            Gizmos.color = new Color(0f, 1f, 1f, 0.1f);
+            Gizmos.DrawWireSphere(spawnData.point.position, spawnRadius * infiniteRangeMultiplier * 1.5f);
 
 #if UNITY_EDITOR
             string status = spawnData.isOnCooldown ?
@@ -853,9 +780,8 @@ public class EnemySpawner : MonoBehaviour
             UnityEditor.Handles.Label(
                 spawnData.point.position + Vector3.up * 2.5f,
                 spawnData.point.name + "\n" + status +
-                "\n激活: " + activation +
-                "\n停用: " + deactivation +
                 "\n生成半径: " + spawnRadius.ToString("F2") +
+                "\n范围倍率: " + infiniteRangeMultiplier +
                 "\nTile类型: " + spawnData.tileType.ToString()
             );
 #endif

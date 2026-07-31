@@ -1009,6 +1009,72 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!1 &808298908
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 808298909}
+  - component: {fileID: 808298910}
+  m_Layer: 0
+  m_Name: Buff Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &808298909
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 808298908}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 839814766}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &808298910
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 808298908}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 250b0199153b95840a11e4622e38e5c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  buffPool:
+  - buffData: {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
+    weight: 4
+  - buffData: {fileID: 11400000, guid: b3c100088aec0a9448b1bd543780eae5, type: 2}
+    weight: 3
+  - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
+    weight: 3
+  spawnRadius: 12
+  spawnInterval: 6
+  maxBuffCount: 5
+  player: {fileID: 6434239907179957981}
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 64
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 8
+  checkRadius: 0.8
+  maxRetries: 10
+  despawnDistance: 30
+  buffLifeTime: 30
+  cleanupInterval: 2
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -1091,6 +1157,7 @@ Transform:
   - {fileID: 4761673725259122327}
   - {fileID: 2493733918704890547}
   - {fileID: 1653268531}
+  - {fileID: 808298909}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1018543807
@@ -3429,8 +3496,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 57.037354, y: 0}
+  m_SizeDelta: {x: -114.07471, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1356008692683080378
 GameObject:
@@ -3715,7 +3782,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentDifficulty: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
-  enemySpawner: {fileID: 7342686693655629100}
+  normalSpawner: {fileID: 0}
+  infiniteSpawner: {fileID: 0}
   easyConfig: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   normalConfig: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   hardConfig: {fileID: 11400000, guid: e4769ee8dacc85243a7a48ab19bd35d0, type: 2}
@@ -7603,6 +7671,7 @@ GameObject:
   - component: {fileID: 1129048699946095783}
   - component: {fileID: 3371960154176138191}
   - component: {fileID: 8951593318951842520}
+  - component: {fileID: 8951593318951842521}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -9532,19 +9601,60 @@ MonoBehaviour:
     tileType: 0
   currentDifficulty: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   useDifficultySettings: 1
+  spawnInterval: 2
+  spawnPerInterval: 1
   initialSpawnCount: 2
   spawnOnStart: 1
-  initialWaveCount: 50
-  minSpawnDistance: 8
-  maxSpawnDistance: 20
   defaultSpawnRadius: 5
+  enableCountdownPressure: 1
+  spawnIntervalCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 2
+      outSlope: 2
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spawnCountCurve:
+    serializedVersion: 2
+    m_Curve: []
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  speedMultiplierCurve:
+    serializedVersion: 2
+    m_Curve: []
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  minSpawnInterval: 0.3
+  maxSpawnPerInterval: 5
+  maxSpeedMultiplier: 3
+  enableFinalPhase: 1
+  finalPhaseThreshold: 0.8
+  finalPhaseExtraEnemies: 3
   navMeshSampleRadius: 5
   maxSpawnAttempts: 30
-  enemyWeights: []
-  showDebugLogs: 1
-  infiniteRangeMultiplier: 2.5
   rebuildDelay: 1.5
   autoRebuildOnTileGenerated: 1
+  enemyWeights: []
+  showDebugLogs: 1
 --- !u!114 &7385240241384388606
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10804,6 +10914,7 @@ MonoBehaviour:
   sfxValueText: {fileID: 6579336922849034606}
   player: {fileID: 8951593318951842520}
   enemySpawner: {fileID: 7342686693655629100}
+  infiniteSpawner: {fileID: 0}
   gameManager: {fileID: 1673762878305393417}
 --- !u!114 &8493055754762611039
 MonoBehaviour:
@@ -11298,6 +11409,18 @@ MonoBehaviour:
   joystickHandle: {fileID: 3796785054616466393}
   joystickRadius: 150
   actionButton: {fileID: 1185096912610347657}
+--- !u!114 &8951593318951842521
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5908955496620676199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 412bd4cf103325d40b51c38ea97d41aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &8978822969436104654
 GameObject:
   m_ObjectHideFlags: 0

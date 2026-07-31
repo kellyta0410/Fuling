@@ -39,15 +39,10 @@ public class CountdownManager : MonoBehaviour
         PlayerController player = FindObjectOfType<PlayerController>();
         if (player != null) player.SetCanMove(false);
 
-        // ⭐ 2. 查找并明确禁用敌人生成器
-        EnemySpawner spawner = FindObjectOfType<EnemySpawner>();
-        if (spawner != null)
-        {
-            spawner.StopSpawning(); // 确保倒计时期间绝对关闭生成
-            Debug.Log("⏸️ 倒计时期间禁用敌人生成");
-        }
+        // ⭐ 2. 禁用所有敌人生成器
+        DisableAllSpawners();
 
-        // ⭐ 3. 冻结场景中原有的敌人（防止地图自带预设敌人移动）
+        // ⭐ 3. 冻结场景中原有的敌人
         EnemyAI[] allEnemies = FindObjectsOfType<EnemyAI>();
         foreach (EnemyAI enemy in allEnemies)
         {
@@ -60,7 +55,7 @@ public class CountdownManager : MonoBehaviour
         // ⭐ 4. 暂停物理和时间
         Time.timeScale = 0f;
 
-        // ⭐ 5. 倒计时循环（使用真实时间计时）
+        // ⭐ 5. 倒计时循环
         for (int i = (int)countdownDuration; i > 0; i--)
         {
             if (countdownText != null)
@@ -73,7 +68,7 @@ public class CountdownManager : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(0.5f);
 
-        // ⭐ 6. 恢复游戏常规运行
+        // ⭐ 6. 恢复游戏
         Time.timeScale = 1f;
         isCountingDown = false;
         gameStarted = true;
@@ -83,25 +78,14 @@ public class CountdownManager : MonoBehaviour
 
         if (player != null) player.SetCanMove(true);
 
-        // ⭐ 7. 启动游戏核心逻辑
+        // ⭐ 7. 启动游戏
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
 
-        // ⭐ 8. 【关键】重新获取 Spawner 并启动敌人生成！
-        // 重新 Find 确保即使 Spawner 是动态生成的也不会报空
-        if (spawner == null) spawner = FindObjectOfType<EnemySpawner>();
+        // ⭐ 8. 启用所有生成器
+        EnableAllSpawners();
 
-        if (spawner != null)
-        {
-            spawner.StartSpawning(); // 内部会设置 canSpawn = true 并触发 PerformInitialSpawn()
-            Debug.Log("✅ 倒计时结束，敌人生成已启用！");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ 未能在场景中找到 EnemySpawner！");
-        }
-
-        // ⭐ 9. 恢复原有敌人的 AI 组件
+        // ⭐ 9. 恢复敌人AI
         foreach (EnemyAI enemy in allEnemies)
         {
             if (enemy != null)
@@ -123,10 +107,60 @@ public class CountdownManager : MonoBehaviour
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
 
-        EnemySpawner spawner = FindObjectOfType<EnemySpawner>();
-        if (spawner != null)
+        EnableAllSpawners();
+    }
+
+    private void DisableAllSpawners()
+    {
+        EnemySpawner normal = FindObjectOfType<EnemySpawner>();
+        if (normal != null)
         {
-            spawner.StartSpawning();
+            normal.StopSpawning();
+            Debug.Log("⏸️ 倒计时期间禁用普通生成器");
+        }
+
+        InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
+        if (infinite != null)
+        {
+            infinite.StopSpawning();
+            Debug.Log("⏸️ 倒计时期间禁用无限生成器");
+        }
+    }
+
+    private void EnableAllSpawners()
+    {
+        // 根据 GameManager 的模式启用对应的生成器
+        if (GameManager.Instance != null)
+        {
+            bool isInfinite = GameManager.Instance.IsInfiniteMode();
+
+            if (isInfinite)
+            {
+                InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
+                if (infinite != null)
+                {
+                    infinite.StartSpawning();
+                    Debug.Log("✅ 倒计时结束，无限生成器已启用");
+                }
+            }
+            else
+            {
+                EnemySpawner normal = FindObjectOfType<EnemySpawner>();
+                if (normal != null)
+                {
+                    normal.StartSpawning();
+                    Debug.Log("✅ 倒计时结束，普通生成器已启用");
+                }
+            }
+        }
+        else
+        {
+            // 降级方案：启用所有
+            EnemySpawner normal = FindObjectOfType<EnemySpawner>();
+            if (normal != null) normal.StartSpawning();
+
+            InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
+            if (infinite != null) infinite.StartSpawning();
         }
     }
 

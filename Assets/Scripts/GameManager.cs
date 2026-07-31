@@ -8,7 +8,10 @@ public class GameManager : MonoBehaviour
 
     [Header("游戏状态")]
     public DifficultySettings currentDifficulty;
-    public EnemySpawner enemySpawner;
+
+    [Header("生成器（两种模式）")]
+    public EnemySpawner normalSpawner;
+    public InfiniteEnemySpawner infiniteSpawner;
 
     [Header("所有难度配置")]
     public DifficultySettings easyConfig;
@@ -47,20 +50,64 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        if (enemySpawner == null)
-            enemySpawner = FindObjectOfType<EnemySpawner>();
+        if (normalSpawner == null)
+            normalSpawner = FindObjectOfType<EnemySpawner>();
+
+        if (infiniteSpawner == null)
+            infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
 
         if (worldManager == null)
             worldManager = FindObjectOfType<InfiniteWorldManager>();
 
-        if (currentDifficulty != null && enemySpawner != null)
+        // 根据模式启用对应的生成器
+        if (currentDifficulty != null)
         {
+            if (currentDifficulty.IsInfiniteMode())
+            {
+                if (normalSpawner != null)
+                {
+                    normalSpawner.gameObject.SetActive(false);
+                    normalSpawner.enabled = false;
+                }
+                if (infiniteSpawner != null)
+                {
+                    infiniteSpawner.gameObject.SetActive(true);
+                    infiniteSpawner.enabled = true;
+                    // 传递引用
+                    if (infiniteSpawner.playerTarget == null)
+                    {
+                        GameObject player = GameObject.FindGameObjectWithTag("Player");
+                        if (player != null) infiniteSpawner.playerTarget = player.transform;
+                    }
+                }
+                Debug.Log($"♾️ 无限模式激活，使用 InfiniteEnemySpawner");
+            }
+            else
+            {
+                if (infiniteSpawner != null)
+                {
+                    infiniteSpawner.gameObject.SetActive(false);
+                    infiniteSpawner.enabled = false;
+                }
+                if (normalSpawner != null)
+                {
+                    normalSpawner.gameObject.SetActive(true);
+                    normalSpawner.enabled = true;
+                    if (normalSpawner.playerTarget == null)
+                    {
+                        GameObject player = GameObject.FindGameObjectWithTag("Player");
+                        if (player != null) normalSpawner.playerTarget = player.transform;
+                    }
+                }
+                Debug.Log($"📋 普通模式激活，使用 EnemySpawner");
+            }
+
             ApplyCurrentDifficultyToSpawner();
             StartGame();
         }
         else
         {
-            Debug.LogError($"❌ 场景 '{SceneManager.GetActiveScene().name}' 配置错误！请在 Inspector 中拖拽 currentDifficulty 和 enemySpawner");
+            Debug.LogError($"❌ 场景 '{SceneManager.GetActiveScene().name}' 配置错误！请在 Inspector 中拖拽 currentDifficulty");
         }
     }
 
@@ -99,10 +146,10 @@ public class GameManager : MonoBehaviour
                     Debug.Log("✅ 无限世界管理器已激活");
                 }
 
-                if (enemySpawner != null)
+                if (infiniteSpawner != null)
                 {
-                    enemySpawner.EnableSpawning();
-                    Debug.Log("✅ EnemySpawner 生成已启用");
+                    infiniteSpawner.EnableSpawning();
+                    Debug.Log("✅ InfiniteEnemySpawner 生成已启用");
                 }
 
                 UIManager uiManager = FindObjectOfType<UIManager>();
@@ -118,9 +165,9 @@ public class GameManager : MonoBehaviour
                     worldManager.gameObject.SetActive(false);
                 }
 
-                if (enemySpawner != null)
+                if (normalSpawner != null)
                 {
-                    enemySpawner.EnableSpawning();
+                    normalSpawner.EnableSpawning();
                     Debug.Log("✅ EnemySpawner 生成已启用（普通模式）");
                 }
 
@@ -233,39 +280,45 @@ public class GameManager : MonoBehaviour
 
     void ApplyCurrentDifficultyToSpawner()
     {
-        if (enemySpawner == null) return;
+        if (currentDifficulty == null) return;
 
-        bool isInfinite = currentDifficulty != null && currentDifficulty.IsInfiniteMode();
+        bool isInfinite = currentDifficulty.IsInfiniteMode();
 
         if (isInfinite)
         {
-            enemySpawner.ApplyScalingParameters(
-                currentSpawnInterval,
-                currentSpawnPerInterval,
-                currentSpeedMultiplier,
-                currentHealthMultiplier,
-                currentDamageMultiplier,
-                currentDifficulty.enableMaxLimit,
-                currentMaxEnemyCount,
-                currentDifficulty.enableCooldown,
-                currentDifficulty.cooldownTime,
-                currentDifficulty.allowedEnemyPrefabs
-            );
+            if (infiniteSpawner != null)
+            {
+                infiniteSpawner.ApplyScalingParameters(
+                    currentSpawnInterval,
+                    currentSpawnPerInterval,
+                    currentSpeedMultiplier,
+                    currentHealthMultiplier,
+                    currentDamageMultiplier,
+                    currentDifficulty.enableMaxLimit,
+                    currentMaxEnemyCount,
+                    currentDifficulty.enableCooldown,
+                    currentDifficulty.cooldownTime,
+                    currentDifficulty.allowedEnemyPrefabs
+                );
+            }
         }
         else
         {
-            enemySpawner.ApplyScalingParameters(
-                currentDifficulty.spawnInterval,
-                currentDifficulty.spawnPerInterval,
-                1f,
-                1f,
-                1f,
-                currentDifficulty.enableMaxLimit,
-                currentDifficulty.maxEnemyCount,
-                currentDifficulty.enableCooldown,
-                currentDifficulty.cooldownTime,
-                currentDifficulty.allowedEnemyPrefabs
-            );
+            if (normalSpawner != null)
+            {
+                normalSpawner.ApplyScalingParameters(
+                    currentDifficulty.spawnInterval,
+                    currentDifficulty.spawnPerInterval,
+                    1f,
+                    1f,
+                    1f,
+                    currentDifficulty.enableMaxLimit,
+                    currentDifficulty.maxEnemyCount,
+                    currentDifficulty.enableCooldown,
+                    currentDifficulty.cooldownTime,
+                    currentDifficulty.allowedEnemyPrefabs
+                );
+            }
         }
     }
 
@@ -291,9 +344,14 @@ public class GameManager : MonoBehaviour
         isGameOver = true;
         hasProcessedGameOver = true;
 
-        if (enemySpawner != null)
+        // 禁用所有生成器
+        if (normalSpawner != null)
         {
-            enemySpawner.DisableSpawning();
+            normalSpawner.DisableSpawning();
+        }
+        if (infiniteSpawner != null)
+        {
+            infiniteSpawner.DisableSpawning();
         }
 
         int coins = 0;
@@ -404,7 +462,6 @@ public class GameManager : MonoBehaviour
     public float GetCurrentDamageMultiplier() => currentDamageMultiplier;
     public int GetCurrentMaxEnemyCount() => currentMaxEnemyCount;
 
-    // ⭐ 以下动态范围方法已被 EnemyAI 弃用，但保留以防其他脚本使用（若不使用可删除）
     public float GetCurrentDetectionRange()
     {
         if (!IsInfiniteMode() || currentDifficulty == null)
@@ -436,10 +493,15 @@ public class GameManager : MonoBehaviour
         gameStartTime = 0f;
         currentMaxEnemyCount = currentDifficulty != null ? currentDifficulty.maxEnemyCount : 30;
 
-        if (enemySpawner != null)
+        if (normalSpawner != null)
         {
-            enemySpawner.DisableSpawning();
-            enemySpawner.ResetSpawner();
+            normalSpawner.DisableSpawning();
+            normalSpawner.ResetSpawner();
+        }
+        if (infiniteSpawner != null)
+        {
+            infiniteSpawner.DisableSpawning();
+            infiniteSpawner.ResetSpawner();
         }
 
         Debug.Log("🔄 游戏状态已重置");
