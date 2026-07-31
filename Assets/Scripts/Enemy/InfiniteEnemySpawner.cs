@@ -419,7 +419,7 @@ public class InfiniteEnemySpawner : MonoBehaviour
                 GameObject surfaceObj = new GameObject("NavMeshSurface (Runtime)");
                 navMeshSurface = surfaceObj.AddComponent<NavMeshSurface>();
                 navMeshSurface.layerMask = ~0;
-                navMeshSurface.collectObjects = CollectObjects.Children;
+                navMeshSurface.collectObjects = CollectObjects.All;
                 navMeshSurface.defaultArea = 0;
             }
         }

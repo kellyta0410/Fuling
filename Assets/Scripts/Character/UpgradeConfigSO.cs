@@ -113,6 +113,7 @@ public class UpgradeConfigSO : ScriptableObject
 #if UNITY_EDITOR
     public void OnValidate()
     {
+        generatedLevels.Clear();
         GenerateLevels();
     }
 

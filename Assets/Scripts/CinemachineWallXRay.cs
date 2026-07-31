@@ -28,6 +28,7 @@ public class CinemachineWallXRay : MonoBehaviour
     private class WallData
     {
         public Material material;
+        public Shader originalShader;
         public Color originalColor;
         public float currentAlpha;
     }
@@ -86,21 +87,28 @@ public class CinemachineWallXRay : MonoBehaviour
                     // 如果有旧的，先恢复
                     if (currentFadingWall != null && currentWallData != null)
                     {
-                        Color originalCol = currentWallData.originalColor;
-                        originalCol.a = 1f;
-                        currentWallData.material.color = originalCol;
-                        currentWallData.material.SetFloat("_Transparency", 1f);
+                        RestoreWallData(currentWallData);
                     }
 
                     // 初始化新墙壁
+                    Shader xrayShader = Shader.Find("Custom/XRayWall");
+                    if (xrayShader == null)
+                    {
+                        Debug.LogWarning("[CinemachineWallXRay] 找不到 Shader: Custom/XRayWall，跳过 X-Ray 处理");
+                        currentFadingWall = null;
+                        currentWallData = null;
+                        return;
+                    }
+
                     Material mat = renderer.material;
-                    mat.shader = Shader.Find("Custom/XRayWall");
                     currentWallData = new WallData
                     {
                         material = mat,
+                        originalShader = mat.shader,
                         originalColor = mat.color,
                         currentAlpha = 1f
                     };
+                    mat.shader = xrayShader;
                     currentFadingWall = targetWall;
                 }
 
@@ -125,6 +133,7 @@ public class CinemachineWallXRay : MonoBehaviour
 
                 if (currentWallData.currentAlpha > 0.99f)
                 {
+                    RestoreWallData(currentWallData);
                     currentFadingWall = null;
                     currentWallData = null;
                 }
@@ -132,14 +141,24 @@ public class CinemachineWallXRay : MonoBehaviour
         }
     }
 
+    // 完全还原墙壁材质（shader + 颜色）
+    void RestoreWallData(WallData data)
+    {
+        if (data == null || data.material == null) return;
+        if (data.originalShader != null)
+            data.material.shader = data.originalShader;
+        Color finalColor = data.originalColor;
+        finalColor.a = 1f;
+        data.material.color = finalColor;
+        if (data.material.HasProperty("_Transparency"))
+            data.material.SetFloat("_Transparency", 1f);
+    }
+
     void OnDestroy()
     {
         if (currentWallData != null)
         {
-            Color finalColor = currentWallData.originalColor;
-            finalColor.a = 1f;
-            currentWallData.material.color = finalColor;
-            currentWallData.material.SetFloat("_Transparency", 1f);
+            RestoreWallData(currentWallData);
         }
         currentFadingWall = null;
         currentWallData = null;

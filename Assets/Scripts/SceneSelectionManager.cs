@@ -103,6 +103,8 @@ public class SceneSelectionManager : MonoBehaviour
 
     void BindCharacterButtons()
     {
+        if (characterButtons == null) return;
+
         for (int i = 0; i < characterButtons.Length; i++)
         {
             if (characterButtons[i] != null)
@@ -141,6 +143,8 @@ public class SceneSelectionManager : MonoBehaviour
 
     void HighlightCharacterButton(int selectedIndex)
     {
+        if (characterButtons == null) return;
+
         for (int i = 0; i < characterButtons.Length; i++)
         {
             if (characterButtons[i] == null) continue;
@@ -492,7 +496,7 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void UpdateCharacterButtons()
     {
-        if (gameDataManager == null) return;
+        if (gameDataManager == null || characterButtons == null) return;
 
         CharacterData[] allCharacters = gameDataManager.GetAllCharacters();
 

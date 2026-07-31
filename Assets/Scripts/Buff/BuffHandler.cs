@@ -119,8 +119,8 @@ public class Buff
 
     public void Refresh(BuffDataSO newData)
     {
-        if (Data.duration > 0)
-            currentDuration = Data.duration;
+        if (newData != null && newData.duration > 0)
+            currentDuration = newData.duration;
         // 若需要叠加层数可在此扩展
     }
 
@@ -155,8 +155,7 @@ public class Buff
                 break;
 
             case BuffType.PowerUp:
-                int atkAdd = Mathf.RoundToInt(Data.effectValue);
-                handler.ModifyAttack(-atkAdd); // 减去之前加的值
+                handler.ModifyAttack(0); // 恢复为基础攻击力
                 break;
         }
         Debug.Log($"Buff {Data.buffName} 已移除");

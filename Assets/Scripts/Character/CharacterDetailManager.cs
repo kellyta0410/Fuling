@@ -162,15 +162,16 @@ public class CharacterDetailManager : MonoBehaviour
         var normalConfig = GetNormalAttackConfig(character);
         var skillConfig = GetSkillAttackConfig(character);
 
-        int maxLevel = normalConfig != null ? normalConfig.maxLevel : 10;
+        int normalMaxLevel = normalConfig != null ? normalConfig.maxLevel : 10;
+        int skillMaxLevel = skillConfig != null ? skillConfig.maxLevel : 10;
 
         // ===== 普通攻击 =====
         int normalLevel = GetNormalLevel(name);
-        bool normalMaxed = normalLevel >= maxLevel;
+        bool normalMaxed = normalLevel >= normalMaxLevel;
         var nextNormal = normalConfig?.GetLevelData(normalLevel + 1);
 
         if (normalAttackLevelText != null)
-            normalAttackLevelText.text = $"Lv.{normalLevel}/{maxLevel}";
+            normalAttackLevelText.text = $"Lv.{normalLevel}/{normalMaxLevel}";
 
         if (normalAttackDescriptionText != null)
             normalAttackDescriptionText.text = nextNormal?.description ?? "已满级";
@@ -204,11 +205,11 @@ public class CharacterDetailManager : MonoBehaviour
 
         // ===== 技能攻击 =====
         int skillLevel = GetSkillLevel(name);
-        bool skillMaxed = skillLevel >= maxLevel;
+        bool skillMaxed = skillLevel >= skillMaxLevel;
         var nextSkill = skillConfig?.GetLevelData(skillLevel + 1);
 
         if (skillAttackLevelText != null)
-            skillAttackLevelText.text = $"Lv.{skillLevel}/{maxLevel}";
+            skillAttackLevelText.text = $"Lv.{skillLevel}/{skillMaxLevel}";
 
         if (skillAttackDescriptionText != null)
             skillAttackDescriptionText.text = nextSkill?.description ?? "已满级";

@@ -151,17 +151,25 @@ public class PlayerController : MonoBehaviour
 
     void LoadCharacterData()
     {
-        if (dataManager == null)
+        if (dataManager != null)
         {
-            Debug.LogWarning("GameDataManager 未找到，使用默认属性");
-            return;
+            currentCharacterData = dataManager.CurrentCharacter;
         }
-
-        currentCharacterData = dataManager.CurrentCharacter;
+        else
+        {
+            Debug.LogWarning("GameDataManager 未找到，尝试从 PlayerPrefs 加载角色");
+        }
 
         if (currentCharacterData == null)
         {
-            Debug.LogWarning("未选择角色，使用默认属性");
+            currentCharacterData = LoadFallbackCharacter();
+        }
+
+        if (currentCharacterData == null)
+        {
+            Debug.LogWarning("未找到角色数据，使用 Inspector 默认属性");
+            baseSpeed = speed;
+            baseAttack = attackDamage;
             return;
         }
 
@@ -173,6 +181,8 @@ public class PlayerController : MonoBehaviour
 
         baseSpeed = speed;
         baseAttack = attackDamage;
+
+        if (dataManager == null) return;
 
         // ===== 应用普通攻击升级加成 =====
         string characterName = currentCharacterData.characterName;
@@ -206,6 +216,20 @@ public class PlayerController : MonoBehaviour
         }
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");
+    }
+
+    CharacterData LoadFallbackCharacter()
+    {
+        string name = PlayerPrefs.GetString("SelectedCharacter", "");
+        if (string.IsNullOrEmpty(name)) return null;
+
+        CharacterData[] characters = Resources.LoadAll<CharacterData>("CharacterData");
+        foreach (var character in characters)
+        {
+            if (character != null && character.characterName == name)
+                return character;
+        }
+        return null;
     }
 
     void Update()
@@ -572,11 +596,13 @@ public class PlayerController : MonoBehaviour
 
     public void ApplySpeedMultiplier(float multiplier)
     {
+        if (baseSpeed <= 0f) baseSpeed = speed;
         speed = baseSpeed * multiplier;
     }
 
     public void ApplyAttackAdditive(int additive)
     {
+        if (baseAttack <= 0) baseAttack = attackDamage;
         attackDamage = baseAttack + additive;
     }
 
