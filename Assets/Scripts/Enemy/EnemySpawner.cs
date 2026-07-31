@@ -25,14 +25,9 @@ public class EnemySpawner : MonoBehaviour
     public bool spawnOnStart = true;
     public float defaultSpawnRadius = 5f;
 
-    [Header("普通模式 - 压力系统（倒计时变难）")]
-    public bool enableCountdownPressure = true;
-    public AnimationCurve spawnIntervalCurve;
-    public AnimationCurve spawnCountCurve;
-    public AnimationCurve speedMultiplierCurve;
-    public float minSpawnInterval = 0.3f;
-    public int maxSpawnPerInterval = 5;
-    public float maxSpeedMultiplier = 3f;
+    [Header("普通模式 - 阶层式升级（时间驱动）")]
+    public bool enableTieredDifficulty = true;
+    public TierData[] difficultyTiers;
 
     [Header("普通模式 - 最终阶段")]
     public bool enableFinalPhase = true;
@@ -66,6 +61,14 @@ public class EnemySpawner : MonoBehaviour
     private bool canSpawn = false;
     private bool isFinalPhaseActive = false;
     private float lastSpeedMultiplier = 1f;
+
+    // 阶层追踪
+    private int currentTierIndex = -1;
+    private int lastTierIndex = -1;
+    private float tierUpgradeCooldown = 0f;
+    private bool showTierMessage = false;
+    private float tierMessageTimer = 0f;
+    private string currentTierMessage = "";
 
     private CountdownManager countdownManager;
     private InfiniteWorldManager worldManager;
@@ -104,10 +107,49 @@ public class EnemySpawner : MonoBehaviour
         public float weight = 1f;
     }
 
+    [System.Serializable]
+    public class TierData
+    {
+        [Header("阶层配置")]
+        public string tierName = "第1阶";
+
+        [Tooltip("到达这个时间（秒）后激活此阶层")]
+        public float timeThreshold = 0f;
+
+        [Tooltip("生成间隔（秒）")]
+        public float spawnInterval = 2f;
+
+        [Tooltip("每次生成数量")]
+        public int spawnCount = 1;
+
+        [Tooltip("速度倍率")]
+        public float speedMultiplier = 1f;
+
+        [Tooltip("血量倍率")]
+        public float healthMultiplier = 1f;
+
+        [Tooltip("伤害倍率")]
+        public float damageMultiplier = 1f;
+
+        [Tooltip("是否启用冷却")]
+        public bool enableCooldown = true;
+
+        [Tooltip("升级时显示的提示文字（留空不显示）")]
+        public string upgradeMessage = "";
+
+        [Tooltip("此阶层的颜色（用于调试）")]
+        public Color tierColor = Color.white;
+    }
+
     void Awake()
     {
         canSpawn = false;
-        InitializePressureCurves();
+
+        // 如果没有配置阶层，创建默认
+        if (difficultyTiers == null || difficultyTiers.Length == 0)
+        {
+            CreateDefaultTiers();
+        }
     }
 
     void Start()
@@ -129,10 +171,10 @@ public class EnemySpawner : MonoBehaviour
             CleanupDeadEnemies();
         }
 
-        // 更新压力参数（倒计时越接近结束越难）
-        if (enableCountdownPressure)
+        // 更新阶层（时间驱动）
+        if (enableTieredDifficulty)
         {
-            UpdatePressureParameters();
+            UpdateTier();
         }
 
         // 检查最终阶段
@@ -317,87 +359,198 @@ public class EnemySpawner : MonoBehaviour
         initialSpawnDone = true;
     }
 
-    // ---------- 压力系统（倒计时越来越难） ----------
-    void InitializePressureCurves()
+    // ====================================================================
+    //  ⭐ 核心：阶层式升级系统
+    // ====================================================================
+
+    void CreateDefaultTiers()
     {
-        if (spawnIntervalCurve == null || spawnIntervalCurve.keys.Length == 0)
+        // 创建默认的6个阶层（90秒倒计时为例）
+        difficultyTiers = new TierData[]
         {
-            spawnIntervalCurve = new AnimationCurve();
-            spawnIntervalCurve.AddKey(0f, 2f);      // 开始：2秒间隔
-            spawnIntervalCurve.AddKey(0.5f, 1f);    // 50%时间：1秒间隔
-            spawnIntervalCurve.AddKey(1f, 0.3f);    // 结束：0.3秒间隔
-        }
-
-        if (spawnCountCurve == null || spawnCountCurve.keys.Length == 0)
-        {
-            spawnCountCurve = new AnimationCurve();
-            spawnCountCurve.AddKey(0f, 1f);         // 开始：每波1个
-            spawnCountCurve.AddKey(0.5f, 2f);       // 50%时间：每波2个
-            spawnCountCurve.AddKey(1f, 5f);         // 结束：每波5个
-        }
-
-        if (speedMultiplierCurve == null || speedMultiplierCurve.keys.Length == 0)
-        {
-            speedMultiplierCurve = new AnimationCurve();
-            speedMultiplierCurve.AddKey(0f, 1f);    // 开始：正常速度
-            speedMultiplierCurve.AddKey(0.5f, 1.5f);// 50%时间：1.5倍
-            speedMultiplierCurve.AddKey(1f, 3f);    // 结束：3倍速度
-        }
+            new TierData {
+                tierName = "🌱 平静期",
+                timeThreshold = 0f,
+                spawnInterval = 2.0f,
+                spawnCount = 1,
+                speedMultiplier = 1.0f,
+                healthMultiplier = 1.0f,
+                damageMultiplier = 1.0f,
+                enableCooldown = true,
+                upgradeMessage = "🌱 平静期开始..."
+            },
+            new TierData {
+                tierName = "⚔️ 热身期",
+                timeThreshold = 15f,
+                spawnInterval = 1.8f,
+                spawnCount = 1,
+                speedMultiplier = 1.1f,
+                healthMultiplier = 1.1f,
+                damageMultiplier = 1.0f,
+                enableCooldown = true,
+                upgradeMessage = "⚔️ 敌人开始活跃！"
+            },
+            new TierData {
+                tierName = "🔥 活跃期",
+                timeThreshold = 30f,
+                spawnInterval = 1.5f,
+                spawnCount = 2,
+                speedMultiplier = 1.3f,
+                healthMultiplier = 1.2f,
+                damageMultiplier = 1.1f,
+                enableCooldown = true,
+                upgradeMessage = "🔥 敌人越来越多！"
+            },
+            new TierData {
+                tierName = "💥 激烈期",
+                timeThreshold = 50f,
+                spawnInterval = 1.0f,
+                spawnCount = 3,
+                speedMultiplier = 1.8f,
+                healthMultiplier = 1.5f,
+                damageMultiplier = 1.3f,
+                enableCooldown = true,
+                upgradeMessage = "💥 战斗白热化！"
+            },
+            new TierData {
+                tierName = "🌪️ 狂暴期",
+                timeThreshold = 70f,
+                spawnInterval = 0.6f,
+                spawnCount = 4,
+                speedMultiplier = 2.5f,
+                healthMultiplier = 2.0f,
+                damageMultiplier = 1.6f,
+                enableCooldown = false,
+                upgradeMessage = "🌪️ 狂暴模式启动！"
+            },
+            new TierData {
+                tierName = "☠️ 末日期",
+                timeThreshold = 85f,
+                spawnInterval = 0.3f,
+                spawnCount = 5,
+                speedMultiplier = 3.0f,
+                healthMultiplier = 2.5f,
+                damageMultiplier = 2.0f,
+                enableCooldown = false,
+                upgradeMessage = "☠️ 末日降临！！！"
+            }
+        };
     }
 
-    float GetPressureFactor()
+    void UpdateTier()
     {
-        if (countdownManager == null) return 0f;
+        if (difficultyTiers == null || difficultyTiers.Length == 0) return;
 
-        // 通过 GameManager 获取倒计时进度
-        if (GameManager.Instance != null)
+        float elapsedTime = GetElapsedTime();
+
+        // 从后往前找匹配的阶层
+        TierData currentTier = difficultyTiers[0];
+        int newTierIndex = 0;
+
+        for (int i = difficultyTiers.Length - 1; i >= 0; i--)
         {
-            float elapsed = GameManager.Instance.GetElapsedTime();
-            float totalTime = 0f;
-
-            // 从 DifficultySettings 获取总时间
-            if (currentDifficulty != null)
-                totalTime = currentDifficulty.timeLimit;
-
-            if (totalTime <= 0) return 0f;
-            return Mathf.Clamp01(elapsed / totalTime);
+            if (elapsedTime >= difficultyTiers[i].timeThreshold)
+            {
+                currentTier = difficultyTiers[i];
+                newTierIndex = i;
+                break;
+            }
         }
-        return 0f;
-    }
 
-    void UpdatePressureParameters()
-    {
-        float pressure = GetPressureFactor();
-
-        float intervalValue = spawnIntervalCurve.Evaluate(pressure);
-        float countValue = spawnCountCurve.Evaluate(pressure);
-        float speedValue = speedMultiplierCurve.Evaluate(pressure);
-
-        currentSpawnInterval = Mathf.Max(minSpawnInterval, intervalValue);
-        currentSpawnPerInterval = Mathf.Min(maxSpawnPerInterval, Mathf.RoundToInt(countValue));
-        currentSpeedMultiplier = Mathf.Min(maxSpeedMultiplier, speedValue);
-
-        // 高压时禁用冷却，让敌人疯狂生成
-        if (pressure > 0.8f)
-            enableCooldown = false;
-        else
-            enableCooldown = true;
-
-        // 更新现有敌人速度
-        if (Mathf.Abs(currentSpeedMultiplier - lastSpeedMultiplier) > 0.05f)
+        // 检测是否升级了
+        if (newTierIndex != lastTierIndex)
         {
-            UpdateExistingEnemySpeeds();
+            currentTierIndex = newTierIndex;
+            OnTierUpgrade(currentTier, newTierIndex);
+        }
+
+        // 应用当前阶层参数
+        currentSpawnInterval = currentTier.spawnInterval;
+        currentSpawnPerInterval = currentTier.spawnCount;
+        currentSpeedMultiplier = currentTier.speedMultiplier;
+        currentHealthMultiplier = currentTier.healthMultiplier;
+        currentDamageMultiplier = currentTier.damageMultiplier;
+        enableCooldown = currentTier.enableCooldown;
+
+        // 更新现有敌人属性
+        if (Mathf.Abs(currentSpeedMultiplier - lastSpeedMultiplier) > 0.01f)
+        {
+            UpdateExistingEnemyMultipliers();
             lastSpeedMultiplier = currentSpeedMultiplier;
         }
 
+        // 显示升级消息（在屏幕上）
+        if (showTierMessage)
+        {
+            tierMessageTimer -= Time.deltaTime;
+            if (tierMessageTimer <= 0f)
+            {
+                showTierMessage = false;
+            }
+        }
+
+        // 调试日志
         if (showDebugLogs && Time.frameCount % 60 == 0)
         {
-            Debug.Log($"⏱️ [普通模式] 压力: {pressure:P0} | 间隔: {currentSpawnInterval:F2}s | " +
-                     $"每波: {currentSpawnPerInterval} | 速度: {currentSpeedMultiplier:F2}x");
+            Debug.Log($"📊 [阶层 {newTierIndex + 1}/{difficultyTiers.Length}] {currentTier.tierName} | " +
+                     $"时间: {elapsedTime:F0}s | 间隔: {currentSpawnInterval:F2}s | " +
+                     $"每波: {currentSpawnPerInterval} | 速度: {currentSpeedMultiplier:F2}x | " +
+                     $"血量: {currentHealthMultiplier:F2}x | 伤害: {currentDamageMultiplier:F2}x");
         }
     }
 
-    void UpdateExistingEnemySpeeds()
+    void OnTierUpgrade(TierData newTier, int tierIndex)
+    {
+        lastTierIndex = tierIndex;
+
+        // 显示升级消息
+        if (!string.IsNullOrEmpty(newTier.upgradeMessage))
+        {
+            showTierMessage = true;
+            tierMessageTimer = 2.5f;
+            currentTierMessage = newTier.upgradeMessage;
+            Debug.Log($"⬆️ [阶层升级] {newTier.tierName}: {newTier.upgradeMessage}");
+
+            // TODO: 在这里触发UI显示
+            // UIManager.Instance?.ShowTierMessage(newTier.upgradeMessage, newTier.tierColor);
+        }
+        else
+        {
+            Debug.Log($"⬆️ [阶层升级] {newTier.tierName}");
+        }
+
+        // 升级时额外生成一波敌人（给玩家一个"惊喜"）
+        if (tierIndex > 0)
+        {
+            StartCoroutine(SpawnBonusWave());
+        }
+    }
+
+    IEnumerator SpawnBonusWave()
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        int bonusCount = Mathf.Min(currentSpawnPerInterval * 2, 6);
+        List<SpawnPointData> activePoints = new List<SpawnPointData>();
+
+        foreach (var sp in spawnPoints)
+        {
+            if (sp.isActive && !sp.isOnCooldown)
+                activePoints.Add(sp);
+        }
+
+        if (activePoints.Count > 0)
+        {
+            int pointsToUse = Mathf.Min(activePoints.Count, 3);
+            for (int i = 0; i < pointsToUse; i++)
+            {
+                StartCoroutine(Routine_SpawnEnemies(activePoints[i], bonusCount / pointsToUse));
+                yield return new WaitForSeconds(0.15f);
+            }
+        }
+    }
+
+    void UpdateExistingEnemyMultipliers()
     {
         foreach (GameObject enemy in allActiveEnemies)
         {
@@ -405,15 +558,32 @@ public class EnemySpawner : MonoBehaviour
             EnemyAI ai = enemy.GetComponent<EnemyAI>();
             if (ai != null)
             {
-                // 使用 ApplyScalingMultipliers 更新所有属性
                 ai.ApplyScalingMultipliers(currentSpeedMultiplier, currentHealthMultiplier, currentDamageMultiplier);
             }
         }
     }
 
+    float GetElapsedTime()
+    {
+        if (GameManager.Instance != null)
+            return GameManager.Instance.GetElapsedTime();
+        return Time.time;
+    }
+
+    // ====================================================================
+    //  最终阶段
+    // ====================================================================
+
     void CheckFinalPhase()
     {
-        float pressure = GetPressureFactor();
+        if (!enableFinalPhase) return;
+
+        float elapsedTime = GetElapsedTime();
+        float totalTime = GetTotalTime();
+
+        if (totalTime <= 0) return;
+
+        float pressure = Mathf.Clamp01(elapsedTime / totalTime);
         bool shouldBeFinal = pressure >= finalPhaseThreshold;
 
         if (shouldBeFinal && !isFinalPhaseActive)
@@ -442,7 +612,17 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    // ---------- 清理 ----------
+    float GetTotalTime()
+    {
+        if (currentDifficulty != null)
+            return currentDifficulty.timeLimit;
+        return 90f; // 默认90秒
+    }
+
+    // ====================================================================
+    //  清理
+    // ====================================================================
+
     void CleanupDeadEnemies()
     {
         for (int i = allActiveEnemies.Count - 1; i >= 0; i--)
@@ -478,7 +658,6 @@ public class EnemySpawner : MonoBehaviour
         }
         else
         {
-            // 如果找不到Tile，尝试通过EnemyAI的ownerTile注册
             EnemyAI ai = enemy.GetComponent<EnemyAI>();
             if (ai != null && ai.ownerTile != null)
             {
@@ -487,7 +666,10 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    // ---------- NavMesh ----------
+    // ====================================================================
+    //  NavMesh
+    // ====================================================================
+
     void EnsureNavMeshSurfaceExists()
     {
         if (navMeshSurface == null)
@@ -551,7 +733,10 @@ public class EnemySpawner : MonoBehaviour
         if (showDebugLogs) Debug.Log($"🧹 已移除 Tile {tile.name} 的所有生成点");
     }
 
-    // ---------- 公共控制 ----------
+    // ====================================================================
+    //  公共控制
+    // ====================================================================
+
     public void EnableSpawning()
     {
         EnsureNavMeshSurfaceExists();
@@ -614,7 +799,6 @@ public class EnemySpawner : MonoBehaviour
     {
         if (settings == null) return;
 
-        // 通用设置
         enableMaxLimit = settings.enableMaxLimit;
         maxEnemyCount = settings.maxEnemyCount;
         enableCooldown = settings.enableCooldown;
@@ -629,7 +813,6 @@ public class EnemySpawner : MonoBehaviour
             UpdateWeightList();
         }
 
-        // 普通模式特定设置
         if (settings.mode == GameMode.Normal)
         {
             spawnInterval = settings.spawnInterval;
@@ -750,6 +933,10 @@ public class EnemySpawner : MonoBehaviour
         initialSpawnDone = false;
         canSpawn = false;
         isFinalPhaseActive = false;
+        currentTierIndex = -1;
+        lastTierIndex = -1;
+        showTierMessage = false;
+
         foreach (SpawnPointData spawnData in spawnPoints)
         {
             spawnData.isActive = false;
@@ -792,8 +979,9 @@ public class EnemySpawner : MonoBehaviour
             if (spawnData.isOnCooldown) coolingCount++;
         }
         string limitInfo = enableMaxLimit ? allActiveEnemies.Count + "/" + maxEnemyCount : "无限 " + allActiveEnemies.Count;
-        float pressure = GetPressureFactor();
-        return $"活跃: {activeCount}/{spawnPoints.Count} | 敌人: {limitInfo} | 压力: {pressure:P0}";
+        string tierInfo = (currentTierIndex >= 0 && currentTierIndex < difficultyTiers.Length) ?
+                          difficultyTiers[currentTierIndex].tierName : "无";
+        return $"阶层: {tierInfo} | 活跃: {activeCount}/{spawnPoints.Count} | 敌人: {limitInfo}";
     }
 
     void InitializeSpawner()
@@ -807,7 +995,6 @@ public class EnemySpawner : MonoBehaviour
 
         if (spawnPoints.Count == 0) AutoFindSpawnPoints();
 
-        // 从 DifficultySettings 加载
         if (useDifficultySettings && currentDifficulty != null)
         {
             ApplyDifficultySettings(currentDifficulty);

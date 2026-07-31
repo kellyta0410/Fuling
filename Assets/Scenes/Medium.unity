@@ -7665,7 +7665,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentDifficulty: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
-  enemySpawner: {fileID: 6555686518727422314}
+  normalSpawner: {fileID: 0}
+  infiniteSpawner: {fileID: 0}
   easyConfig: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
   normalConfig: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   hardConfig: {fileID: 11400000, guid: e4769ee8dacc85243a7a48ab19bd35d0, type: 2}
@@ -7818,7 +7819,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyPrefabs:
   - {fileID: 2051455957182502511, guid: c7149de1882fe0f4d9b109749982959b, type: 3}
-  playerTarget: {fileID: 0}
+  playerTarget: {fileID: 2273522333858444555}
   spawnPoints:
   - point: {fileID: 1474384004792099461}
     activationRadius: 20
@@ -7866,19 +7867,55 @@ MonoBehaviour:
     tileType: 0
   currentDifficulty: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   useDifficultySettings: 1
+  spawnInterval: 2
+  spawnPerInterval: 1
   initialSpawnCount: 2
   spawnOnStart: 1
-  initialWaveCount: 50
-  minSpawnDistance: 8
-  maxSpawnDistance: 20
   defaultSpawnRadius: 5
+  enableTieredDifficulty: 1
+  difficultyTiers:
+  - tierName: Start
+    timeThreshold: 0
+    spawnInterval: 2
+    spawnCount: 2
+    speedMultiplier: 1
+    healthMultiplier: 1
+    damageMultiplier: 1
+    enableCooldown: 1
+    upgradeMessage: 
+    tierColor: {r: 0, g: 0, b: 0, a: 0}
+  - tierName: Middle
+    timeThreshold: 50
+    spawnInterval: 1.5
+    spawnCount: 5
+    speedMultiplier: 1.2
+    healthMultiplier: 1.2
+    damageMultiplier: 1.2
+    enableCooldown: 1
+    upgradeMessage: 
+    tierColor: {r: 0, g: 0, b: 0, a: 0}
+  - tierName: Last
+    timeThreshold: 95
+    spawnInterval: 1.2
+    spawnCount: 7
+    speedMultiplier: 1.5
+    healthMultiplier: 1.5
+    damageMultiplier: 1.5
+    enableCooldown: 1
+    upgradeMessage: 
+    tierColor: {r: 0, g: 0, b: 0, a: 0}
+  enableFinalPhase: 1
+  finalPhaseThreshold: 0.8
+  finalPhaseExtraEnemies: 3
   navMeshSampleRadius: 5
   maxSpawnAttempts: 30
-  enemyWeights: []
-  showDebugLogs: 1
-  infiniteRangeMultiplier: 2.5
   rebuildDelay: 1.5
   autoRebuildOnTileGenerated: 1
+  enemyWeights:
+  - enemyPrefab: {fileID: 2051455957182502511, guid: 40a5ef2c7bae0f248ab67a341df39511,
+      type: 3}
+    weight: 1
+  showDebugLogs: 1
 --- !u!4 &6609944325433902110
 Transform:
   m_ObjectHideFlags: 0
@@ -8521,6 +8558,7 @@ MonoBehaviour:
   sfxValueText: {fileID: 3958287053856522350}
   player: {fileID: 4250374598139595022}
   enemySpawner: {fileID: 6555686518727422314}
+  infiniteSpawner: {fileID: 0}
   gameManager: {fileID: 6284059613933116886}
 --- !u!224 &7223004483196564472
 RectTransform:
