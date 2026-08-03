@@ -13,12 +13,14 @@ MonoBehaviour:
   m_Name: Ming
   m_EditorClassIdentifier: 
   characterName: Ming
-  description: 
-  portrait: {fileID: 0}
-  prefab: {fileID: 0}
-  unlockCost: 1500
+  avatarSprite: {fileID: 0}
+  fullBodySprite: {fileID: 0}
   baseHealth: 100
-  baseSpeed: 4
   baseAttack: 20
+  baseSpeed: 4
+  baseDefense: 5
   baseAttackRange: 2
   baseAttackCooldown: 1
+  unlockCost: 1500
+  normalAttackConfig: {fileID: 0}
+  skillAttackConfig: {fileID: 0}
