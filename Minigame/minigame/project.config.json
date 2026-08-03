@@ -22,9 +22,7 @@
     "useApiHook": false,
     "disableUseStrict": false,
     "babelSetting": {
-      "ignore": [
-        "webgl.wasm.framework.unityweb.js"
-      ],
+      "ignore": ["webgl.wasm.framework.unityweb.js"],
       "disablePlugins": [],
       "outputPath": ""
     },
@@ -32,15 +30,7 @@
     "useCompilerModule": true,
     "userConfirmedUseCompilerModuleSwitch": false,
     "packNpmManually": false,
-    "packNpmRelationList": [],
-    "compileWorklet": false,
-    "minifyWXSS": true,
-    "minifyWXML": true,
-    "localPlugins": false,
-    "useCompilerPlugins": false,
-    "condition": false,
-    "swc": false,
-    "disableSWC": true
+    "packNpmRelationList": []
   },
   "compileType": "game",
   "libVersion": "latest",
@@ -51,19 +41,18 @@
   "packOptions": {
     "ignore": [
       {
-        "value": ".plugincache",
-        "type": "folder"
+        "type": "folder",
+        "value": ".plugincache"
       },
       {
-        "value": ".symbols.unityweb",
-        "type": "suffix"
+        "type": "suffix",
+        "value": ".symbols.unityweb"
       },
       {
-        "value": ".symbols.unityweb.br",
-        "type": "suffix"
+        "type": "suffix",
+        "value": ".symbols.unityweb.br"
       }
-    ],
-    "include": []
+    ]
   },
   "condition": {
     "search": {
@@ -82,7 +71,5 @@
       "current": -1,
       "list": []
     }
-  },
-  "isGameTourist": false,
-  "editorSetting": {}
+  }
 }
