@@ -10346,8 +10346,8 @@ MonoBehaviour:
   playerTarget: {fileID: 6434239907179957981}
   spawnPoints:
   - point: {fileID: 3128344718545706691}
-    activationRadius: 30
-    deactivationRadius: 40
+    activationRadius: 10
+    deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -10357,8 +10357,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 6500387255294131236}
-    activationRadius: 30
-    deactivationRadius: 40
+    activationRadius: 10
+    deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -10368,8 +10368,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 7494223144303368223}
-    activationRadius: 30
-    deactivationRadius: 40
+    activationRadius: 10
+    deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -10379,8 +10379,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 432921137615348667}
-    activationRadius: 30
-    deactivationRadius: 40
+    activationRadius: 10
+    deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -10390,8 +10390,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 1203668572}
-    activationRadius: 30
-    deactivationRadius: 40
+    activationRadius: 10
+    deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -12068,7 +12068,7 @@ MonoBehaviour:
   maxHealth: 100
   speed: 5
   attackDamage: 10
-  attackRange: 2
+  attackRange: 1.5
   attackCooldown: 1
   gravity: 10
   smoothRotation: 10
