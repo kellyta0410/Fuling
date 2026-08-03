@@ -29,8 +29,6 @@ public class UIManager : MonoBehaviour
     [Header("InGame 设置 - 音量控制")]
     public Slider musicSlider;
     public Slider sfxSlider;
-    public TextMeshProUGUI musicValueText;
-    public TextMeshProUGUI sfxValueText;
 
     [Header("游戏引用")]
     public PlayerController player;
@@ -174,28 +172,28 @@ public class UIManager : MonoBehaviour
         if (musicSlider != null) musicSlider.value = music;
         if (sfxSlider != null) sfxSlider.value = sfx;
 
-        UpdateVolumeTexts();
+        //UpdateVolumeTexts();
     }
 
-    void UpdateVolumeTexts()
-    {
-        if (musicValueText != null && musicSlider != null)
-            musicValueText.text = $"{Mathf.RoundToInt(musicSlider.value * 100)}%";
-
-        if (sfxValueText != null && sfxSlider != null)
-            sfxValueText.text = $"{Mathf.RoundToInt(sfxSlider.value * 100)}%";
-    }
+    //void UpdateVolumeTexts()
+    //{
+        //if (musicValueText != null && musicSlider != null)
+           // musicValueText.text = $"{Mathf.RoundToInt(musicSlider.value * 100)}%";
+        
+        //if (sfxValueText != null && sfxSlider != null)
+            //sfxValueText.text = $"{Mathf.RoundToInt(sfxSlider.value * 100)}%";
+    //}
 
     void OnMusicSliderChanged(float value)
     {
         SettingsManager.Instance?.SetMusicVolume(value);
-        UpdateVolumeTexts();
+        //UpdateVolumeTexts();
     }
 
     void OnSFXSliderChanged(float value)
     {
         SettingsManager.Instance?.SetSFXVolume(value);
-        UpdateVolumeTexts();
+        //UpdateVolumeTexts();
     }
 
     public void OpenPauseMenu()
@@ -392,6 +390,7 @@ public class UIManager : MonoBehaviour
 
     public void QuitToGameOver()
     {
+        if (pausemenu != null) pausemenu.SetActive(false);
         if (gameManager != null) gameManager.GameOver(false);
         else ShowGameOver();
     }
