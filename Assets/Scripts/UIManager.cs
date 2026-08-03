@@ -10,6 +10,7 @@ public class UIManager : MonoBehaviour
     public Slider healthSlider;
     public GameObject gameOverPanel;
     public GameObject settingsPanel;
+    public GameObject pausemenu;
     public TextMeshProUGUI coinText;
     public TextMeshProUGUI enemyCountText;
     public TextMeshProUGUI finalCoinText;
@@ -197,12 +198,11 @@ public class UIManager : MonoBehaviour
         UpdateVolumeTexts();
     }
 
-    public void OpenSettings()
+    public void OpenPauseMenu()
     {
-        if (settingsPanel != null)
+        if (pausemenu != null)
         {
-            settingsPanel.SetActive(true);
-            LoadSettings();
+            pausemenu.SetActive(true);
             Time.timeScale = 0f;
 
             if (player != null)
@@ -212,11 +212,11 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    public void CloseSettings()
+    public void ClosePauseMenu()
     {
-        if (settingsPanel != null)
+        if (pausemenu != null)
         {
-            settingsPanel.SetActive(false);
+            pausemenu.SetActive(false);
             Time.timeScale = 1f;
 
             if (player != null)
@@ -224,6 +224,25 @@ public class UIManager : MonoBehaviour
                 player.SetJoystickEnabled(true);
             }
         }
+    }
+
+    public void OpenSettings()
+    {
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(true);
+            LoadSettings();
+        }
+    }
+
+    public void CloseSettings()
+    {
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(false);
+            Time.timeScale = 1f;
+        }
+
     }
 
     public void UpdateHealthUI()
