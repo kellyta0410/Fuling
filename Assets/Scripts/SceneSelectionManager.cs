@@ -298,7 +298,11 @@ public class SceneSelectionManager : MonoBehaviour
             }
             else if (characterDetailManager != null)
             {
-                characterDetailManager.ClearPanel();
+                // 未选择角色时，默认预览第一个角色（梅），但不标记为已选
+                if (allCharacters.Length > 0)
+                    characterDetailManager.ShowCharacterDetail(allCharacters[0]);
+                else
+                    characterDetailManager.ClearPanel();
             }
         }
     }
@@ -514,13 +518,17 @@ public class SceneSelectionManager : MonoBehaviour
 
             CharacterData character = allCharacters[i];
 
-            // 设置头像
+            // 设置头像（未解锁时显示锁定头像）
+            Sprite displaySprite = character.avatarSprite;
+            if (!gameDataManager.IsCharacterUnlocked(character) && character.lockedAvatarSprite != null)
+                displaySprite = character.lockedAvatarSprite;
+
             if (characterButtonAvatars != null &&
                 characterButtonAvatars.Length > i &&
                 characterButtonAvatars[i] != null &&
-                character.avatarSprite != null)
+                displaySprite != null)
             {
-                characterButtonAvatars[i].sprite = character.avatarSprite;
+                characterButtonAvatars[i].sprite = displaySprite;
                 characterButtonAvatars[i].preserveAspect = true;
             }
 

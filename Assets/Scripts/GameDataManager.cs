@@ -69,17 +69,34 @@ public class GameDataManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         LoadData();
+        LoadAllCharactersIfNeeded();
         InitializeDefaultData();
+    }
+
+    // ==================== 角色加载 ====================
+
+    // 若 Inspector 里没有拖入角色，运行时从 Resources/CharacterData 自动加载
+    void LoadAllCharactersIfNeeded()
+    {
+        if (allCharacters == null) allCharacters = new List<CharacterData>();
+        if (allCharacters.Count > 0) return;
+
+        CharacterData[] loaded = Resources.LoadAll<CharacterData>("CharacterData");
+        if (loaded != null && loaded.Length > 0)
+        {
+            allCharacters.AddRange(loaded);
+            Debug.Log($"自动加载角色 {allCharacters.Count} 个");
+        }
     }
 
     // ==================== 初始化 ====================
 
     void InitializeDefaultData()
     {
-        if (unlockedCharacterNames.Count == 0)
+        // 默认角色（梅）始终默认解锁，不依赖存档
+        if (!unlockedCharacterNames.Contains(defaultCharacterName))
         {
             unlockedCharacterNames.Add(defaultCharacterName);
-            selectedCharacterName = defaultCharacterName;
             SaveData();
         }
 
@@ -92,6 +109,10 @@ public class GameDataManager : MonoBehaviour
         if (!string.IsNullOrEmpty(selectedCharacterName))
         {
             currentCharacter = GetCharacterData(selectedCharacterName);
+        }
+        else
+        {
+            currentCharacter = null;
         }
     }
 

@@ -13,14 +13,19 @@ MonoBehaviour:
   m_Name: Ming
   m_EditorClassIdentifier: 
   characterName: Ming
+  characterDescription: 
   avatarSprite: {fileID: 0}
   fullBodySprite: {fileID: 0}
-  baseHealth: 100
+  lockedAvatarSprite: {fileID: 21300000, guid: 6b441f1285a392d4b9bdd823bf5e03b0, type: 3}
+  modelPrefab: {fileID: 0}
+  modelSpawnPosition: {x: 0, y: 0, z: 0}
+  modelSpawnRotation: {x: 0, y: 0, z: 0}
+  defaultAnimation: Idle
   baseAttack: 20
-  baseSpeed: 4
-  baseDefense: 5
-  baseAttackRange: 2
-  baseAttackCooldown: 1
+  baseRange: 5
+  baseSpeed: 5
+  baseCooldown: 2
+  baseHealth: 100
+  normalAttackConfig: {fileID: 11400000, guid: 808b29b4cc9c24048a9777d4cd688467, type: 2}
+  skillAttackConfig: {fileID: 11400000, guid: c07a3c63caeaeb3449bf4a8f8085d9a0, type: 2}
   unlockCost: 1500
-  normalAttackConfig: {fileID: 0}
-  skillAttackConfig: {fileID: 0}

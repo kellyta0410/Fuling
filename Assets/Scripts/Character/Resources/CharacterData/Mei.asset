@@ -12,15 +12,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5b6775544ce3534188b693a7197b38a, type: 3}
   m_Name: Mei
   m_EditorClassIdentifier: 
-  characterName: Mei
-  avatarSprite: {fileID: 0}
-  fullBodySprite: {fileID: 0}
-  baseHealth: 100
+  characterName: "\u6885"
+  characterDescription: "\u6211\u662F\u6885"
+  avatarSprite: {fileID: 21300000, guid: 873527f122382484ebf98102a9162408, type: 3}
+  fullBodySprite: {fileID: 21300000, guid: 502138d812646dd4babd19687784ae89, type: 3}
+  lockedAvatarSprite: {fileID: 21300000, guid: 6b441f1285a392d4b9bdd823bf5e03b0, type: 3}
+  modelPrefab: {fileID: 0}
+  modelSpawnPosition: {x: 0, y: 0, z: 0}
+  modelSpawnRotation: {x: 0, y: 0, z: 0}
+  defaultAnimation: Idle
   baseAttack: 20
+  baseRange: 5
   baseSpeed: 5
-  baseDefense: 5
-  baseAttackRange: 2
-  baseAttackCooldown: 1
-  unlockCost: 0
+  baseCooldown: 2
+  baseHealth: 100
   normalAttackConfig: {fileID: 11400000, guid: a880dc0aa151ed445a596fdf1464788f, type: 2}
   skillAttackConfig: {fileID: 11400000, guid: bd744ac6885b0ec4eb37c87fdc76595c, type: 2}
+  unlockCost: 0

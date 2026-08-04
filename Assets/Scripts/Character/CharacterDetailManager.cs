@@ -5,37 +5,40 @@ using System.Collections.Generic;
 
 public class CharacterDetailManager : MonoBehaviour
 {
-    [Header("===== 角色显示 =====")]
+    [Header("===== 头像与信息 =====")]
     [SerializeField] private Image avatarImage;
     [SerializeField] private Image fullBodyImage;
     [SerializeField] private TextMeshProUGUI characterNameText;
-    [SerializeField] private TextMeshProUGUI characterDescriptionText; // 角色背景介绍
+    [SerializeField] private TextMeshProUGUI characterDescriptionText; // ??????
 
-    [Header("===== 角色属性（横排显示）=====")]
-    [SerializeField] private TextMeshProUGUI attackStatText;    // "攻击: 150"
-    [SerializeField] private TextMeshProUGUI rangeStatText;     // "射程: 10.0"
-    [SerializeField] private TextMeshProUGUI cooldownStatText;  // "冷却: 2.5s"
-    // ⚠️ 移速不显示在 UI 上，但数据在后台计算（PlayerController 使用）
-
-    [Header("===== 普通攻击升级=====")]
+    [Header("===== 普通攻击 =====")]
     [SerializeField] private Button normalAttackUpgradeButton;
-    [SerializeField] private TextMeshProUGUI normalAttackLevelText;
+    [SerializeField] private TextMeshProUGUI normalAttackStatText;      // "Lv: 10"(最高等级)
+    [SerializeField] private TextMeshProUGUI normalAttackLevelText;     // "Lv.2 ? 3" ? "MAX"
     [SerializeField] private TextMeshProUGUI normalAttackDescriptionText;
+    [SerializeField] private TextMeshProUGUI normalAttackCoinText;
 
-    [Header("===== 技能攻击升级=====")]
+    [Header("===== 技能攻击 =====")]
     [SerializeField] private Button skillAttackUpgradeButton;
-    [SerializeField] private TextMeshProUGUI skillAttackLevelText;
+    [SerializeField] private TextMeshProUGUI skillAttackStatText;       
+    [SerializeField] private TextMeshProUGUI skillAttackLevelText;     
     [SerializeField] private TextMeshProUGUI skillAttackDescriptionText;
+    [SerializeField] private TextMeshProUGUI skillAttackCoinText;
 
     [Header("===== 选择按钮 =====")]
     [SerializeField] private Button selectCharacterButton;
     [SerializeField] private TextMeshProUGUI selectButtonText;
+    [SerializeField] private TextMeshProUGUI selectButtonShadowText;   // 阴影副本（自己在 Inspector 拖入，与原文字同字体、偏移一点即可）
 
-    [Header("===== 数据管理 =====")]
+    [Header("===== 字体 =====")]
+    [Tooltip("游戏内统一使用的华文行楷字体（拖入 Assets/Font/LiyuXingkai SDF）")]
+    [SerializeField] private TMP_FontAsset uiFont;
+
+    [Header("===== manager =====")]
     [SerializeField] private GameDataManager gameDataManager;
 
-    [Header("===== 3D 模型显示（可选）=====")]
-    [Tooltip("3D 模型挂载点（世界空间）。留空则回退到全身图显示")]
+    [Header("===== 3D 模型=====")]
+    [Tooltip("3D 角色的模型预制体")]
     [SerializeField] private Transform modelContainer;
     private GameObject currentModelInstance;
 
@@ -52,11 +55,19 @@ public class CharacterDetailManager : MonoBehaviour
             return;
         }
 
-        normalAttackUpgradeButton?.onClick.AddListener(UpgradeNormalAttack);
-        skillAttackUpgradeButton?.onClick.AddListener(UpgradeSkillAttack);
+        // 升级按钮的 onClick 已在场景中绑定（Inspector）
         selectCharacterButton?.onClick.AddListener(SelectCurrentCharacter);
 
         gameDataManager.OnDataChanged += RefreshPanel;
+
+        ApplyGameFont();
+        UpdateSelectButtonShadow();
+
+        // 启动时默认显示当前角色
+        if (gameDataManager.CurrentCharacter != null)
+            ShowCharacterDetail(gameDataManager.CurrentCharacter);
+        else
+            RefreshPanel();
     }
 
     void OnDestroy()
@@ -65,7 +76,7 @@ public class CharacterDetailManager : MonoBehaviour
             gameDataManager.OnDataChanged -= RefreshPanel;
     }
 
-    // ==================== 获取角色配置 ====================
+    // ==================== ?????? ====================
 
     private UpgradeConfigSO GetNormalAttackConfig(CharacterData character)
     {
@@ -77,7 +88,7 @@ public class CharacterDetailManager : MonoBehaviour
         return character != null ? character.skillAttackConfig : null;
     }
 
-    // ==================== 等级读写 ====================
+    // ==================== ???? ====================
 
     int GetNormalLevel(string name)
     {
@@ -111,10 +122,10 @@ public class CharacterDetailManager : MonoBehaviour
         gameDataManager.SaveData();
     }
 
-    // ==================== 显示角色 ====================
+    // ==================== ???? ====================
 
     /// <summary>
-    /// 供场景头像按钮绑定调用
+    /// ???????????
     /// </summary>
     public void ShowCharacterByAvatar(CharacterData character)
     {
@@ -128,7 +139,7 @@ public class CharacterDetailManager : MonoBehaviour
 
         bool isUnlocked = gameDataManager.IsCharacterUnlocked(character);
 
-        // ===== Avatar 显示（根据解锁状态切换） =====
+        // ===== Avatar ??(????????) =====
         if (avatarImage != null)
         {
             if (isUnlocked && character.avatarSprite != null)
@@ -149,7 +160,7 @@ public class CharacterDetailManager : MonoBehaviour
             avatarImage.preserveAspect = true;
         }
 
-        // ===== 全身图显示（根据解锁状态） =====
+        // ===== ?????(??????) =====
         if (fullBodyImage != null)
         {
             if (isUnlocked && character.fullBodySprite != null)
@@ -165,24 +176,28 @@ public class CharacterDetailManager : MonoBehaviour
             fullBodyImage.preserveAspect = true;
         }
 
-        // ===== 角色名称 =====
+        // ===== ???? =====
         if (characterNameText != null)
             characterNameText.text = isUnlocked ? character.characterName : "???";
-
-        // ===== 角色介绍 =====
+        // ===== 描述 =====
         if (characterDescriptionText != null)
-            characterDescriptionText.text = isUnlocked ? (character.characterDescription ?? "暂无介绍") : "未解锁此角色";
+        {
+            string desc = isUnlocked ? character.characterDescription : null;
+            characterDescriptionText.text = string.IsNullOrEmpty(desc)
+                ? (isUnlocked ? "暂无描述" : "未解锁角色")
+                : desc;
+        }
 
-        // ===== 更新属性显示 =====
+        // ===== ?????? =====
         UpdateCharacterStats(character);
         UpdateSkillDisplay(character);
         UpdateSelectButtonState(character);
 
-        // ===== 3D 模型显示 =====
+        // ===== 3D ???? =====
         UpdateCharacterModel(character);
     }
 
-    // ==================== 3D 模型显示 ====================
+    // ==================== 3D ???? ====================
 
     void UpdateCharacterModel(CharacterData character)
     {
@@ -208,7 +223,7 @@ public class CharacterDetailManager : MonoBehaviour
             }
         }
 
-        // 有模型时隐藏全身图，无模型时恢复全身图显示
+        // ?????????,???????????
         if (fullBodyImage != null)
             fullBodyImage.gameObject.SetActive(!hasModel);
     }
@@ -224,7 +239,7 @@ public class CharacterDetailManager : MonoBehaviour
             fullBodyImage.gameObject.SetActive(true);
     }
 
-    // ==================== 更新角色属性（横排显示：攻击、射程、冷却） ====================
+    // ==================== ????/?????? ====================
 
     void UpdateCharacterStats(CharacterData character)
     {
@@ -238,26 +253,18 @@ public class CharacterDetailManager : MonoBehaviour
         var normalTotal = normalConfig?.GetTotalBonus(GetNormalLevel(name)) ?? new UpgradeLevelData();
         var skillTotal = skillConfig?.GetTotalBonus(GetSkillLevel(name)) ?? new UpgradeLevelData();
 
-        // 计算最终属性
+        // 普通攻击区域：显示最终攻击力（默认属性，升级后更新数字）
         int totalAttack = character.baseAttack + normalTotal.attackBonus + skillTotal.attackBonus;
-        float totalRange = character.baseRange + normalTotal.attackRangeBonus + skillTotal.attackRangeBonus;
-        float totalCooldown = character.baseCooldown - normalTotal.cooldownReductionBonus - skillTotal.cooldownReductionBonus;
+        if (normalAttackStatText != null)
+            normalAttackStatText.text = $"攻击: {totalAttack}";
 
-        // 移速在后台计算（供 PlayerController 使用），但不显示在 UI 上
-        float totalSpeed = character.baseSpeed + normalTotal.speedBonus + skillTotal.speedBonus;
-
-        // 更新 UI（只显示攻击、射程、冷却）
-        if (attackStatText != null)
-            attackStatText.text = $"攻击: {totalAttack}";
-
-        if (rangeStatText != null)
-            rangeStatText.text = $"射程: {totalRange:F1}";
-
-        if (cooldownStatText != null)
-            cooldownStatText.text = $"冷却: {totalCooldown:F1}s";
+        // 技能攻击区域：显示技能攻击力（默认属性，升级后更新数字）
+        int skillAttack = character.baseAttack + skillTotal.attackBonus;
+        if (skillAttackStatText != null)
+            skillAttackStatText.text = $"技能: {skillAttack}";
     }
 
-    // ==================== 更新技能显示 ====================
+    // ==================== ?????? ====================
 
     void UpdateSkillDisplay(CharacterData character)
     {
@@ -276,25 +283,36 @@ public class CharacterDetailManager : MonoBehaviour
         var nextNormal = normalConfig?.GetLevelData(normalLevel + 1);
         var currentNormal = normalConfig?.GetLevelData(normalLevel);
 
-        // 等级显示（只显示当前等级）
+        // 等级显示（当前等级 → 下一等级，满级显示 MAX）
         if (normalAttackLevelText != null)
         {
-            if (unlocked)
-                normalAttackLevelText.text = $"Lv.{normalLevel}";
-            else
+            if (!unlocked)
                 normalAttackLevelText.text = "Lv.--";
+            else if (normalMaxed)
+                normalAttackLevelText.text = "MAX";
+            else
+                normalAttackLevelText.text = $"Lv.{normalLevel} → {normalLevel + 1}";
         }
 
-        // 描述显示（显示当前等级的描述）
+        // 升级所需金币（满级清空）
+        if (normalAttackCoinText != null)
+        {
+            if (!unlocked || normalMaxed || nextNormal == null || normalConfig == null)
+                normalAttackCoinText.text = "";
+            else
+                normalAttackCoinText.text = $"{nextNormal.cost}";
+        }
+
+        // 描述显示（当前等级的描述，0 级时显示下一级效果）
         if (normalAttackDescriptionText != null)
         {
             if (!unlocked)
             {
                 normalAttackDescriptionText.text = "解锁角色以查看技能";
             }
-            else if (normalLevel == 0 && currentNormal == null)
+            else if (currentNormal == null)
             {
-                normalAttackDescriptionText.text = normalConfig?.GetLevelData(0)?.description ?? "未解锁";
+                normalAttackDescriptionText.text = normalConfig?.GetLevelData(1)?.description ?? "无描述";
             }
             else
             {
@@ -302,34 +320,19 @@ public class CharacterDetailManager : MonoBehaviour
             }
         }
 
-        // 按钮显示
+        // 按钮（只控制可点，文字由场景固定，不自动创建字体）
         if (normalAttackUpgradeButton != null)
         {
             if (!unlocked)
             {
-                var btnText = normalAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null) btnText.text = "🔒";
-                normalAttackUpgradeButton.interactable = false;
-            }
-            else if (normalMaxed || nextNormal == null || normalConfig == null)
-            {
-                var btnText = normalAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null)
-                {
-                    btnText.text = "MAX";
-                    btnText.color = Color.green;
-                }
                 normalAttackUpgradeButton.interactable = false;
             }
             else
             {
-                var btnText = normalAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null)
-                {
-                    btnText.text = $"{nextNormal.cost}";
-                    btnText.color = gameDataManager.TotalCoins >= nextNormal.cost ? Color.yellow : Color.gray;
-                }
-                normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextNormal.cost && unlocked;
+                if (normalMaxed || nextNormal == null || normalConfig == null)
+                    normalAttackUpgradeButton.interactable = false;
+                else
+                    normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextNormal.cost;
             }
         }
 
@@ -339,25 +342,36 @@ public class CharacterDetailManager : MonoBehaviour
         var nextSkill = skillConfig?.GetLevelData(skillLevel + 1);
         var currentSkill = skillConfig?.GetLevelData(skillLevel);
 
-        // 等级显示（只显示当前等级）
+        // 等级显示（当前等级 → 下一等级，满级显示 MAX）
         if (skillAttackLevelText != null)
         {
-            if (unlocked)
-                skillAttackLevelText.text = $"Lv.{skillLevel}";
-            else
+            if (!unlocked)
                 skillAttackLevelText.text = "Lv.--";
+            else if (skillMaxed)
+                skillAttackLevelText.text = "MAX";
+            else
+                skillAttackLevelText.text = $"Lv.{skillLevel} → {skillLevel + 1}";
         }
 
-        // 描述显示（显示当前等级的描述）
+        // 升级所需金币（满级清空）
+        if (skillAttackCoinText != null)
+        {
+            if (!unlocked || skillMaxed || nextSkill == null || skillConfig == null)
+                skillAttackCoinText.text = "";
+            else
+                skillAttackCoinText.text = $"{nextSkill.cost}";
+        }
+
+        // 描述显示（当前等级的描述，0 级时显示下一级效果）
         if (skillAttackDescriptionText != null)
         {
             if (!unlocked)
             {
                 skillAttackDescriptionText.text = "解锁角色以查看技能";
             }
-            else if (skillLevel == 0 && currentSkill == null)
+            else if (currentSkill == null)
             {
-                skillAttackDescriptionText.text = skillConfig?.GetLevelData(0)?.description ?? "未解锁";
+                skillAttackDescriptionText.text = skillConfig?.GetLevelData(1)?.description ?? "无描述";
             }
             else
             {
@@ -365,39 +379,24 @@ public class CharacterDetailManager : MonoBehaviour
             }
         }
 
-        // 按钮显示
+        // 按钮（只控制可点，文字由场景固定，不自动创建字体）
         if (skillAttackUpgradeButton != null)
         {
             if (!unlocked)
             {
-                var btnText = skillAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null) btnText.text = "🔒";
-                skillAttackUpgradeButton.interactable = false;
-            }
-            else if (skillMaxed || nextSkill == null || skillConfig == null)
-            {
-                var btnText = skillAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null)
-                {
-                    btnText.text = "MAX";
-                    btnText.color = Color.green;
-                }
                 skillAttackUpgradeButton.interactable = false;
             }
             else
             {
-                var btnText = skillAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-                if (btnText != null)
-                {
-                    btnText.text = $"{nextSkill.cost}";
-                    btnText.color = gameDataManager.TotalCoins >= nextSkill.cost ? Color.yellow : Color.gray;
-                }
-                skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextSkill.cost && unlocked;
+                if (skillMaxed || nextSkill == null || skillConfig == null)
+                    skillAttackUpgradeButton.interactable = false;
+                else
+                    skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextSkill.cost;
             }
         }
     }
 
-    // ==================== 升级 ====================
+    // ==================== ?? ====================
 
     public void UpgradeNormalAttack()
     {
@@ -437,7 +436,35 @@ public class CharacterDetailManager : MonoBehaviour
         gameDataManager.NotifyDataChanged();
     }
 
-    // ==================== 选择角色 ====================
+    // ==================== 华文字体（统一本面板所有文本） ====================
+
+    void ApplyGameFont()
+    {
+        if (uiFont == null) return;
+
+        TextMeshProUGUI[] allTexts = GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (var t in allTexts)
+        {
+            t.font = uiFont;
+        }
+    }
+
+    // ==================== 选择按钮阴影（同步文字，阴影副本已在 Inspector 拖入） ====================
+
+    void UpdateSelectButtonShadow()
+    {
+        if (selectButtonShadowText == null || selectButtonText == null) return;
+
+        // 阴影与原文字完全一致（字体、字号、样式、对齐、内容），只靠 Inspector 里的颜色/偏移做区分
+        selectButtonShadowText.text = selectButtonText.text;
+        selectButtonShadowText.font = selectButtonText.font;
+        selectButtonShadowText.fontSize = selectButtonText.fontSize;
+        selectButtonShadowText.fontStyle = selectButtonText.fontStyle;
+        selectButtonShadowText.alignment = selectButtonText.alignment;
+        selectButtonShadowText.enableWordWrapping = selectButtonText.enableWordWrapping;
+    }
+
+    // ==================== ???? ====================
 
     void UpdateSelectButtonState(CharacterData character)
     {
@@ -446,21 +473,15 @@ public class CharacterDetailManager : MonoBehaviour
 
         if (selectButtonText != null)
         {
+            // 只同步内容，颜色由场景 Inspector 设置（不在此修改）
             if (selected)
-            {
-                selectButtonText.text = "✓ 已选择";
-                selectButtonText.color = Color.green;
-            }
+                selectButtonText.text = "已选择";
             else if (unlocked)
-            {
                 selectButtonText.text = "选择角色";
-                selectButtonText.color = Color.white;
-            }
             else
-            {
                 selectButtonText.text = $"解锁 ({character.unlockCost})";
-                selectButtonText.color = gameDataManager.TotalCoins >= character.unlockCost ? Color.yellow : Color.gray;
-            }
+
+            UpdateSelectButtonShadow();
         }
 
         if (selectCharacterButton != null)
@@ -511,34 +532,31 @@ public class CharacterDetailManager : MonoBehaviour
         if (characterNameText != null) characterNameText.text = "";
         if (characterDescriptionText != null) characterDescriptionText.text = "";
 
-        // 清空属性显示
-        if (attackStatText != null) attackStatText.text = "攻击: --";
-        if (rangeStatText != null) rangeStatText.text = "射程: --";
-        if (cooldownStatText != null) cooldownStatText.text = "冷却: --";
+        // 清空攻击/技能属性显示
+        if (normalAttackStatText != null) normalAttackStatText.text = "攻击: --";
+        if (skillAttackStatText != null) skillAttackStatText.text = "技能: --";
 
         if (normalAttackLevelText != null) normalAttackLevelText.text = "Lv.--";
         if (skillAttackLevelText != null) skillAttackLevelText.text = "Lv.--";
         if (normalAttackDescriptionText != null) normalAttackDescriptionText.text = "";
         if (skillAttackDescriptionText != null) skillAttackDescriptionText.text = "";
+        if (normalAttackCoinText != null) normalAttackCoinText.text = "";
+        if (skillAttackCoinText != null) skillAttackCoinText.text = "";
 
-        // 重置按钮
+        // 按钮（文字由场景固定，只禁用）
         if (normalAttackUpgradeButton != null)
         {
-            var btnText = normalAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (btnText != null) btnText.text = "--";
             normalAttackUpgradeButton.interactable = false;
         }
         if (skillAttackUpgradeButton != null)
         {
-            var btnText = skillAttackUpgradeButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (btnText != null) btnText.text = "--";
             skillAttackUpgradeButton.interactable = false;
         }
 
         if (selectButtonText != null)
         {
-            selectButtonText.text = "请选择角色";
-            selectButtonText.color = Color.gray;
+            selectButtonText.text = "选择角色";
+            UpdateSelectButtonShadow();
         }
         if (selectCharacterButton != null)
             selectCharacterButton.interactable = false;
