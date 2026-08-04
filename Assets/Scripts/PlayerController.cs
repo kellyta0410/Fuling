@@ -173,11 +173,12 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
+        // ⭐ 从 CharacterData 加载属性
         maxHealth = currentCharacterData.baseHealth;
-        speed = currentCharacterData.baseSpeed;
+        speed = currentCharacterData.baseSpeed;              // ⭐ 保持不变
         attackDamage = currentCharacterData.baseAttack;
-        attackRange = currentCharacterData.baseAttackRange;
-        attackCooldown = currentCharacterData.baseAttackCooldown;
+        attackRange = currentCharacterData.baseRange;
+        attackCooldown = currentCharacterData.baseCooldown;
 
         baseSpeed = speed;
         baseAttack = attackDamage;
@@ -192,8 +193,8 @@ public class PlayerController : MonoBehaviour
         {
             var normalBonus = dataManager.GetSkillTotalBonus("NormalAttack", characterName, normalConfig);
             attackDamage += normalBonus.attackBonus;
-            attackRange += normalBonus.attackRangeBonus;
-            speed += normalBonus.speedBonus;
+            attackRange += normalBonus.attackRangeBonus;     // ⭐ 保持不变
+            speed += normalBonus.speedBonus;                 // ⭐ 保持不变（移速加成）
             attackCooldown -= normalBonus.cooldownReductionBonus;
             if (attackCooldown < 0.1f) attackCooldown = 0.1f;
 
@@ -208,9 +209,11 @@ public class PlayerController : MonoBehaviour
         {
             var skillBonus = dataManager.GetSkillTotalBonus("SkillAttack", characterName, skillConfig);
             attackDamage += skillBonus.attackBonus;
-            attackRange += skillBonus.attackRangeBonus;
-            // 技能攻击也可以加速度、冷却等
-            // speed += skillBonus.speedBonus;
+            attackRange += skillBonus.attackRangeBonus;      // ⭐ 保持不变
+                                                             // ⭐ 技能攻击也可以加移速（如果需要）
+            speed += skillBonus.speedBonus;                  // ⭐ 保持不变
+            attackCooldown -= skillBonus.cooldownReductionBonus;
+            if (attackCooldown < 0.1f) attackCooldown = 0.1f;
 
             baseAttack = attackDamage;
         }

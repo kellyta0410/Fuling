@@ -1057,6 +1057,7 @@ GameObject:
   - component: {fileID: 1318499291264486505}
   - component: {fileID: 7991273140918378801}
   - component: {fileID: 545722946129857648}
+  - component: {fileID: 7991273140918378802}
   m_Layer: 5
   m_Name: Pausemenu
   m_TagString: Untagged
@@ -5980,7 +5981,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 26.354101}
+  m_AnchoredPosition: {x: 0, y: 26.354126}
   m_SizeDelta: {x: -235.932, y: -52.708252}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!143 &4627361006714548018
@@ -9279,6 +9280,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 294792639415564606}
   m_CullTransparentMesh: 1
+--- !u!114 &7991273140918378802
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 294792639415564606}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!222 &8031054553297939028
 CanvasRenderer:
   m_ObjectHideFlags: 0
