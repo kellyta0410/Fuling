@@ -46,8 +46,8 @@ public class CharacterDetailManager : MonoBehaviour
 
     void Start()
     {
-        if (gameDataManager == null)
-            gameDataManager = GameDataManager.Instance;
+        // 无条件使用单例，避免引用到场景里被销毁的 GameDataManager 对象
+        gameDataManager = GameDataManager.Instance;
 
         if (gameDataManager == null)
         {
@@ -326,13 +326,20 @@ public class CharacterDetailManager : MonoBehaviour
             if (!unlocked)
             {
                 normalAttackUpgradeButton.interactable = false;
+                Debug.Log($"[升级按钮] {name} 普通攻击禁用：未解锁");
             }
             else
             {
                 if (normalMaxed || nextNormal == null || normalConfig == null)
+                {
                     normalAttackUpgradeButton.interactable = false;
+                    Debug.Log($"[升级按钮] {name} 普通攻击禁用：maxed={normalMaxed} nextNull={nextNormal == null} configNull={normalConfig == null}");
+                }
                 else
+                {
                     normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextNormal.cost;
+                    Debug.Log($"[升级按钮] {name} 普通攻击 金币={gameDataManager.TotalCoins} 需要={nextNormal.cost} => {normalAttackUpgradeButton.interactable}");
+                }
             }
         }
 
@@ -385,13 +392,20 @@ public class CharacterDetailManager : MonoBehaviour
             if (!unlocked)
             {
                 skillAttackUpgradeButton.interactable = false;
+                Debug.Log($"[升级按钮] {name} 技能攻击禁用：未解锁");
             }
             else
             {
                 if (skillMaxed || nextSkill == null || skillConfig == null)
+                {
                     skillAttackUpgradeButton.interactable = false;
+                    Debug.Log($"[升级按钮] {name} 技能攻击禁用：maxed={skillMaxed} nextNull={nextSkill == null} configNull={skillConfig == null}");
+                }
                 else
+                {
                     skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextSkill.cost;
+                    Debug.Log($"[升级按钮] {name} 技能攻击 金币={gameDataManager.TotalCoins} 需要={nextSkill.cost} => {skillAttackUpgradeButton.interactable}");
+                }
             }
         }
     }

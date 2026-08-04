@@ -40,6 +40,18 @@ public class PlayerController : MonoBehaviour
 
     [Header("按钮 UI")]
     public Button actionButton;
+    [Tooltip("技能按钮（可不拖，运行时自动创建在普通攻击按钮上方）")]
+    public Button skillButton;
+    [Tooltip("技能冷却时间（秒）")]
+    public float skillCooldown = 3f;
+    [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
+    public Button dodgeButton;
+    [Tooltip("闪避冷却时间（秒）")]
+    public float dodgeCooldown = 2f;
+    [Tooltip("闪避距离")]
+    public float dodgeDistance = 4f;
+    [Tooltip("闪避持续时间（秒）")]
+    public float dodgeDuration = 0.35f;
 
     // ==================== 运行时数据 ====================
     private float currentHealth;
@@ -64,6 +76,22 @@ public class PlayerController : MonoBehaviour
     private bool isAttacking = false;
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
+
+    // ==================== 技能相关 ====================
+    private int skillDamage = 0;
+    private float skillCooldownTimer = 0f;
+    private bool canUseSkill = true;
+    private Image normalCooldownPointer;
+    private Image skillCooldownPointer;
+
+    // ==================== 闪避相关 ====================
+    private float dodgeCooldownTimer = 0f;
+    private bool canDodge = true;
+    private bool isDodging = false;
+    private float dodgeTimer = 0f;
+    private float dodgeSpeed = 10f;
+    private Vector3 dodgeDirection = Vector3.zero;
+    private Image dodgeCooldownPointer;
 
     // ==================== 角色配置 ====================
     private CharacterData currentCharacterData;
@@ -131,13 +159,24 @@ public class PlayerController : MonoBehaviour
 
 #if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
+        if (skillButton == null) skillButton = CreateSkillButton();
+        if (skillButton != null) skillButton.onClick.AddListener(PerformSkillAttack);
+        if (dodgeButton == null) dodgeButton = CreateDodgeButton();
+        if (dodgeButton != null) dodgeButton.onClick.AddListener(PerformDodge);
         if (joystickBg != null) joystickBg.gameObject.SetActive(true);
         isJoystickEnabled = true;
 #else
         if (joystickBg != null) joystickBg.gameObject.SetActive(false);
         if (actionButton != null) actionButton.gameObject.SetActive(false);
+        if (skillButton != null) skillButton.gameObject.SetActive(false);
+        if (dodgeButton != null) dodgeButton.gameObject.SetActive(false);
         isJoystickEnabled = false;
 #endif
+
+        // ⭐ 冷却时钟指针（挂在按钮下方，按钮隐藏时自动隐藏）
+        normalCooldownPointer = CreateCooldownPointer(actionButton);
+        skillCooldownPointer = CreateCooldownPointer(skillButton);
+        dodgeCooldownPointer = CreateCooldownPointer(dodgeButton);
 
         if (uiManager != null)
         {
@@ -216,6 +255,15 @@ public class PlayerController : MonoBehaviour
             if (attackCooldown < 0.1f) attackCooldown = 0.1f;
 
             baseAttack = attackDamage;
+
+            // ⭐ 技能伤害 = 基础攻击 × 1.5 + 技能升级伤害加成；技能冷却受冷却缩减影响
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 1.5f + skillBonus.skillDamageBonus);
+            skillCooldown -= skillBonus.cooldownReductionBonus;
+            if (skillCooldown < 0.5f) skillCooldown = 0.5f;
+        }
+        else
+        {
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 1.5f);
         }
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");
@@ -283,6 +331,38 @@ public class PlayerController : MonoBehaviour
             }
         }
 
+        if (!canUseSkill)
+        {
+            skillCooldownTimer += Time.deltaTime;
+            if (skillCooldownTimer >= skillCooldown)
+            {
+                canUseSkill = true;
+                skillCooldownTimer = 0f;
+            }
+        }
+
+        if (!canDodge)
+        {
+            dodgeCooldownTimer += Time.deltaTime;
+            if (dodgeCooldownTimer >= dodgeCooldown)
+            {
+                canDodge = true;
+                dodgeCooldownTimer = 0f;
+            }
+        }
+
+        if (isDodging)
+        {
+            dodgeTimer += Time.deltaTime;
+            if (dodgeTimer >= dodgeDuration)
+            {
+                isDodging = false;
+                dodgeTimer = 0f;
+            }
+        }
+
+        UpdateCooldownPointers();
+
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -294,10 +374,10 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        Vector3 moveDir = GetMoveDirection(inputVector);
-        float inputMagnitude = Mathf.Clamp01(inputVector.magnitude);
+        Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
+        float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        if (moveDir.magnitude > 0.1f && !isAttacking)
+        if (moveDir.magnitude > 0.1f && !isAttacking && !isDodging)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -320,7 +400,7 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        float currentSpeed = isAttacking ? speed * 0.3f : speed;
+        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking ? speed * 0.3f : speed);
         if (isGrounded)
         {
             if (inputMagnitude > 0.1f)
@@ -445,6 +525,190 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    // ==================== 技能攻击 ====================
+
+    void PerformSkillAttack()
+    {
+        if (!canUseSkill || isDead || isDying) return;
+
+        canUseSkill = false;
+        skillCooldownTimer = 0f;
+        animator.SetTrigger("Action");
+
+        int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
+        StartCoroutine(DelayedSkillDamage(finalDamage));
+    }
+
+    IEnumerator DelayedSkillDamage(int damage)
+    {
+        yield return new WaitForSeconds(attackDamageDelay);
+
+        Collider[] hitColliders = Physics.OverlapSphere(
+            transform.position + transform.forward * attackRange * 0.5f,
+            attackRange * 1.2f
+        );
+
+        foreach (Collider hit in hitColliders)
+        {
+            EnemyAI enemy = hit.GetComponent<EnemyAI>();
+            if (enemy != null && !enemy.isDead)
+            {
+                enemy.TakeDamageImmediate(damage);
+                Debug.Log($"技能攻击 {enemy.name}，造成 {damage} 伤害");
+            }
+        }
+    }
+
+    // ⭐ 冷却进度：1 = 就绪，0 → 1 = 冷却推进
+    public float GetNormalCooldownProgress()
+    {
+        if (canAttack) return 1f;
+        return attackCooldown > 0 ? Mathf.Clamp01(attackCooldownTimer / attackCooldown) : 1f;
+    }
+
+    public float GetSkillCooldownProgress()
+    {
+        if (canUseSkill) return 1f;
+        return skillCooldown > 0 ? Mathf.Clamp01(skillCooldownTimer / skillCooldown) : 1f;
+    }
+
+    public float GetDodgeCooldownProgress()
+    {
+        if (canDodge) return 1f;
+        return dodgeCooldown > 0 ? Mathf.Clamp01(dodgeCooldownTimer / dodgeCooldown) : 1f;
+    }
+
+    // ==================== 闪避 ====================
+
+    void PerformDodge()
+    {
+        if (!canDodge || isDead || isDying || isDodging) return;
+
+        Vector3 dir = GetMoveDirection(inputVector);
+        if (dir.magnitude < 0.1f) dir = transform.forward;
+        dir.y = 0f;
+        if (dir.magnitude < 0.1f) dir = Vector3.forward;
+
+        dodgeDirection = dir.normalized;
+        dodgeSpeed = dodgeDistance / Mathf.Max(dodgeDuration, 0.01f);
+        dodgeTimer = 0f;
+        isDodging = true;
+        canDodge = false;
+        dodgeCooldownTimer = 0f;
+    }
+
+    // ⭐ 在普通攻击按钮上方创建技能按钮
+    Button CreateSkillButton()
+    {
+        if (actionButton == null) return null;
+
+        RectTransform srcRt = actionButton.GetComponent<RectTransform>();
+        if (srcRt == null || srcRt.parent == null) return null;
+
+        GameObject obj = new GameObject("SkillButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        obj.transform.SetParent(srcRt.parent, false);
+
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        rt.sizeDelta = srcRt.sizeDelta;
+        rt.anchorMin = srcRt.anchorMin;
+        rt.anchorMax = srcRt.anchorMax;
+        rt.pivot = srcRt.pivot;
+        rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(0, srcRt.sizeDelta.y + 24f);
+
+        Image srcImg = actionButton.GetComponent<Image>();
+        Image img = obj.GetComponent<Image>();
+        img.sprite = srcImg != null ? srcImg.sprite : null;
+        img.color = srcImg != null ? srcImg.color : Color.white;
+        img.raycastTarget = true;
+
+        Button btn = obj.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.colors = actionButton.colors;
+        btn.transition = actionButton.transition;
+
+        Debug.Log("[技能按钮] 已自动创建在普通攻击按钮上方");
+        return btn;
+    }
+
+    // ⭐ 在普通攻击按钮左边创建闪避按钮
+    Button CreateDodgeButton()
+    {
+        if (actionButton == null) return null;
+
+        RectTransform srcRt = actionButton.GetComponent<RectTransform>();
+        if (srcRt == null || srcRt.parent == null) return null;
+
+        GameObject obj = new GameObject("DodgeButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        obj.transform.SetParent(srcRt.parent, false);
+
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        rt.sizeDelta = srcRt.sizeDelta;
+        rt.anchorMin = srcRt.anchorMin;
+        rt.anchorMax = srcRt.anchorMax;
+        rt.pivot = srcRt.pivot;
+        rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(-(srcRt.sizeDelta.x + 24f), 0);
+
+        Image srcImg = actionButton.GetComponent<Image>();
+        Image img = obj.GetComponent<Image>();
+        img.sprite = srcImg != null ? srcImg.sprite : null;
+        img.color = srcImg != null ? srcImg.color : Color.white;
+        img.raycastTarget = true;
+
+        Button btn = obj.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.colors = actionButton.colors;
+        btn.transition = actionButton.transition;
+
+        Debug.Log("[闪避按钮] 已自动创建在普通攻击按钮左边");
+        return btn;
+    }
+
+    // ⭐ 创建冷却时钟指针（细长条，绕按钮中心旋转）
+    Image CreateCooldownPointer(Button button)
+    {
+        if (button == null) return null;
+
+        RectTransform btnRt = button.GetComponent<RectTransform>();
+        if (btnRt == null) return null;
+
+        GameObject pointer = new GameObject("CooldownPointer", typeof(RectTransform), typeof(Image));
+        pointer.transform.SetParent(btnRt, false);
+
+        RectTransform ptrRt = pointer.GetComponent<RectTransform>();
+        ptrRt.anchorMin = new Vector2(0.5f, 0.5f);
+        ptrRt.anchorMax = new Vector2(0.5f, 0.5f);
+        ptrRt.pivot = new Vector2(0.5f, 0f);
+        ptrRt.sizeDelta = new Vector2(4f, btnRt.rect.height * 0.38f);
+        ptrRt.localPosition = Vector3.zero;
+
+        Image img = pointer.GetComponent<Image>();
+        img.color = new Color(1f, 1f, 1f, 0.85f);
+        img.raycastTarget = false;
+
+        pointer.SetActive(false);
+        return img;
+    }
+
+    // ⭐ 更新两个按钮的冷却时钟指针
+    void UpdateCooldownPointers()
+    {
+        UpdatePointer(normalCooldownPointer, GetNormalCooldownProgress());
+        UpdatePointer(skillCooldownPointer, GetSkillCooldownProgress());
+        UpdatePointer(dodgeCooldownPointer, GetDodgeCooldownProgress());
+    }
+
+    void UpdatePointer(Image pointer, float progress)
+    {
+        if (pointer == null) return;
+
+        bool cooling = progress < 1f;
+        pointer.gameObject.SetActive(cooling);
+        if (cooling)
+        {
+            pointer.rectTransform.localRotation = Quaternion.Euler(0, 0, -(progress * 360f));
+        }
+    }
+
     public void TakeDamage(float damage)
     {
         if (isDead || isDying) return;
@@ -503,11 +767,6 @@ public class PlayerController : MonoBehaviour
         Debug.Log($"玩家死亡");
 
         StartCoroutine(WaitForDeathAnimationEnd());
-
-        if (ComboManager.Instance != null)
-        {
-            ComboManager.Instance.OnPlayerDeath();
-        }
     }
 
     void PlaceOnGround()
@@ -637,6 +896,8 @@ public class PlayerController : MonoBehaviour
         keyboardInput = new Vector2(h, v);
 
         if (Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0)) PerformAction();
+        if (Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.Space)) PerformSkillAttack();
+        if (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift)) PerformDodge();
         if (Input.GetKeyDown(KeyCode.K)) TakeDamage(999f);
     }
 

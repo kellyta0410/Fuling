@@ -36,6 +36,11 @@ public class UIManager : MonoBehaviour
     public InfiniteEnemySpawner infiniteSpawner;
     public GameManager gameManager;
 
+    [Header("Buff 提示")]
+    [Tooltip("获得 Buff 时的提示文字（可不拖，运行时自动创建）")]
+    public TextMeshProUGUI buffToastText;
+    private Coroutine buffToastCoroutine;
+
     private Vector2 timerOriginalPosition;
     private float timeLimit;
 
@@ -405,4 +410,65 @@ public class UIManager : MonoBehaviour
     public void OnPlayerCoinChanged() => UpdateCoinUI();
     public void OnPlayerKillChanged() => UpdateKillUI();
     public void OnPlayerDied() => ShowGameOver();
+
+    // ==================== Buff 提示 ====================
+
+    public void ShowBuffToast(string message)
+    {
+        TextMeshProUGUI toast = GetBuffToast();
+        if (toast == null) return;
+
+        toast.gameObject.SetActive(true);
+        toast.text = message;
+        toast.color = Color.white;
+
+        if (buffToastCoroutine != null) StopCoroutine(buffToastCoroutine);
+        buffToastCoroutine = StartCoroutine(HideBuffToast(2f));
+    }
+
+    IEnumerator HideBuffToast(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        if (buffToastText != null)
+        {
+            buffToastText.gameObject.SetActive(false);
+        }
+        buffToastCoroutine = null;
+    }
+
+    TextMeshProUGUI GetBuffToast()
+    {
+        if (buffToastText != null) return buffToastText;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return null;
+
+        // 复用场景中已有文本的字体（华文行楷），保证中文正常显示
+        TMP_FontAsset font = null;
+        if (coinText != null) font = coinText.font;
+        else if (timerText != null) font = timerText.font;
+        else if (finalCoinText != null) font = finalCoinText.font;
+
+        GameObject obj = new GameObject("BuffToast");
+        obj.transform.SetParent(canvas.transform, false);
+
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.85f);
+        rt.anchorMax = new Vector2(0.5f, 0.85f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(800, 80);
+
+        TextMeshProUGUI tmp = obj.AddComponent<TextMeshProUGUI>();
+        tmp.fontSize = 40;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = Color.yellow;
+        if (font != null) tmp.font = font;
+        else tmp.font = TMP_Settings.defaultFontAsset;
+
+        buffToastText = tmp;
+        return tmp;
+    }
 }

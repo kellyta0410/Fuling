@@ -23,6 +23,7 @@ public abstract class EnemyAI : MonoBehaviour
     protected Slider healthSlider;
     protected Image healthFillImage;
     protected float currentHealth;
+    protected float maxHealth;   // 生成时锁定的最大血量（生成当刻的血量，后续升级不再改变）
 
     [Header("血条颜色")]
     public Color fullHealthColor = Color.green;
@@ -95,6 +96,7 @@ public abstract class EnemyAI : MonoBehaviour
         player = FindObjectOfType<PlayerController>();
         agent = GetComponent<NavMeshAgent>();
         myCollider = GetComponent<Collider>();
+        if (myCollider == null) myCollider = GetComponentInChildren<Collider>();
 
         isAgentValid = agent != null && agent.isOnNavMesh;
         enemyLayerMask = LayerMask.GetMask("Enemy");
@@ -129,7 +131,9 @@ public abstract class EnemyAI : MonoBehaviour
 
             if (!isHealthInitialized)
             {
-                currentHealth = baseHealth;
+                // 生成时锁定血量：满血 = 基础血量 × 生成当刻的倍率
+                maxHealth = baseHealth * currentHealthMultiplier;
+                currentHealth = maxHealth;
                 isHealthInitialized = true;
             }
 
@@ -152,7 +156,8 @@ public abstract class EnemyAI : MonoBehaviour
             baseAttackDamage = 10f;
             if (!isHealthInitialized)
             {
-                currentHealth = 50f;
+                maxHealth = baseHealth * currentHealthMultiplier;
+                currentHealth = maxHealth;
                 isHealthInitialized = true;
             }
         }
@@ -243,7 +248,7 @@ public abstract class EnemyAI : MonoBehaviour
 
         HandleMovement();
 
-        if (enableSeparation && isChasing && !isAttacking)
+        if (enableSeparation && !isAttacking)
         {
             ApplySeparation();
         }
@@ -263,24 +268,37 @@ public abstract class EnemyAI : MonoBehaviour
         Collider[] nearbyEnemies = Physics.OverlapSphere(transform.position, separationRadius, enemyLayerMask);
         Vector3 force = Vector3.zero;
         int count = 0;
+        float minDist = float.MaxValue;
 
         foreach (Collider col in nearbyEnemies)
         {
-            if (col.gameObject == gameObject) continue;
+            if (col == null || col.gameObject == gameObject) continue;
 
-            Vector3 dir = (transform.position - col.transform.position);
+            EnemyAI other = col.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.isDead) continue;
+
+            Vector3 dir = transform.position - col.transform.position;
+            dir.y = 0;
             float dist = dir.magnitude;
 
-            if (dist < separationRadius && dist > 0.01f)
+            if (dist < separationRadius && dist > 0.001f)
             {
+                // 越近排斥力越强（平方曲线，避免远处微扰）
                 float strength = 1f - (dist / separationRadius);
-                force += dir.normalized * strength * separationForce;
+                force += dir.normalized * (strength * strength) * separationForce;
                 count++;
+                if (dist < minDist) minDist = dist;
             }
         }
 
         if (count > 0)
         {
+            // 距离过近时停止追击（保持间距，避免互相推挤着走）
+            if (minDist < separationRadius * 0.6f && !isAttacking && !isDead)
+            {
+                StopAgent();
+            }
+
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
 
             if (useDirectChase)
@@ -442,8 +460,8 @@ public abstract class EnemyAI : MonoBehaviour
     protected void UpdateHealthBar()
     {
         if (healthSlider == null) return;
-        float maxHealth = baseHealth * currentHealthMultiplier;
-        float percent = currentHealth / maxHealth;
+        // 使用生成时锁定的 maxHealth，后续难度升级不会改变已生成敌人的血量显示
+        float percent = maxHealth > 0 ? currentHealth / maxHealth : 0f;
         healthSlider.value = percent;
         if (healthFillImage != null)
         {
@@ -502,11 +520,7 @@ public abstract class EnemyAI : MonoBehaviour
         }
 
         int baseCoin = enemyData != null ? enemyData.coinReward : 10;
-        int finalCoin = baseCoin;
-        bool comboActive = ComboManager.Instance != null && ComboManager.Instance.IsComboActive();
-        if (comboActive) finalCoin = baseCoin * 2;
-        if (ComboManager.Instance != null) ComboManager.Instance.AddKill();
-        SpawnCoin(finalCoin);
+        SpawnCoin(baseCoin);
         if (player != null) player.AddKill();
 
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;

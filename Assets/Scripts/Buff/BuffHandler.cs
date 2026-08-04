@@ -5,6 +5,7 @@ public class BuffHandler : MonoBehaviour
 {
     private Dictionary<BuffType, Buff> activeBuffs = new Dictionary<BuffType, Buff>();
     private PlayerController player;
+    private UIManager cachedUI;
 
     void Start()
     {
@@ -22,6 +23,7 @@ public class BuffHandler : MonoBehaviour
         if (data.isInstantEffect)
         {
             ApplyInstantEffect(data);
+            ShowBuffToast(GetBuffMessage(data));
             return;
         }
 
@@ -37,6 +39,32 @@ public class BuffHandler : MonoBehaviour
             activeBuffs.Add(data.buffType, newBuff);
             newBuff.OnApply();
         }
+
+        ShowBuffToast(GetBuffMessage(data));
+    }
+
+    // ---------- Buff 获取提示 ----------
+    private string GetBuffMessage(BuffDataSO data)
+    {
+        if (data == null) return "获得 Buff！";
+
+        switch (data.buffType)
+        {
+            case BuffType.Heal:
+                return data.isFullRestore ? "生命回满！" : $"恢复 {Mathf.RoundToInt(data.effectValue)} 点生命";
+            case BuffType.SpeedUp:
+                return $"获得 {data.buffName}！，限时5秒";
+            case BuffType.PowerUp:
+                return $"获得 {data.buffName}，攻击 +{Mathf.RoundToInt(data.effectValue)}！，限时5秒";
+            default:
+                return $"获得 {data.buffName}！";
+        }
+    }
+
+    private void ShowBuffToast(string message)
+    {
+        if (cachedUI == null) cachedUI = FindObjectOfType<UIManager>();
+        if (cachedUI != null) cachedUI.ShowBuffToast(message);
     }
 
     // ---------- 即时效果执行 ----------

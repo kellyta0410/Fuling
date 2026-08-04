@@ -61,6 +61,12 @@ public class GameDataManager : MonoBehaviour
                 LoadData();
                 return;
             }
+
+            // 场景重载时新对象会被销毁。先让保留的 Instance 从存档刷新一次，
+            // 保证跨场景（游戏结束返回）后解锁/选择/金币与存档一致。
+            Instance.LoadData();
+            Instance.LoadAllCharactersIfNeeded();
+            Instance.InitializeDefaultData();
             Destroy(gameObject);
             return;
         }
@@ -71,6 +77,8 @@ public class GameDataManager : MonoBehaviour
         LoadData();
         LoadAllCharactersIfNeeded();
         InitializeDefaultData();
+
+        Debug.Log($"[GDM] 初始化完成 角色数={allCharacters.Count} 解锁=[{string.Join(",", unlockedCharacterNames)}] 金币={totalCoins} 已选={selectedCharacterName}");
     }
 
     // ==================== 角色加载 ====================
