@@ -53,9 +53,9 @@ public class BuffHandler : MonoBehaviour
             case BuffType.Heal:
                 return data.isFullRestore ? "生命回满！" : $"恢复 {Mathf.RoundToInt(data.effectValue)} 点生命";
             case BuffType.SpeedUp:
-                return $"获得 {data.buffName}！，限时5秒";
+                return $"获得 {data.buffName}！";
             case BuffType.PowerUp:
-                return $"获得 {data.buffName}，攻击 +{Mathf.RoundToInt(data.effectValue)}！，限时5秒";
+                return $"获得 {data.buffName}，攻击 +{Mathf.RoundToInt(data.effectValue)}！";
             default:
                 return $"获得 {data.buffName}！";
         }

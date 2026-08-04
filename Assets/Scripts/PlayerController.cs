@@ -43,11 +43,11 @@ public class PlayerController : MonoBehaviour
     [Tooltip("技能按钮（可不拖，运行时自动创建在普通攻击按钮上方）")]
     public Button skillButton;
     [Tooltip("技能冷却时间（秒）")]
-    public float skillCooldown = 3f;
+    public float skillCooldown = 10f;
     [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
     public Button dodgeButton;
     [Tooltip("闪避冷却时间（秒）")]
-    public float dodgeCooldown = 2f;
+    public float dodgeCooldown = 5f;
     [Tooltip("闪避距离")]
     public float dodgeDistance = 4f;
     [Tooltip("闪避持续时间（秒）")]
@@ -81,8 +81,7 @@ public class PlayerController : MonoBehaviour
     private int skillDamage = 0;
     private float skillCooldownTimer = 0f;
     private bool canUseSkill = true;
-    private Image normalCooldownPointer;
-    private Image skillCooldownPointer;
+    private Image[] cooldownMasks = new Image[3];
 
     // ==================== 闪避相关 ====================
     private float dodgeCooldownTimer = 0f;
@@ -91,7 +90,6 @@ public class PlayerController : MonoBehaviour
     private float dodgeTimer = 0f;
     private float dodgeSpeed = 10f;
     private Vector3 dodgeDirection = Vector3.zero;
-    private Image dodgeCooldownPointer;
 
     // ==================== 角色配置 ====================
     private CharacterData currentCharacterData;
@@ -173,10 +171,10 @@ public class PlayerController : MonoBehaviour
         isJoystickEnabled = false;
 #endif
 
-        // ⭐ 冷却时钟指针（挂在按钮下方，按钮隐藏时自动隐藏）
-        normalCooldownPointer = CreateCooldownPointer(actionButton);
-        skillCooldownPointer = CreateCooldownPointer(skillButton);
-        dodgeCooldownPointer = CreateCooldownPointer(dodgeButton);
+        // ⭐ 冷却效果：全暗遮罩 + 亮色从下往上填充，填满后才可点击
+        CreateCooldownEffect(actionButton, 0);
+        CreateCooldownEffect(skillButton, 1);
+        CreateCooldownEffect(dodgeButton, 2);
 
         if (uiManager != null)
         {
@@ -361,7 +359,7 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        UpdateCooldownPointers();
+        UpdateCooldownOverlays();
 
         if (isAttacking)
         {
@@ -663,50 +661,51 @@ public class PlayerController : MonoBehaviour
         return btn;
     }
 
-    // ⭐ 创建冷却时钟指针（细长条，绕按钮中心旋转）
-    Image CreateCooldownPointer(Button button)
+    // ⭐ 创建冷却效果：顶部锚定的深色遮罩，高度逐帧缩短，露出按钮本体
+    void CreateCooldownEffect(Button button, int index)
     {
-        if (button == null) return null;
+        if (button == null) return;
 
         RectTransform btnRt = button.GetComponent<RectTransform>();
-        if (btnRt == null) return null;
+        if (btnRt == null) return;
 
-        GameObject pointer = new GameObject("CooldownPointer", typeof(RectTransform), typeof(Image));
-        pointer.transform.SetParent(btnRt, false);
+        GameObject mask = new GameObject("CooldownMask", typeof(RectTransform), typeof(Image));
+        mask.transform.SetParent(btnRt, false);
 
-        RectTransform ptrRt = pointer.GetComponent<RectTransform>();
-        ptrRt.anchorMin = new Vector2(0.5f, 0.5f);
-        ptrRt.anchorMax = new Vector2(0.5f, 0.5f);
-        ptrRt.pivot = new Vector2(0.5f, 0f);
-        ptrRt.sizeDelta = new Vector2(4f, btnRt.rect.height * 0.38f);
-        ptrRt.localPosition = Vector3.zero;
+        RectTransform mrt = mask.GetComponent<RectTransform>();
+        mrt.anchorMin = new Vector2(0f, 1f);
+        mrt.anchorMax = new Vector2(1f, 1f);
+        mrt.pivot = new Vector2(0.5f, 1f);
+        mrt.sizeDelta = Vector2.zero;
 
-        Image img = pointer.GetComponent<Image>();
-        img.color = new Color(1f, 1f, 1f, 0.85f);
-        img.raycastTarget = false;
-
-        pointer.SetActive(false);
-        return img;
+        Image mImg = mask.GetComponent<Image>();
+        mImg.color = new Color(0f, 0f, 0f, 0.6f);
+        mImg.raycastTarget = false;
+        mask.SetActive(false);
+        cooldownMasks[index] = mImg;
     }
 
-    // ⭐ 更新两个按钮的冷却时钟指针
-    void UpdateCooldownPointers()
+    // ⭐ 更新三个按钮的冷却效果
+    void UpdateCooldownOverlays()
     {
-        UpdatePointer(normalCooldownPointer, GetNormalCooldownProgress());
-        UpdatePointer(skillCooldownPointer, GetSkillCooldownProgress());
-        UpdatePointer(dodgeCooldownPointer, GetDodgeCooldownProgress());
+        ApplyCooldown(0, GetNormalCooldownProgress());
+        ApplyCooldown(1, GetSkillCooldownProgress());
+        ApplyCooldown(2, GetDodgeCooldownProgress());
     }
 
-    void UpdatePointer(Image pointer, float progress)
+    void ApplyCooldown(int index, float progress)
     {
-        if (pointer == null) return;
+        Image mask = cooldownMasks[index];
+        if (mask == null) return;
 
-        bool cooling = progress < 1f;
-        pointer.gameObject.SetActive(cooling);
-        if (cooling)
-        {
-            pointer.rectTransform.localRotation = Quaternion.Euler(0, 0, -(progress * 360f));
-        }
+        float p = Mathf.Clamp01(progress);
+        mask.gameObject.SetActive(p < 1f);
+
+        RectTransform maskRt = mask.rectTransform;
+        RectTransform btnRt = mask.transform.parent as RectTransform;
+        float btnHeight = btnRt != null ? btnRt.rect.height : 100f;
+        // 遮罩锚定顶部：高度从全高缩到 0 → 遮罩从底部退去，按钮本体从下往上露出
+        maskRt.sizeDelta = new Vector2(0f, btnHeight * (1f - p));
     }
 
     public void TakeDamage(float damage)
