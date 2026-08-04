@@ -3187,9 +3187,9 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 2115558895}
   - {fileID: 689418173}
   - {fileID: 875755818}
+  - {fileID: 2115558895}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &202067727336509010
@@ -6097,9 +6097,27 @@ MonoBehaviour:
   m_GameObject: {fileID: 5385433905013847977}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 87f5af15c9e1293489ef0302d185ab00, type: 3}
+  m_Script: {fileID: 11500000, guid: 2d19fb306a6ead34f9eaf49d30ea2dca, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  maxHealth: 100
+  speed: 4
+  attackDamage: 20
+  attackRange: 2
+  attackCooldown: 1
+  gravity: 3.5
+  smoothRotation: 10
+  attackDuration: 0.5
+  attackDamageDelay: 0.3
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
+  groundCheckDistance: 0.5
+  deathDelay: 1.5
+  joystickBg: {fileID: 7605755201320503764}
+  joystickHandle: {fileID: 7789745709981054936}
+  joystickRadius: 150
+  actionButton: {fileID: 657327851982807269}
 --- !u!1 &2987291204084542027
 GameObject:
   m_ObjectHideFlags: 0
