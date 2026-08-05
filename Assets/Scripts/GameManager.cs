@@ -362,6 +362,17 @@ public class GameManager : MonoBehaviour
         {
             coins = player.GetCoins();
             kills = player.GetKills();
+
+            // ⭐ 结算场景残留金币：把尚未收集的金币预制体也计入最终金币
+            Coin[] leftoverCoins = FindObjectsOfType<Coin>();
+            foreach (Coin c in leftoverCoins)
+            {
+                if (c == null || c.coinValue <= 0) continue;
+                coins += c.coinValue;
+                player.AddCoin(c.coinValue);
+                Destroy(c.gameObject);
+            }
+
             Debug.Log($"🎯 玩家数据 - 金币: {coins}, 击杀: {kills}");
         }
         else

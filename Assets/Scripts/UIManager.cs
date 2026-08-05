@@ -366,8 +366,8 @@ public class UIManager : MonoBehaviour
             timeText = $"\nTime: {min:00}:{sec:00}";
         }
 
-        if (finalCoinText != null) finalCoinText.text = $"Coins: {coins}";
-        if (finalKillText != null) finalKillText.text = $"Kills: {kills}{timeText}";
+        if (finalCoinText != null) finalCoinText.text = $"{coins}";
+        if (finalKillText != null) finalKillText.text = $"{kills}{timeText}";
 
         Time.timeScale = 0f;
 
