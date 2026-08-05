@@ -456,7 +456,7 @@ Transform:
   m_GameObject: {fileID: 961739749}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 0, y: 8, z: -8}
+  m_LocalPosition: {x: 0, y: 12, z: -12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -511,9 +511,7 @@ MonoBehaviour:
   player: {fileID: 4014722327288531488}
   fadeSpeed: 8
   targetAlpha: 0.5
-  wallLayer:
-    serializedVersion: 2
-    m_Bits: 64
+  hysteresisFrames: 6
   playerOffsets:
   - {x: 0, y: 0, z: 0}
   - {x: 0, y: 0.5, z: 0}
@@ -521,6 +519,9 @@ MonoBehaviour:
   - {x: 0.3, y: 0, z: 0}
   - {x: -0.3, y: 0, z: 0}
   minHitsToFade: 2
+  wallLayer:
+    serializedVersion: 2
+    m_Bits: 64
 --- !u!1 &1668390886
 GameObject:
   m_ObjectHideFlags: 0
@@ -900,7 +901,7 @@ Transform:
   m_GameObject: {fileID: 8753919783859019764}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 0, y: 8, z: -8}
+  m_LocalPosition: {x: 0, y: 12, z: -12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -5453,8 +5454,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 2, y: 2, z: 2}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 7856840646057162371}
   - {fileID: 5442859082569457038}
@@ -8375,7 +8376,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BindingMode: 4
-  m_FollowOffset: {x: 0, y: 8, z: -8}
+  m_FollowOffset: {x: 0, y: 12, z: -12}
   m_XDamping: 0.5
   m_YDamping: 0.5
   m_ZDamping: 0.5
