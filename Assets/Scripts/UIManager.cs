@@ -267,7 +267,7 @@ public class UIManager : MonoBehaviour
     public void UpdateCoinUI()
     {
         if (player != null && coinText != null)
-            coinText.text = $"Coins: {player.GetCoins()}";
+            coinText.text = $"{player.GetCoins()}";
     }
 
     public void UpdateKillUI()
@@ -275,7 +275,7 @@ public class UIManager : MonoBehaviour
         if (enemyCountText != null && player != null)
         {
             // 显示击杀数
-            enemyCountText.text = $"Kills: {player.GetKills()}";
+            enemyCountText.text = $"{player.GetKills()}";
         }
     }
 
