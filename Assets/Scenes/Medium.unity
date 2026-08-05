@@ -8,9 +8,8 @@ OcclusionCullingSettings:
     smallestOccluder: 5
     smallestHole: 0.25
     backfaceThreshold: 100
-  m_SceneGUID: e9fd0d21b8a5a7a439496020e083b179
-  m_OcclusionCullingData: {fileID: 36300000, guid: 4cfa37acd2ec39848b8a202cff61317f,
-    type: 2}
+  m_SceneGUID: 00000000000000000000000000000000
+  m_OcclusionCullingData: {fileID: 0}
 --- !u!104 &2
 RenderSettings:
   m_ObjectHideFlags: 0
@@ -337,6 +336,7 @@ GameObject:
   - component: {fileID: 961739751}
   - component: {fileID: 961739750}
   - component: {fileID: 961739754}
+  - component: {fileID: 961739755}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -496,6 +496,32 @@ MonoBehaviour:
   m_CameraActivatedEvent:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &961739755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 961739749}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a4812ea6d7228c45ad25d0a030ed768, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  player: {fileID: 4014722327288531488}
+  fadeSpeed: 8
+  targetAlpha: 0.5
+  hysteresisFrames: 6
+  playerOffsets:
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0.5, z: 0}
+  - {x: 0, y: -0.5, z: 0}
+  - {x: 0.3, y: 0, z: 0}
+  - {x: -0.3, y: 0, z: 0}
+  minHitsToFade: 2
+  wallLayer:
+    serializedVersion: 2
+    m_Bits: 64
 --- !u!1 &1668390886
 GameObject:
   m_ObjectHideFlags: 0
@@ -10892,7 +10918,6 @@ GameObject:
   m_Component:
   - component: {fileID: 233422764473163174}
   - component: {fileID: 9023595788974492072}
-  - component: {fileID: 9023595788974492073}
   m_Layer: 0
   m_Name: Virtual Camera
   m_TagString: Untagged
@@ -11428,31 +11453,6 @@ MonoBehaviour:
         m_Calls: []
   m_LegacyBlendHint: 0
   m_ComponentOwner: {fileID: 4497339275467960473}
---- !u!114 &9023595788974492073
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8753919783859019764}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1a4812ea6d7228c45ad25d0a030ed768, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  player: {fileID: 4014722327288531488}
-  fadeSpeed: 8
-  targetAlpha: 0.5
-  wallLayer:
-    serializedVersion: 2
-    m_Bits: 64
-  playerOffsets:
-  - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 0.5, z: 0}
-  - {x: 0, y: -0.5, z: 0}
-  - {x: 0.3, y: 0, z: 0}
-  - {x: -0.3, y: 0, z: 0}
-  minHitsToFade: 2
 --- !u!1 &9049809997544548891
 GameObject:
   m_ObjectHideFlags: 0
