@@ -43,7 +43,7 @@ public class PlayerController : MonoBehaviour
     [Tooltip("技能按钮（可不拖，运行时自动创建在普通攻击按钮上方）")]
     public Button skillButton;
     [Tooltip("技能冷却时间（秒）")]
-    public float skillCooldown = 10f;
+    public float skillCooldown = 15f;
     [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
     public Button dodgeButton;
     [Tooltip("闪避冷却时间（秒）")]
@@ -79,6 +79,7 @@ public class PlayerController : MonoBehaviour
 
     // ==================== 技能相关 ====================
     private int skillDamage = 0;
+    private float skillRange = 3f;
     private float skillCooldownTimer = 0f;
     private bool canUseSkill = true;
     private Image[] cooldownMasks = new Image[3];
@@ -216,6 +217,7 @@ public class PlayerController : MonoBehaviour
         attackDamage = currentCharacterData.baseAttack;
         attackRange = currentCharacterData.baseRange;
         attackCooldown = currentCharacterData.baseCooldown;
+        skillRange = currentCharacterData.baseRange * 1.5f;   // 初始技能范围 = 3（普攻2 × 1.5）
 
         baseSpeed = speed;
         baseAttack = attackDamage;
@@ -246,22 +248,21 @@ public class PlayerController : MonoBehaviour
         {
             var skillBonus = dataManager.GetSkillTotalBonus("SkillAttack", characterName, skillConfig);
             attackDamage += skillBonus.attackBonus;
-            attackRange += skillBonus.attackRangeBonus;      // ⭐ 保持不变
-                                                             // ⭐ 技能攻击也可以加移速（如果需要）
+            skillRange += skillBonus.attackRangeBonus;          // ⭐ 技能范围加成只加技能范围
             speed += skillBonus.speedBonus;                  // ⭐ 保持不变
             attackCooldown -= skillBonus.cooldownReductionBonus;
             if (attackCooldown < 0.1f) attackCooldown = 0.1f;
 
             baseAttack = attackDamage;
 
-            // ⭐ 技能伤害 = 基础攻击 × 1.5 + 技能升级伤害加成；技能冷却受冷却缩减影响
-            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 1.5f + skillBonus.skillDamageBonus);
+            // ⭐ 技能伤害 = 基础攻击 × 3 + 技能升级伤害加成；技能冷却受冷却缩减影响
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 3f + skillBonus.skillDamageBonus);
             skillCooldown -= skillBonus.cooldownReductionBonus;
             if (skillCooldown < 0.5f) skillCooldown = 0.5f;
         }
         else
         {
-            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 1.5f);
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 3f);
         }
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");
@@ -542,8 +543,8 @@ public class PlayerController : MonoBehaviour
         yield return new WaitForSeconds(attackDamageDelay);
 
         Collider[] hitColliders = Physics.OverlapSphere(
-            transform.position + transform.forward * attackRange * 0.5f,
-            attackRange * 1.2f
+            transform.position + transform.forward * skillRange * 0.5f,
+            skillRange
         );
 
         foreach (Collider hit in hitColliders)

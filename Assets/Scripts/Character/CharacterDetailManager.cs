@@ -94,14 +94,14 @@ public class CharacterDetailManager : MonoBehaviour
     {
         string id = $"NormalAttack_{name}";
         var entry = gameDataManager.skillLevels.Find(s => s.skillID == id);
-        return entry != null ? entry.level : 0;
+        return entry != null && entry.level > 0 ? entry.level : 1;
     }
 
     int GetSkillLevel(string name)
     {
         string id = $"SkillAttack_{name}";
         var entry = gameDataManager.skillLevels.Find(s => s.skillID == id);
-        return entry != null ? entry.level : 0;
+        return entry != null && entry.level > 0 ? entry.level : 1;
     }
 
     void SetNormalLevel(string name, int level)
@@ -253,15 +253,18 @@ public class CharacterDetailManager : MonoBehaviour
         var normalTotal = normalConfig?.GetTotalBonus(GetNormalLevel(name)) ?? new UpgradeLevelData();
         var skillTotal = skillConfig?.GetTotalBonus(GetSkillLevel(name)) ?? new UpgradeLevelData();
 
-        // 普通攻击区域：显示最终攻击力（默认属性，升级后更新数字）
+        // 普通攻击区域：显示当前实际数值（默认属性 + 升级累计，升级后更新）
         int totalAttack = character.baseAttack + normalTotal.attackBonus + skillTotal.attackBonus;
+        float totalRange = character.baseRange + normalTotal.attackRangeBonus;
         if (normalAttackStatText != null)
-            normalAttackStatText.text = $"攻击: {totalAttack}";
+            normalAttackStatText.text = $"攻击：{totalAttack}  范围：{totalRange:F1}";
 
-        // 技能攻击区域：显示技能攻击力（默认属性，升级后更新数字）
-        int skillAttack = character.baseAttack + skillTotal.attackBonus;
+        // 技能攻击区域：显示当前实际数值（基础攻击×3 + 技能伤害成长；冷却基准 15 秒）
+        int skillAttack = character.baseAttack * 3 + skillTotal.skillDamageBonus;
+        float skillRange = character.baseRange * 1.5f + skillTotal.attackRangeBonus;
+        float skillCd = Mathf.Max(0f, 15f - skillTotal.cooldownReductionBonus);
         if (skillAttackStatText != null)
-            skillAttackStatText.text = $"技能: {skillAttack}";
+            skillAttackStatText.text = $"伤害：{skillAttack}  范围：{skillRange:F1}  冷却：{skillCd:F0}秒";
     }
 
     // ==================== ?????? ====================
@@ -300,10 +303,10 @@ public class CharacterDetailManager : MonoBehaviour
             if (!unlocked || normalMaxed || nextNormal == null || normalConfig == null)
                 normalAttackCoinText.text = "";
             else
-                normalAttackCoinText.text = $"{nextNormal.cost}";
+                normalAttackCoinText.text = $"{normalConfig.GetLevelCost(normalLevel + 1)}";
         }
 
-        // 描述显示（当前等级的描述，0 级时显示下一级效果）
+        // 简介显示当前等级这一级提升的内容（升级后更新）
         if (normalAttackDescriptionText != null)
         {
             if (!unlocked)
@@ -337,8 +340,8 @@ public class CharacterDetailManager : MonoBehaviour
                 }
                 else
                 {
-                    normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextNormal.cost;
-                    Debug.Log($"[升级按钮] {name} 普通攻击 金币={gameDataManager.TotalCoins} 需要={nextNormal.cost} => {normalAttackUpgradeButton.interactable}");
+                    normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= normalConfig.GetLevelCost(normalLevel + 1);
+                    Debug.Log($"[升级按钮] {name} 普通攻击 金币={gameDataManager.TotalCoins} 需要={normalConfig.GetLevelCost(normalLevel + 1)} => {normalAttackUpgradeButton.interactable}");
                 }
             }
         }
@@ -366,10 +369,10 @@ public class CharacterDetailManager : MonoBehaviour
             if (!unlocked || skillMaxed || nextSkill == null || skillConfig == null)
                 skillAttackCoinText.text = "";
             else
-                skillAttackCoinText.text = $"{nextSkill.cost}";
+                skillAttackCoinText.text = $"{skillConfig.GetLevelCost(skillLevel + 1)}";
         }
 
-        // 描述显示（当前等级的描述，0 级时显示下一级效果）
+        // 简介显示当前等级这一级提升的内容（升级后更新）
         if (skillAttackDescriptionText != null)
         {
             if (!unlocked)
@@ -403,8 +406,8 @@ public class CharacterDetailManager : MonoBehaviour
                 }
                 else
                 {
-                    skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= nextSkill.cost;
-                    Debug.Log($"[升级按钮] {name} 技能攻击 金币={gameDataManager.TotalCoins} 需要={nextSkill.cost} => {skillAttackUpgradeButton.interactable}");
+                    skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= skillConfig.GetLevelCost(skillLevel + 1);
+                    Debug.Log($"[升级按钮] {name} 技能攻击 金币={gameDataManager.TotalCoins} 需要={skillConfig.GetLevelCost(skillLevel + 1)} => {skillAttackUpgradeButton.interactable}");
                 }
             }
         }
@@ -423,7 +426,7 @@ public class CharacterDetailManager : MonoBehaviour
         if (current >= config.maxLevel) return;
 
         var next = config.GetLevelData(current + 1);
-        if (next == null || !gameDataManager.SpendCoins(next.cost)) return;
+        if (next == null || !gameDataManager.SpendCoins(config.GetLevelCost(current + 1))) return;
 
         SetNormalLevel(name, current + 1);
         UpdateCharacterStats(currentDisplayCharacter);
@@ -442,7 +445,7 @@ public class CharacterDetailManager : MonoBehaviour
         if (current >= config.maxLevel) return;
 
         var next = config.GetLevelData(current + 1);
-        if (next == null || !gameDataManager.SpendCoins(next.cost)) return;
+        if (next == null || !gameDataManager.SpendCoins(config.GetLevelCost(current + 1))) return;
 
         SetSkillLevel(name, current + 1);
         UpdateCharacterStats(currentDisplayCharacter);

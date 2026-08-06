@@ -14,13 +14,87 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   configName: "\u5347\u7EA7\u914D\u7F6E"
   maxLevel: 10
-  attackBonusPerLevel: 3
-  attackRangeBonusPerLevel: 0.2
-  speedBonusPerLevel: 0
-  cooldownReductionPerLevel: 0
-  skillDamageBonusPerLevel: 0
-  baseCost: 50
-  costIncreasePerLevel: 30
-  enableSpecialBonus: 0
-  specialBonusLevels: []
-  generatedLevels: []
+  costBase: 25
+  costIncrease: 20
+  costAcceleration: 10
+  manualLevels:
+  - level: 1
+    description: "\u521D\u59CB\u5C5E\u6027"
+    cost: 0
+    attackBonus: 0
+    attackRangeBonus: 0
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 2
+    description: "\u653B\u51FB+1"
+    cost: 0
+    attackBonus: 1
+    attackRangeBonus: 0
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 3
+    description: "\u653B\u51FB\u8303\u56F4+0.5"
+    cost: 0
+    attackBonus: 0
+    attackRangeBonus: 0.5
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 4
+    description: "\u653B\u51FB+1"
+    cost: 0
+    attackBonus: 1
+    attackRangeBonus: 0
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 5
+    description: "\u653B\u51FB\u8303\u56F4+0.5"
+    cost: 0
+    attackBonus: 0
+    attackRangeBonus: 0.5
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 6
+    description: "\u653B\u51FB+2"
+    cost: 0
+    attackBonus: 2
+    attackRangeBonus: 0
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 7
+    description: "\u653B\u51FB\u8303\u56F4+0.5"
+    cost: 0
+    attackBonus: 0
+    attackRangeBonus: 0.5
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 8
+    description: "\u653B\u51FB+2"
+    cost: 0
+    attackBonus: 2
+    attackRangeBonus: 0
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 9
+    description: "\u653B\u51FB\u8303\u56F4+0.7"
+    cost: 0
+    attackBonus: 0
+    attackRangeBonus: 0.7
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0
+  - level: 10
+    description: "\u653B\u51FB+4\uFF0C\u653B\u51FB\u8303\u56F4+0.8"
+    cost: 0
+    attackBonus: 4
+    attackRangeBonus: 0.8
+    speedBonus: 0
+    cooldownReductionBonus: 0
+    skillDamageBonus: 0

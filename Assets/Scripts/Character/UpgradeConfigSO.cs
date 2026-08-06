@@ -8,45 +8,60 @@ public class UpgradeConfigSO : ScriptableObject
     public string configName = "升级配置";
     public int maxLevel = 10;
 
-    [Header("===== 每级加成（每级固定增加）=====")]
-    public int attackBonusPerLevel = 3;
-    public float attackRangeBonusPerLevel = 0.2f;
-    public float speedBonusPerLevel = 0f;
-    public float cooldownReductionPerLevel = 0f;
-    public int skillDamageBonusPerLevel = 0;
+    [Header("===== 金币花费（自动规律计算，逐级加速递增）=====")]
+    [Tooltip("升到第 2 级的金币")]
+    public int costBase = 25;
+    [Tooltip("第 3 级比第 2 级多出的金币（每级的基础增量）")]
+    public int costIncrease = 20;
+    [Tooltip("每升一级，下一级增量再额外增加的数量（加速效果）")]
+    public int costAcceleration = 10;
 
-    [Header("===== 费用（每级增加）=====")]
-    public int baseCost = 50;
-    public int costIncreasePerLevel = 30;
-
-    [Header("===== 生成的每级数据（只读）=====")]
-    [SerializeField] private List<UpgradeLevelData> generatedLevels = new List<UpgradeLevelData>();
+    [Header("===== 手动逐级加成（只填加成；金币由上方规律自动计算，成本区内 Cost 填 0 即可）=====")]
+    public List<UpgradeLevelData> manualLevels = new List<UpgradeLevelData>();
 
     // ==================== 获取等级数据 ====================
 
     public UpgradeLevelData GetLevelData(int level)
     {
-        GenerateLevels();
-        if (level <= 0 || level > generatedLevels.Count) return null;
-        return generatedLevels[level - 1];
+        if (manualLevels == null || manualLevels.Count == 0) return null;
+        if (level <= 0 || level > manualLevels.Count) return null;
+        return manualLevels[level - 1];
     }
 
     public List<UpgradeLevelData> GetAllLevels()
     {
-        GenerateLevels();
-        return generatedLevels;
+        return manualLevels ?? new List<UpgradeLevelData>();
+    }
+
+    // ==================== 金币花费（规律自动计算）====================
+
+    // 第 2 级 = costBase；之后每级的增量 = costIncrease + (级数-2) * costAcceleration
+    // 例如：L2=25, L3=55, L4=95, L5=145, L6=205（costBase=25, costIncrease=30, costAcceleration=10）
+    public int GetLevelCost(int level)
+    {
+        if (level <= 1 || level >= maxLevel) return 0; // 无上级(满级)免费
+        int steps = level - 2;
+        int cost = costBase;
+        int stepInc = costIncrease;
+        for (int i = 0; i < steps; i++)
+        {
+            cost += stepInc;
+            stepInc += costAcceleration;
+        }
+        return Mathf.Max(0, cost);
     }
 
     // ==================== 获取累计加成 ====================
 
     public UpgradeLevelData GetTotalBonus(int level)
     {
-        GenerateLevels();
         var total = new UpgradeLevelData();
-        int max = Mathf.Min(level, generatedLevels.Count);
+        if (manualLevels == null || manualLevels.Count == 0) return total;
+
+        int max = Mathf.Min(level, manualLevels.Count);
         for (int i = 0; i < max; i++)
         {
-            var d = generatedLevels[i];
+            var d = manualLevels[i];
             total.attackBonus += d.attackBonus;
             total.attackRangeBonus += d.attackRangeBonus;
             total.speedBonus += d.speedBonus;
@@ -55,74 +70,4 @@ public class UpgradeConfigSO : ScriptableObject
         }
         return total;
     }
-
-    // ==================== 生成升级数据 ====================
-
-    public void GenerateLevels()
-    {
-        if (generatedLevels.Count == maxLevel) return;
-
-        generatedLevels.Clear();
-
-        for (int i = 1; i <= maxLevel; i++)
-        {
-            var data = new UpgradeLevelData();
-            data.level = i;
-
-            data.attackBonus = attackBonusPerLevel;
-            data.attackRangeBonus = attackRangeBonusPerLevel;
-            data.speedBonus = speedBonusPerLevel;
-            data.cooldownReductionBonus = cooldownReductionPerLevel;
-            data.skillDamageBonus = skillDamageBonusPerLevel;
-
-            data.cost = baseCost + (i - 1) * costIncreasePerLevel;
-
-            data.description = GenerateDescription(data, i);
-            generatedLevels.Add(data);
-        }
-    }
-
-    // ==================== 自动生成描述 ====================
-
-    string GenerateDescription(UpgradeLevelData data, int level)
-    {
-        List<string> parts = new List<string>();
-
-        int totalAttack = data.attackBonus * level;
-        float totalRange = data.attackRangeBonus * level;
-        float totalSpeed = data.speedBonus * level;
-        float totalCooldown = data.cooldownReductionBonus * level;
-        int totalSkillDamage = data.skillDamageBonus * level;
-
-        if (totalAttack > 0)
-            parts.Add($"攻击+{totalAttack}");
-        if (totalRange > 0)
-            parts.Add($"范围+{totalRange:F1}");
-        if (totalSpeed > 0)
-            parts.Add($"移速+{totalSpeed:F1}");
-        if (totalCooldown > 0)
-            parts.Add($"冷却-{totalCooldown:F1}秒");
-        if (totalSkillDamage > 0)
-            parts.Add($"技能伤害+{totalSkillDamage}");
-
-        return parts.Count > 0 ? string.Join("，", parts) : "无加成";
-    }
-
-    // ==================== Inspector 刷新 ====================
-
-#if UNITY_EDITOR
-    public void OnValidate()
-    {
-        generatedLevels.Clear();
-        GenerateLevels();
-    }
-
-    [ContextMenu("重新生成升级数据")]
-    public void RegenerateLevels()
-    {
-        generatedLevels.Clear();
-        GenerateLevels();
-        UnityEditor.EditorUtility.SetDirty(this);
-    }
-#endif
 }
