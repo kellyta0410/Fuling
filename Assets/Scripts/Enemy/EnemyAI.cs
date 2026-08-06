@@ -142,8 +142,6 @@ public abstract class EnemyAI : MonoBehaviour
                 agent.speed = baseSpeed;
                 agent.stoppingDistance = enemyData.attackRange * 0.85f;
                 agent.autoBraking = true;
-                agent.radius = 0.4f;
-                agent.height = 2f;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
                 agent.isStopped = true;

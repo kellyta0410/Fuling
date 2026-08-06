@@ -365,7 +365,7 @@ public class EnemySpawner : MonoBehaviour
 
     void CreateDefaultTiers()
     {
-        // 创建默认的6个阶层（90秒倒计时为例）
+        // 创建默认的6个阶层（300秒/5分钟一局）
         difficultyTiers = new TierData[]
         {
             new TierData {
@@ -381,7 +381,7 @@ public class EnemySpawner : MonoBehaviour
             },
             new TierData {
                 tierName = "⚔️ 热身期",
-                timeThreshold = 15f,
+                timeThreshold = 60f,
                 spawnInterval = 1.8f,
                 spawnCount = 1,
                 speedMultiplier = 1.1f,
@@ -392,7 +392,7 @@ public class EnemySpawner : MonoBehaviour
             },
             new TierData {
                 tierName = "🔥 活跃期",
-                timeThreshold = 30f,
+                timeThreshold = 120f,
                 spawnInterval = 1.5f,
                 spawnCount = 2,
                 speedMultiplier = 1.3f,
@@ -403,7 +403,7 @@ public class EnemySpawner : MonoBehaviour
             },
             new TierData {
                 tierName = "💥 激烈期",
-                timeThreshold = 50f,
+                timeThreshold = 180f,
                 spawnInterval = 1.0f,
                 spawnCount = 3,
                 speedMultiplier = 1.8f,
@@ -414,7 +414,7 @@ public class EnemySpawner : MonoBehaviour
             },
             new TierData {
                 tierName = "🌪️ 狂暴期",
-                timeThreshold = 70f,
+                timeThreshold = 240f,
                 spawnInterval = 0.6f,
                 spawnCount = 4,
                 speedMultiplier = 2.5f,
@@ -425,7 +425,7 @@ public class EnemySpawner : MonoBehaviour
             },
             new TierData {
                 tierName = "☠️ 末日期",
-                timeThreshold = 85f,
+                timeThreshold = 285f,
                 spawnInterval = 0.3f,
                 spawnCount = 5,
                 speedMultiplier = 3.0f,
