@@ -304,21 +304,8 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            if (normalSpawner != null)
-            {
-                normalSpawner.ApplyScalingParameters(
-                    currentDifficulty.spawnInterval,
-                    currentDifficulty.spawnPerInterval,
-                    1f,
-                    1f,
-                    1f,
-                    currentDifficulty.enableMaxLimit,
-                    currentDifficulty.maxEnemyCount,
-                    currentDifficulty.enableCooldown,
-                    currentDifficulty.cooldownTime,
-                    currentDifficulty.allowedEnemyPrefabs
-                );
-            }
+            // 普通模式：生成节奏与属性倍率由 EnemySpawner.difficultyTiers 统一管理，
+            // 参数已在 InitializeSpawner→ApplyDifficultySettings 设置，此处无需下发。
         }
     }
 
@@ -472,24 +459,6 @@ public class GameManager : MonoBehaviour
     public float GetCurrentHealthMultiplier() => currentHealthMultiplier;
     public float GetCurrentDamageMultiplier() => currentDamageMultiplier;
     public int GetCurrentMaxEnemyCount() => currentMaxEnemyCount;
-
-    public float GetCurrentDetectionRange()
-    {
-        if (!IsInfiniteMode() || currentDifficulty == null)
-            return 0f;
-        float level = Mathf.Clamp(scalingLevel, 0, currentDifficulty.maxScalingLevel);
-        float range = currentDifficulty.detectionRangeBase + level * currentDifficulty.detectionRangeStep;
-        return Mathf.Min(range, currentDifficulty.detectionRangeMax);
-    }
-
-    public float GetCurrentLoseRange()
-    {
-        if (!IsInfiniteMode() || currentDifficulty == null)
-            return 0f;
-        float level = Mathf.Clamp(scalingLevel, 0, currentDifficulty.maxScalingLevel);
-        float range = currentDifficulty.loseTargetRangeBase + level * currentDifficulty.loseTargetRangeStep;
-        return Mathf.Min(range, currentDifficulty.loseTargetRangeMax);
-    }
 
     public bool IsGameRunning() => isGameRunning && !isGameOver;
     public bool IsGameOver() => isGameOver;

@@ -803,9 +803,6 @@ public class EnemySpawner : MonoBehaviour
         maxEnemyCount = settings.maxEnemyCount;
         enableCooldown = settings.enableCooldown;
         cooldownTime = settings.cooldownTime;
-        currentSpeedMultiplier = settings.enemySpeedMultiplier;
-        currentHealthMultiplier = 1f;
-        currentDamageMultiplier = 1f;
 
         if (settings.allowedEnemyPrefabs != null && settings.allowedEnemyPrefabs.Count > 0)
         {
@@ -813,14 +810,25 @@ public class EnemySpawner : MonoBehaviour
             UpdateWeightList();
         }
 
-        if (settings.mode == GameMode.Normal)
+        // 普通模式：生成节奏与属性倍率统一由 difficultyTiers 管理，不读取 SO 的生成参数
+        // （避免多源冲突）。初始值取第一阶，之后 UpdateTier 每帧刷新。
+        if (enableTieredDifficulty && difficultyTiers != null && difficultyTiers.Length > 0)
         {
-            spawnInterval = settings.spawnInterval;
-            spawnPerInterval = settings.spawnPerInterval;
+            currentSpawnInterval = difficultyTiers[0].spawnInterval;
+            currentSpawnPerInterval = difficultyTiers[0].spawnCount;
+            currentSpeedMultiplier = difficultyTiers[0].speedMultiplier;
+            currentHealthMultiplier = difficultyTiers[0].healthMultiplier;
+            currentDamageMultiplier = difficultyTiers[0].damageMultiplier;
+            enableCooldown = difficultyTiers[0].enableCooldown;
         }
-
-        currentSpawnInterval = spawnInterval;
-        currentSpawnPerInterval = spawnPerInterval;
+        else
+        {
+            currentSpawnInterval = spawnInterval;
+            currentSpawnPerInterval = spawnPerInterval;
+            currentSpeedMultiplier = 1f;
+            currentHealthMultiplier = 1f;
+            currentDamageMultiplier = 1f;
+        }
 
         if (showDebugLogs) Debug.Log($"📋 已应用难度设置: {settings.difficultyName}");
     }

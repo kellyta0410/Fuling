@@ -25,14 +25,10 @@ public class InfiniteEnemySpawner : MonoBehaviour
     public float infiniteRangeMultiplier = 2.5f;
     public int enemiesPerSpawnPoint = 2;
 
-    [Header("无限模式 - 难度递增（时间驱动）")]
-    public bool enableDifficultyScaling = true;
-    public float difficultyIncreaseInterval = 30f;
-    public float minSpawnIntervalLimit = 0.5f;
-    public int maxSpawnPerIntervalLimit = 10;
-    public float maxSpeedMultiplierLimit = 5f;
-    public float maxHealthMultiplierLimit = 5f;
-    public float maxDamageMultiplierLimit = 3f;
+    [Header("无限模式 - 难度递增")]
+    // ⭐ 无限模式成长统一由 GameManager.HandleScaling 依据 DifficultySettings 的
+    // step/max 字段计算并下发（ApplyScalingParameters），此处不再自行成长，
+    // 避免两套逻辑互相覆盖。
 
     [Header("NavMesh 设置")]
     public float navMeshSampleRadius = 5f;
@@ -60,7 +56,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
     private bool initialSpawnDone = false;
     private bool canSpawn = false;
     private float globalSpawnTimer = 0f;
-    private float difficultyTimer = 0f;
     private int difficultyLevel = 0;
 
     private CountdownManager countdownManager;
@@ -128,12 +123,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
         foreach (SpawnPointData spawnData in spawnPoints)
         {
             spawnData.isActive = true;
-        }
-
-        // 难度递增（时间驱动）
-        if (enableDifficultyScaling)
-        {
-            UpdateDifficultyScaling();
         }
 
         ProcessInfiniteMode();
@@ -318,48 +307,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
         if (showDebugLogs) Debug.Log($"🎯 [无限模式] 初始波次生成完成：{spawned} 个敌人");
         initialSpawnDone = true;
         yield return null;
-    }
-
-    // ---------- 难度递增系统 ----------
-    void UpdateDifficultyScaling()
-    {
-        difficultyTimer += Time.deltaTime;
-        if (difficultyTimer >= difficultyIncreaseInterval)
-        {
-            difficultyTimer = 0f;
-            difficultyLevel++;
-
-            // 增加难度：间隔变短、每波变多、属性变强
-            currentSpawnInterval = Mathf.Max(minSpawnIntervalLimit, currentSpawnInterval * 0.92f);
-            currentSpawnPerInterval = Mathf.Min(maxSpawnPerIntervalLimit, currentSpawnPerInterval + 1);
-            currentSpeedMultiplier = Mathf.Min(maxSpeedMultiplierLimit, currentSpeedMultiplier * 1.08f);
-            currentHealthMultiplier = Mathf.Min(maxHealthMultiplierLimit, currentHealthMultiplier * 1.05f);
-            currentDamageMultiplier = Mathf.Min(maxDamageMultiplierLimit, currentDamageMultiplier * 1.05f);
-
-            // 更新所有已存在的敌人属性
-            UpdateAllEnemyMultipliers();
-
-            if (showDebugLogs)
-            {
-                Debug.Log($"📈 [无限模式] 难度提升！等级: {difficultyLevel} | " +
-                         $"间隔: {currentSpawnInterval:F2}s | 每波: {currentSpawnPerInterval} | " +
-                         $"速度: {currentSpeedMultiplier:F2}x | 血量: {currentHealthMultiplier:F2}x | " +
-                         $"伤害: {currentDamageMultiplier:F2}x | 总敌人: {allActiveEnemies.Count}");
-            }
-        }
-    }
-
-    void UpdateAllEnemyMultipliers()
-    {
-        foreach (GameObject enemy in allActiveEnemies)
-        {
-            if (enemy == null) continue;
-            EnemyAI ai = enemy.GetComponent<EnemyAI>();
-            if (ai != null)
-            {
-                ai.ApplyScalingMultipliers(currentSpeedMultiplier, currentHealthMultiplier, currentDamageMultiplier);
-            }
-        }
     }
 
     // ---------- 清理 ----------
@@ -548,21 +495,13 @@ public class InfiniteEnemySpawner : MonoBehaviour
             UpdateWeightList();
         }
 
-        // 无限模式特定设置
+        // 无限模式成长由 GameManager.HandleScaling 依据本 SO 的 step/max 计算并下发
+        //（先在此固定初始值，之后由 ApplyScalingParameters 覆盖）
         if (settings.mode == GameMode.Infinite)
         {
-            minSpawnIntervalLimit = settings.spawnIntervalMin;
-            maxSpawnPerIntervalLimit = settings.spawnPerIntervalMax;
-            maxSpeedMultiplierLimit = settings.speedMultiplierMax;
-            maxHealthMultiplierLimit = settings.healthMultiplierMax;
-            maxDamageMultiplierLimit = settings.damageMultiplierMax;
-            difficultyIncreaseInterval = settings.scalingInterval;
-            enableDifficultyScaling = settings.enableScaling;
+            currentSpawnInterval = settings.spawnInterval;
+            currentSpawnPerInterval = settings.spawnPerInterval;
         }
-
-        // 初始值
-        currentSpawnInterval = settings.spawnInterval;
-        currentSpawnPerInterval = settings.spawnPerInterval;
 
         if (showDebugLogs) Debug.Log($"📋 已应用无限模式难度设置: {settings.difficultyName}");
     }
@@ -675,7 +614,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
         initialSpawnDone = false;
         canSpawn = false;
         difficultyLevel = 0;
-        difficultyTimer = 0f;
         globalSpawnTimer = 0f;
         currentSpawnInterval = 2f;
         currentSpawnPerInterval = 1;

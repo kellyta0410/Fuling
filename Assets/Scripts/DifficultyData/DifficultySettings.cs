@@ -60,17 +60,6 @@ public class DifficultySettings : ScriptableObject
     [Header("无限模式 - 成长上限")]
     public int maxScalingLevel = 100;
 
-    // ⭐ 以下范围成长字段目前未被 EnemyAI 使用（EnemyAI 改用 Inspector 固定值）
-    // 若以后需要动态范围可启用
-    [Header("无限模式 - 追击范围成长（可选）")]
-    public float detectionRangeBase = 30f;
-    public float detectionRangeStep = 2f;
-    public float detectionRangeMax = 60f;
-
-    public float loseTargetRangeBase = 40f;
-    public float loseTargetRangeStep = 2f;
-    public float loseTargetRangeMax = 80f;
-
     public bool IsInfiniteMode()
     {
         return mode == GameMode.Infinite;

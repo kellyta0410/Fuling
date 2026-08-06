@@ -382,8 +382,6 @@ public class SceneSelectionManager : MonoBehaviour
 
         PlayerPrefs.SetInt("GameMode", (int)difficulty.mode);
         PlayerPrefs.SetFloat("TimeLimit", difficulty.timeLimit);
-        PlayerPrefs.SetFloat("SpawnInterval", difficulty.spawnInterval);
-        PlayerPrefs.SetInt("SpawnPerInterval", difficulty.spawnPerInterval);
         PlayerPrefs.SetInt("MaxEnemyCount", difficulty.maxEnemyCount);
         PlayerPrefs.SetInt("MaxScalingLevel", difficulty.maxScalingLevel);
         PlayerPrefs.SetFloat("ScalingInterval", difficulty.scalingInterval);
