@@ -8492,7 +8492,7 @@ MonoBehaviour:
   - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
     weight: 3
   spawnRadius: 12
-  spawnInterval: 10
+  spawnInterval: 15
   maxBuffCount: 5
   player: {fileID: 8186556143949961242}
   obstacleMask:
@@ -12599,6 +12599,11 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 920520777187579428, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: m_Avatar
+      value: 
+      objectReference: {fileID: 9000000, guid: d24a8a5d0faca7842b1233f5875dc907, type: 3}
     - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: joystickBg
