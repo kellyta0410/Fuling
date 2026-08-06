@@ -30,7 +30,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 920003016486387336}
@@ -48,7 +48,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9bfc97bf66737e4d802ffb34d1a9206, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyData: {fileID: 11400000, guid: 445140429a745c84e9119c7036783fc0, type: 2}
+  enemyData: {fileID: 11400000, guid: a6f23f293aec4ff79f6bb5b63c871c30, type: 2}
   coinPrefab: {fileID: 6635696330829912713, guid: 02a014571be355446be50bc4c7158be5,
     type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
@@ -146,6 +146,7 @@ GameObject:
   - component: {fileID: 920003016486387336}
   - component: {fileID: 388573310983770392}
   - component: {fileID: 3638954660759801885}
+  - component: {fileID: 8412255660771234567}
   m_Layer: 9
   m_Name: Snake
   m_TagString: Enemy
@@ -218,3 +219,34 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &8412255660771234567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6090429710359137567}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f3a9c2e1b4d5f6a8b9c0d1e2f3a4b5c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  segmentCount: 10
+  slitherAmplitude: 0.08
+  slitherWaves: 2
+  slitherSpeed: 3
+  tailGain: 1.4
+  idleSlither: 0.25
+  stiffFront: 0.6
+  stiffFeather: 0.12
+  stiffAtBigU: 1
+  showGizmos: 1
+  attackMotion: 1
+  attackDuration: 0.35
+  tailStart: 0.62
+  tailSwingAngle: 55
+  headStrikeReach: 0.18
+  headStrikeDip: 0.04
+  headStrikeLen: 0.4
+  deathFallDuration: 0.7
+  fallAxis: {x: 1, y: 0, z: 0}

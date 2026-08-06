@@ -662,7 +662,7 @@ public class PlayerController : MonoBehaviour
         return btn;
     }
 
-    // ⭐ 创建冷却效果：顶部锚定的深色遮罩，高度逐帧缩短，露出按钮本体
+    // ⭐ 创建冷却效果：圆形径向填充遮罩（跟随按钮形状），方形按钮自动退化回方形
     void CreateCooldownEffect(Button button, int index)
     {
         if (button == null) return;
@@ -670,18 +670,37 @@ public class PlayerController : MonoBehaviour
         RectTransform btnRt = button.GetComponent<RectTransform>();
         if (btnRt == null) return;
 
+        // 复用按钮自身的图片，保证遮罩形状和按钮一致（圆形按钮→圆形冷却）
+        Sprite btnSprite = null;
+        Image btnImg = button.GetComponent<Image>();
+        if (btnImg != null && btnImg.sprite != null) btnSprite = btnImg.sprite;
+        else if (button.transform.childCount > 0)
+        {
+            Image ci = button.transform.GetChild(0).GetComponent<Image>();
+            if (ci != null) btnSprite = ci.sprite;
+        }
+
         GameObject mask = new GameObject("CooldownMask", typeof(RectTransform), typeof(Image));
         mask.transform.SetParent(btnRt, false);
 
         RectTransform mrt = mask.GetComponent<RectTransform>();
-        mrt.anchorMin = new Vector2(0f, 1f);
-        mrt.anchorMax = new Vector2(1f, 1f);
-        mrt.pivot = new Vector2(0.5f, 1f);
-        mrt.sizeDelta = Vector2.zero;
+        mrt.anchorMin = Vector2.zero;
+        mrt.anchorMax = Vector2.one;
+        mrt.offsetMin = Vector2.zero;
+        mrt.offsetMax = Vector2.zero;
+        mrt.pivot = new Vector2(0.5f, 0.5f);
 
         Image mImg = mask.GetComponent<Image>();
         mImg.color = new Color(0f, 0f, 0f, 0.6f);
         mImg.raycastTarget = false;
+        if (btnSprite != null)
+        {
+            mImg.sprite = btnSprite;
+            mImg.type = Image.Type.Filled;
+            mImg.fillMethod = Image.FillMethod.Radial360;
+            mImg.fillOrigin = (int)Image.Origin360.Top;
+            mImg.fillAmount = 1f;
+        }
         mask.SetActive(false);
         cooldownMasks[index] = mImg;
     }
@@ -702,11 +721,19 @@ public class PlayerController : MonoBehaviour
         float p = Mathf.Clamp01(progress);
         mask.gameObject.SetActive(p < 1f);
 
-        RectTransform maskRt = mask.rectTransform;
-        RectTransform btnRt = mask.transform.parent as RectTransform;
-        float btnHeight = btnRt != null ? btnRt.rect.height : 100f;
-        // 遮罩锚定顶部：高度从全高缩到 0 → 遮罩从底部退去，按钮本体从下往上露出
-        maskRt.sizeDelta = new Vector2(0f, btnHeight * (1f - p));
+        if (mask.type == Image.Type.Filled)
+        {
+            // 圆形/图形按钮：径向填充，冷却时全盖，随冷却减少一圈圈露出
+            mask.fillAmount = 1f - p;
+        }
+        else
+        {
+            // 无图片时退化为方形遮罩
+            RectTransform maskRt = mask.rectTransform;
+            RectTransform btnRt = mask.transform.parent as RectTransform;
+            float btnHeight = btnRt != null ? btnRt.rect.height : 100f;
+            maskRt.sizeDelta = new Vector2(0f, btnHeight * (1f - p));
+        }
     }
 
     public void TakeDamage(float damage)
@@ -714,6 +741,22 @@ public class PlayerController : MonoBehaviour
         if (isDead || isDying) return;
 
         StartCoroutine(SmoothDamage(damage));
+    }
+
+    // 击退：沿 dir 推 distance 米（用 CharacterController.Move，会被墙挡住）
+    public void AddKnockback(Vector3 dir, float distance)
+    {
+        if (isDead || isDying || controller == null) return;
+        dir.y = 0;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        Vector3 mv = dir.normalized * distance;
+        float left = distance;
+        while (left > 0.001f)
+        {
+            float step = Mathf.Min(left, 0.1f);
+            controller.Move(mv.normalized * step);
+            left -= step;
+        }
     }
 
     IEnumerator SmoothDamage(float damage)

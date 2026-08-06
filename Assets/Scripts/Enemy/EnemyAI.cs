@@ -44,6 +44,7 @@ public abstract class EnemyAI : MonoBehaviour
 
     [Header("面向检测")]
     public float facingAngleThreshold = 45f;
+    public float turnSpeed = 240f;
 
     [Header("追击检测（普通模式）")]
     public float detectionRange = 18f;
@@ -140,7 +141,7 @@ public abstract class EnemyAI : MonoBehaviour
             if (isAgentValid && !useDirectChase)
             {
                 agent.speed = baseSpeed;
-                agent.stoppingDistance = enemyData.attackRange * 0.85f;
+                agent.stoppingDistance = enemyData.attackRange * 0.9f;
                 agent.autoBraking = true;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
@@ -220,9 +221,17 @@ public abstract class EnemyAI : MonoBehaviour
         float distance = Vector3.Distance(transform.position, player.transform.position);
         float attackRange = enemyData != null ? enemyData.attackRange : 1.5f;
 
-        if (distance <= attackRange && canAttack && IsFacingPlayer())
+        // 进入攻击范围：停住原地转向玩家，能攻则攻，不再前进贴脸
+        if (distance <= attackRange)
         {
-            PerformAttack();
+            RotateTowardsPlayer(Time.deltaTime);
+            StopAgent();
+            if (canAttack && IsFacingPlayer())
+            {
+                PerformAttack();
+                return;
+            }
+            UpdateAnimations(0f, false);
             return;
         }
 
@@ -378,6 +387,17 @@ public abstract class EnemyAI : MonoBehaviour
         Vector3 forward = transform.forward;
         forward.y = 0;
         return Vector3.Angle(forward, dir) <= facingAngleThreshold;
+    }
+
+    // 原地旋转面向玩家（不移动，供射程内待机）
+    protected void RotateTowardsPlayer(float dt)
+    {
+        if (player == null) return;
+        Vector3 dir = player.transform.position - transform.position;
+        dir.y = 0;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        Quaternion target = Quaternion.LookRotation(dir.normalized);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, turnSpeed * Mathf.Max(dt, 0f));
     }
 
     protected virtual void PerformAttack()
