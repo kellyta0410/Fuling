@@ -44,6 +44,8 @@ public class PlayerController : MonoBehaviour
     public Button skillButton;
     [Tooltip("技能冷却时间（秒）")]
     public float skillCooldown = 15f;
+    [Tooltip("攻击命中后敌人被击退的距离（米）")]
+    public float enemyKnockbackDistance = 2f;
     [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
     public Button dodgeButton;
     [Tooltip("闪避冷却时间（秒）")]
@@ -519,6 +521,7 @@ public class PlayerController : MonoBehaviour
             if (enemy != null && !enemy.isDead)
             {
                 enemy.TakeDamageImmediate(attackDamage);
+                enemy.AddKnockback(transform.forward, enemyKnockbackDistance);
                 Debug.Log($"攻击 {enemy.name}，造成 {attackDamage} 伤害");
             }
         }
@@ -532,7 +535,7 @@ public class PlayerController : MonoBehaviour
 
         canUseSkill = false;
         skillCooldownTimer = 0f;
-        animator.SetTrigger("Action");
+        animator.SetTrigger("SkillAction");
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         StartCoroutine(DelayedSkillDamage(finalDamage));
@@ -553,6 +556,7 @@ public class PlayerController : MonoBehaviour
             if (enemy != null && !enemy.isDead)
             {
                 enemy.TakeDamageImmediate(damage);
+                enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 1.5f);
                 Debug.Log($"技能攻击 {enemy.name}，造成 {damage} 伤害");
             }
         }

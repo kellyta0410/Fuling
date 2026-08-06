@@ -503,6 +503,40 @@ public abstract class EnemyAI : MonoBehaviour
         StartCoroutine(SmoothDamage(damage));
     }
 
+    // 受击击退：平滑推出一段距离（SmoothStep 缓动，避免瞬移）
+    private Coroutine knockRoutine;
+    public void AddKnockback(Vector3 dir, float distance)
+    {
+        if (isDead) return;
+        if (knockRoutine != null) StopCoroutine(knockRoutine);
+        knockRoutine = StartCoroutine(KnockbackRoutine(dir, distance));
+    }
+
+    IEnumerator KnockbackRoutine(Vector3 dir, float distance)
+    {
+        dir.y = 0;
+        if (dir.sqrMagnitude < 0.0001f || distance <= 0f) { knockRoutine = null; yield break; }
+
+        Vector3 mv = dir.normalized;
+        float duration = Mathf.Clamp(distance * 0.12f, 0.1f, 0.4f);
+        float t = 0f;
+        float moved = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.SmoothStep(0f, 1f, t / duration);
+            float newMoved = Mathf.Lerp(0f, distance, k);
+            float step = newMoved - moved;
+            moved = newMoved;
+
+            if (agent != null && agent.isOnNavMesh) agent.Move(mv * step);
+            else transform.position += mv * step;
+
+            yield return null;
+        }
+        knockRoutine = null;
+    }
+
     protected virtual IEnumerator SmoothDamage(int damage)
     {
         float duration = 0.2f;
