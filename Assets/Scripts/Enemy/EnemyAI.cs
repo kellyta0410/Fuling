@@ -39,6 +39,11 @@ public abstract class EnemyAI : MonoBehaviour
     protected bool isAttacking = false;
     protected float attackTimer = 0f;
     public float attackDuration = 0.5f;
+
+    [Header("被击退硬直")]
+    [Tooltip("被击退后停顿（硬直）时长（秒），期间不移动不攻击")]
+    public float staggerDuration = 0.4f;
+    protected bool isStaggering = false;
     public float attackDamageDelay = 0.3f;
     protected Coroutine attackCoroutine;
 
@@ -184,6 +189,14 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
+        // 被击退后的硬直：不动、不出手、不追击
+        if (isStaggering)
+        {
+            StopAgent();
+            UpdateAnimations(0f, false);
+            return;
+        }
+
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
@@ -223,15 +236,11 @@ public abstract class EnemyAI : MonoBehaviour
         float attackRange = enemyData != null ? enemyData.attackRange : 1.5f;
 
         // 进入攻击范围：停住原地转向玩家，能攻则攻，不再前进贴脸
+        // （子类可重写 TryPerformInRangeAttack 接管该行为，如蓄力/咏唱）
         if (distance <= attackRange)
         {
-            RotateTowardsPlayer(Time.deltaTime);
-            StopAgent();
-            if (canAttack && IsFacingPlayer())
-            {
-                PerformAttack();
+            if (TryPerformInRangeAttack())
                 return;
-            }
             UpdateAnimations(0f, false);
             return;
         }
@@ -401,6 +410,20 @@ public abstract class EnemyAI : MonoBehaviour
         transform.rotation = Quaternion.RotateTowards(transform.rotation, target, turnSpeed * Mathf.Max(dt, 0f));
     }
 
+    // 进入攻击范围时由 Update 调用。默认：停住转向玩家，能攻则攻。
+    // 返回 true 表示已处理（Update 不再执行 HandleMovement），子类可重写（如蓄力咏唱）。
+    protected virtual bool TryPerformInRangeAttack()
+    {
+        RotateTowardsPlayer(Time.deltaTime);
+        StopAgent();
+        if (canAttack && IsFacingPlayer())
+        {
+            PerformAttack();
+            return true;
+        }
+        return false;
+    }
+
     protected virtual void PerformAttack()
     {
         if (!canAttack || isDead || isAttacking) return;
@@ -541,6 +564,12 @@ public abstract class EnemyAI : MonoBehaviour
             yield return null;
         }
         knockRoutine = null;
+
+        // 被击退后停顿（硬直）一下，再恢复行动
+        if (isStaggering || isDead) yield break;
+        isStaggering = true;
+        yield return new WaitForSeconds(staggerDuration);
+        isStaggering = false;
     }
 
     protected virtual IEnumerator SmoothDamage(int damage)

@@ -2,6 +2,7 @@
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 
 public class SceneSelectionManager : MonoBehaviour
 {
@@ -50,6 +51,11 @@ public class SceneSelectionManager : MonoBehaviour
     public TextMeshProUGUI unlockConfirmText;
     public Button unlockConfirmButton;
     public Button unlockCancelButton;
+
+    [Header("===== 提示气泡（可选）=====")]
+    [Tooltip("显示“未开放/金币不足”等提示的文本，留空则仅打印日志")]
+    public TextMeshProUGUI hintToastText;
+    private Coroutine hintToastCoroutine;
 
     private CharacterData pendingUnlockCharacter;
     private int currentSelectedCharacterIndex = -1;
@@ -351,7 +357,7 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void SelectNormal()
     {
-        SelectDifficulty(normalConfig, "普通");
+        ShowHint("普通模式正在开发中，敬请期待！请先体验其他模式");
     }
 
     public void SelectHard()
@@ -439,7 +445,7 @@ public class SceneSelectionManager : MonoBehaviour
 
         if (gameDataManager.TotalCoins < character.unlockCost)
         {
-            Debug.Log($"金币不足！需要 {character.unlockCost}，当前 {gameDataManager.TotalCoins}");
+            ShowHint($"金币不足！解锁需 {character.unlockCost} 金币（当前 {gameDataManager.TotalCoins}）");
             return;
         }
 
@@ -548,6 +554,32 @@ public class SceneSelectionManager : MonoBehaviour
     public GameDataManager GetGameDataManager()
     {
         return gameDataManager;
+    }
+
+    // ==================== 提示气泡 ====================
+
+    public void ShowHint(string message)
+    {
+        if (hintToastText != null)
+        {
+            hintToastText.gameObject.SetActive(true);
+            hintToastText.text = message;
+
+            if (hintToastCoroutine != null) StopCoroutine(hintToastCoroutine);
+            hintToastCoroutine = StartCoroutine(HideHintToast(2f));
+        }
+        else
+        {
+            Debug.Log(message);
+        }
+    }
+
+    IEnumerator HideHintToast(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (hintToastText != null)
+            hintToastText.gameObject.SetActive(false);
+        hintToastCoroutine = null;
     }
 
     public void RefreshCharacterDetail()

@@ -11,7 +11,7 @@ Shader "Custom/XRayWall"
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Geometry+1" "RenderType"="Transparent" }
         Cull Off
-        ZWrite On
+        ZWrite Off
         Blend SrcAlpha OneMinusSrcAlpha
 
         Pass
