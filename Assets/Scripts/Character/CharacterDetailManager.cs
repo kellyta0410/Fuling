@@ -40,6 +40,15 @@ public class CharacterDetailManager : MonoBehaviour
     [Header("===== 3D 模型=====")]
     [Tooltip("3D 角色的模型预制体")]
     [SerializeField] private Transform modelContainer;
+    [Tooltip("模型相对相机前方摆放的距离（米），用于对齐到全身图位置")]
+    [SerializeField] private float modelViewDistance = 2.5f;
+    [Header("===== 专用模型相机（RenderTexture 方式，优先于 modelContainer）=====")]
+    [Tooltip("照模型的专用相机；模型会放在它前方，相机输出给 RawImage")]
+    [SerializeField] private Camera modelCamera;
+    [Tooltip("接收 RenderTexture 的 UI 图（与全身图同大小同位置），有模型时显示")]
+    [SerializeField] private RawImage modelRenderImage;
+    [Tooltip("模型放在相机前方的距离（米）")]
+    [SerializeField] private float modelCamDistance = 3f;
     private GameObject currentModelInstance;
 
     private CharacterData currentDisplayCharacter;
@@ -207,14 +216,30 @@ public class CharacterDetailManager : MonoBehaviour
             currentModelInstance = null;
         }
 
-        bool hasModel = character != null && character.modelPrefab != null && modelContainer != null;
+        bool useCamMode = character != null && character.modelPrefab != null && modelCamera != null;
+        bool useContainerMode = character != null && character.modelPrefab != null && modelContainer != null;
+        bool hasModel = useCamMode || useContainerMode;
 
         if (hasModel)
         {
-            currentModelInstance = Instantiate(character.modelPrefab, modelContainer);
-            currentModelInstance.transform.localPosition = character.modelSpawnPosition;
-            currentModelInstance.transform.localRotation = Quaternion.Euler(character.modelSpawnRotation);
-            currentModelInstance.transform.localScale = Vector3.one;
+            if (useCamMode)
+            {
+                // 专用相机方式：模型放进相机前方，相机渲染到 RawImage
+                SetModelRenderActive(true);
+                currentModelInstance = Instantiate(character.modelPrefab, modelCamera.transform);
+                currentModelInstance.transform.localPosition = Vector3.forward * modelCamDistance + character.modelSpawnPosition;
+                currentModelInstance.transform.localRotation = Quaternion.Euler(character.modelSpawnRotation);
+                currentModelInstance.transform.localScale = Vector3.one;
+            }
+            else
+            {
+                // 原方式：容器摆到全身图 UI 位置
+                AlignModelToImage();
+                currentModelInstance = Instantiate(character.modelPrefab, modelContainer);
+                currentModelInstance.transform.localPosition = character.modelSpawnPosition;
+                currentModelInstance.transform.localRotation = Quaternion.Euler(character.modelSpawnRotation);
+                currentModelInstance.transform.localScale = Vector3.one;
+            }
 
             Animator modelAnimator = currentModelInstance.GetComponentInChildren<Animator>();
             if (modelAnimator != null && !string.IsNullOrEmpty(character.defaultAnimation))
@@ -222,10 +247,67 @@ public class CharacterDetailManager : MonoBehaviour
                 modelAnimator.Play(character.defaultAnimation);
             }
         }
+        else
+        {
+            SetModelRenderActive(false);
+        }
 
         // ?????????,???????????
         if (fullBodyImage != null)
             fullBodyImage.gameObject.SetActive(!hasModel);
+    }
+
+    // 开关专用模型相机 + RawImage（有模型才显示）
+    void SetModelRenderActive(bool active)
+    {
+        if (modelCamera != null) modelCamera.gameObject.SetActive(active);
+        if (modelRenderImage != null) modelRenderImage.gameObject.SetActive(active);
+    }
+
+    // 把 modelContainer 放到"全身图 UI"屏幕中心的相机前方，让模型显示在图片位置
+    void AlignModelToImage()
+    {
+        if (modelContainer == null || fullBodyImage == null || fullBodyImage.rectTransform == null)
+        {
+            if (modelContainer != null) modelContainer.localPosition = Vector3.zero;
+            return;
+        }
+
+        // 选相机：优先用 Canvas 的世界相机，其次 MainCamera，再退到任意相机
+        Canvas canvas = fullBodyImage.GetComponentInParent<Canvas>();
+        Camera cam = null;
+        if (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.worldCamera != null)
+            cam = canvas.worldCamera;
+        if (cam == null) cam = Camera.main;
+        if (cam == null)
+        {
+            Camera[] all = Camera.allCameras;
+            if (all.Length > 0) cam = all[0];
+        }
+        if (cam == null)
+        {
+            modelContainer.localPosition = Vector3.zero;
+            return;
+        }
+
+        Vector3[] corners = new Vector3[4];
+        fullBodyImage.rectTransform.GetWorldCorners(corners);
+        Vector3 center = (corners[0] + corners[2]) * 0.5f;
+
+        if (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        {
+            // Overlay：corners 是屏幕像素，射线投到相机前方
+            Ray r = cam.ScreenPointToRay(center);
+            modelContainer.position = cam.transform.position + r.direction * modelViewDistance;
+        }
+        else
+        {
+            // ScreenSpace-Camera / World：corners 是世界坐标，沿相机→中心方向取一段
+            Vector3 dir = (center - cam.transform.position).normalized;
+            modelContainer.position = cam.transform.position + dir * modelViewDistance;
+        }
+
+        modelContainer.rotation = cam.transform.rotation;
     }
 
     void DestroyCurrentModel()
@@ -235,6 +317,7 @@ public class CharacterDetailManager : MonoBehaviour
             Destroy(currentModelInstance);
             currentModelInstance = null;
         }
+        SetModelRenderActive(false);
         if (fullBodyImage != null)
             fullBodyImage.gameObject.SetActive(true);
     }
