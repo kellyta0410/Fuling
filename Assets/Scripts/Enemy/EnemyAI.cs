@@ -47,6 +47,10 @@ public abstract class EnemyAI : MonoBehaviour
     public float attackDamageDelay = 0.3f;
     protected Coroutine attackCoroutine;
 
+    [Header("击退方向")]
+    [Tooltip("击退方向掺入\"敌人自身后方\"的比例（0~1；0 = 纯远离玩家，1 = 纯自身后方）")]
+    public float knockbackOwnBackBlend = 0.3f;
+
     [Header("攻击冷却")]
     [Tooltip("攻击冷却（>0 时覆盖 EnemyType 资产的 attackCooldown，方便在 Inspect差 逐个手动调，无需改资产）")]
     public float attackCooldownOverride = 0f;
@@ -256,7 +260,7 @@ public abstract class EnemyAI : MonoBehaviour
         }
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
-        float attackRange = enemyData != null ? enemyData.attackRange : 1.5f;
+        float attackRange = GetAttackActivationRange();
 
         // 进入攻击范围：停住原地转向玩家，能攻则攻，不再前进贴脸
         // （子类可重写 TryPerformInRangeAttack 接管该行为，如蓄力/咏唱）
@@ -618,6 +622,15 @@ Vector3 center = player.transform.position;
         return enemyData != null ? enemyData.attackCooldown : 1.5f;
     }
 
+    // 有效攻击触发距离：取"攻击范围"与"agent 停距"较大者，
+    // 否则像 Basic(stop 2.5 > attackRange 2) 会停在攻击范围外而永远不攻。
+    protected float GetAttackActivationRange()
+    {
+        float attack = enemyData != null ? enemyData.attackRange : 1.5f;
+        float stopping = isAgentValid && agent != null ? agent.stoppingDistance : 0f;
+        return Mathf.Max(attack, stopping);
+    }
+
     protected bool IsFacingPlayer()
     {
         if (player == null) return false;
@@ -676,7 +689,7 @@ Vector3 center = player.transform.position;
         if (player != null && !player.IsDead() && !isDead)
         {
             float dist = Vector3.Distance(transform.position, player.transform.position);
-            float attackRangeValue = enemyData != null ? enemyData.attackRange : 1.5f;
+            float attackRangeValue = GetAttackActivationRange();
             if (dist <= attackRangeValue && IsFacingPlayer())
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
@@ -766,28 +779,27 @@ Vector3 center = player.transform.position;
     public void AddKnockback(Vector3 dir, float distance)
     {
         if (isDead) return;
-
-        // 击退方向：尽量按敌人自身朝后的方向退（向后倒退），而不是单纯沿玩家攻击方向侧移。
-        // 以敌人自身的 -forward 为主，仅轻微保留一点玩家攻击方向成分，避免纯侧向推开很违和。
-        Vector3 back = -transform.forward;
-        back.y = 0;
-        if (back.sqrMagnitude > 0.0001f)
-        {
-            back.Normalize();
-            dir.y = 0;
-            if (dir.sqrMagnitude > 0.0001f)
-                dir = Vector3.Slerp(back, dir.normalized, 0.25f).normalized;
-            else
-                dir = back;
-        }
-        else
-        {
-            dir.y = 0;
-        }
-        if (dir.sqrMagnitude < 0.0001f) return;
-
         if (knockRoutine != null) StopCoroutine(knockRoutine);
-        knockRoutine = StartCoroutine(KnockbackRoutine(dir, distance));
+
+        // 击退方向：始终以"远离玩家"为主（保证玩家能追踪到、打得到），
+        // 只轻微掺少量"敌人自身后方"的朝向成分避免侧移太违和。
+        // 不能只靠敌人自身朝向——蛇蓄力时转向，其"后方"有时会对着玩家，导致击退方向反了玩家打不到。
+        Vector3 away = dir; away.y = 0;
+        if (player != null)
+        {
+            Vector3 p = transform.position - player.transform.position;
+            p.y = 0;
+            if (p.sqrMagnitude > 0.0001f) away = p.normalized;
+        }
+
+        Vector3 back = -transform.forward; back.y = 0;
+        Vector3 final = away;
+        if (back.sqrMagnitude > 0.0001f)
+            final = Vector3.Slerp(away.normalized, back, Mathf.Clamp01(knockbackOwnBackBlend));
+        final.y = 0;
+        if (final.sqrMagnitude < 0.0001f) return;
+
+        knockRoutine = StartCoroutine(KnockbackRoutine(final.normalized, distance));
     }
 
     IEnumerator KnockbackRoutine(Vector3 dir, float distance)

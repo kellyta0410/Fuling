@@ -62,7 +62,11 @@ MonoBehaviour:
   attackDuration: 0.5
   staggerDuration: 0.4
   attackDamageDelay: 0.3
-  attackCooldownOverride: 3.5
+  knockbackOwnBackBlend: 0.3
+  attackCooldownOverride: 2
+  enableApproachBrake: 1
+  approachBrakeRange: 1.5
+  approachStopSpeed: 0
   facingAngleThreshold: 45
   turnSpeed: 240
   detectionRange: 18
