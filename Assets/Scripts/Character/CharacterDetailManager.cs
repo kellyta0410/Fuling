@@ -9,7 +9,7 @@ public class CharacterDetailManager : MonoBehaviour
     [SerializeField] private Image avatarImage;
     [SerializeField] private Image fullBodyImage;
     [SerializeField] private TextMeshProUGUI characterNameText;
-    [SerializeField] private TextMeshProUGUI characterDescriptionText; // ??????
+    [SerializeField] private TextMeshProUGUI characterDescriptionText; 
 
     [Header("===== 普通攻击 =====")]
     [SerializeField] private Button normalAttackUpgradeButton;
@@ -49,9 +49,72 @@ public class CharacterDetailManager : MonoBehaviour
     [SerializeField] private RawImage modelRenderImage;
     [Tooltip("模型放在相机前方的距离（米）")]
     [SerializeField] private float modelCamDistance = 3f;
+    [Header("===== 模型旋转预览 =====")]
+    [Tooltip("开启后模型可随鼠标/触屏旋转")]
+    [SerializeField] private bool allowRotate = true;
+    [Tooltip("开=模型朝向跟随指针在 RawImage 上的水平位置（悬停即转）；关=按住拖动旋转")]
+    [SerializeField] private bool rotateFollowPointer = false;
+    [Tooltip("转动灵敏度（仅拖动模式使用）")]
+    [SerializeField] private float modelRotateSpeed = 0.6f;
+    [Tooltip("创建模型后自动把包围盒中心对齐到相机画面中线（解决偏高/偏低）")]
+    [SerializeField] private bool autoCenterModel = true;
+    [Tooltip("按相机画面比例自动放大模型，避免显示太小")]
+    [SerializeField] private bool autoFitScale = true;
+    [Tooltip("模型高度占整个画面高度的比例（0~1，越大模型越大）")]
+    [SerializeField] private float fitRatio = 0.7f;
     private GameObject currentModelInstance;
+    private float modelYaw;
+    private float lastDragX = -1f;
 
     private CharacterData currentDisplayCharacter;
+
+    void Update()
+    {
+        if (!allowRotate || currentModelInstance == null || currentDisplayCharacter == null)
+            return;
+
+        // 只在 RawImage 矩形范围内生效
+        Vector2 local = Vector2.zero;
+        Rect rect = new Rect();
+        bool inside = false;
+        if (modelRenderImage != null && modelRenderImage.rectTransform != null)
+        {
+            Camera uicam = null;
+            Canvas canvas = modelRenderImage.canvas;
+            if (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                uicam = canvas.worldCamera;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    modelRenderImage.rectTransform, Input.mousePosition, uicam, out local))
+            {
+                rect = modelRenderImage.rectTransform.rect;
+                inside = rect.Contains(local);
+            }
+        }
+        if (!inside)
+        {
+            lastDragX = -1f;
+            return;
+        }
+
+        if (rotateFollowPointer)
+        {
+            float t = Mathf.InverseLerp(rect.xMin, rect.xMax, local.x);
+            modelYaw = Mathf.Lerp(-180f, 180f, t);
+        }
+        else if (Input.GetMouseButton(0))
+        {
+            if (lastDragX >= 0f)
+                modelYaw += (local.x - lastDragX) * modelRotateSpeed;
+            lastDragX = local.x;
+        }
+        else
+        {
+            lastDragX = -1f;
+        }
+
+        currentModelInstance.transform.localRotation =
+            Quaternion.Euler(currentDisplayCharacter.modelSpawnRotation) * Quaternion.Euler(0f, modelYaw, 0f);
+    }
 
     void Start()
     {
@@ -230,6 +293,7 @@ public class CharacterDetailManager : MonoBehaviour
                 currentModelInstance.transform.localPosition = Vector3.forward * modelCamDistance + character.modelSpawnPosition;
                 currentModelInstance.transform.localRotation = Quaternion.Euler(character.modelSpawnRotation);
                 currentModelInstance.transform.localScale = Vector3.one;
+                CenterModelInView();
             }
             else
             {
@@ -262,6 +326,48 @@ public class CharacterDetailManager : MonoBehaviour
     {
         if (modelCamera != null) modelCamera.gameObject.SetActive(active);
         if (modelRenderImage != null) modelRenderImage.gameObject.SetActive(active);
+    }
+
+    // 自动缩放模型到画面比例 + 垂直居中
+    void CenterModelInView()
+    {
+        if (currentModelInstance == null || modelCamera == null)
+            return;
+        if (!autoCenterModel && !autoFitScale)
+            return;
+
+        // 先按画面高度放大模型
+        if (autoFitScale)
+        {
+            float h = GetModelBounds().size.y;
+            if (h > 0.001f)
+            {
+                float viewHeight;
+                if (modelCamera.orthographic)
+                    viewHeight = modelCamera.orthographicSize * 2f;
+                else
+                    viewHeight = 2f * modelCamDistance * Mathf.Tan(modelCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+                currentModelInstance.transform.localScale = Vector3.one * (viewHeight * fitRatio / h);
+            }
+        }
+
+        // 再让包围盒中心对齐画面中线
+        if (autoCenterModel)
+        {
+            Vector3 camLocal = modelCamera.transform.InverseTransformPoint(GetModelBounds().center);
+            Vector3 p = currentModelInstance.transform.localPosition;
+            p.y -= camLocal.y;
+            currentModelInstance.transform.localPosition = p;
+        }
+    }
+
+    Bounds GetModelBounds()
+    {
+        Renderer[] renderers = currentModelInstance.GetComponentsInChildren<Renderer>(true);
+        Bounds b = renderers.Length > 0 ? renderers[0].bounds : new Bounds();
+        for (int i = 1; i < renderers.Length; i++)
+            b.Encapsulate(renderers[i].bounds);
+        return b;
     }
 
     // 把 modelContainer 放到"全身图 UI"屏幕中心的相机前方，让模型显示在图片位置
