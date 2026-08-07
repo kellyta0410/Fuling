@@ -47,6 +47,10 @@ public abstract class EnemyAI : MonoBehaviour
     public float attackDamageDelay = 0.3f;
     protected Coroutine attackCoroutine;
 
+    [Header("攻击冷却")]
+    [Tooltip("攻击冷却（>0 时覆盖 EnemyType 资产的 attackCooldown，方便在 Inspect差 逐个手动调，无需改资产）")]
+    public float attackCooldownOverride = 0f;
+
     [Header("面向检测")]
     public float facingAngleThreshold = 45f;
     public float turnSpeed = 240f;
@@ -237,7 +241,7 @@ public abstract class EnemyAI : MonoBehaviour
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
-            if (attackCooldownTimer >= (enemyData != null ? enemyData.attackCooldown : 1.5f))
+            if (attackCooldownTimer >= GetAttackCooldown())
             {
                 canAttack = true;
                 attackCooldownTimer = 0f;
@@ -560,6 +564,13 @@ Vector3 center = player.transform.position;
     protected float GetCurrentSpeed()
     {
         return isAgentValid && agent != null ? agent.velocity.magnitude : 0f;
+    }
+
+    // 攻击冷却：优先用 Inspector 的手动覆盖值（>0），否则读 EnemyType 资产
+    protected float GetAttackCooldown()
+    {
+        if (attackCooldownOverride > 0f) return attackCooldownOverride;
+        return enemyData != null ? enemyData.attackCooldown : 1.5f;
     }
 
     protected bool IsFacingPlayer()

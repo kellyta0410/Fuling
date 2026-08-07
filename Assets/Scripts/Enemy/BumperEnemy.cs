@@ -106,7 +106,7 @@ public class BumperEnemy : EnemyAI
 
     private IEnumerator ResetAttackCooldown()
     {
-        yield return new WaitForSeconds(enemyData.attackCooldown);
+        yield return new WaitForSeconds(GetAttackCooldown());
         canAttack = true;
     }
 
