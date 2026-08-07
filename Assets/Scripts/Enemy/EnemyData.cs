@@ -11,6 +11,10 @@ public class EnemyData : ScriptableObject
     public int attackDamage = 10;
     public float attackCooldown = 1f;
 
+    [Header("攻击时机")]
+    [Tooltip("敌人攻击造成伤害的延迟（秒），对齐到攻击动画命中玩家那一刻")]
+    public float attackDamageDelay = 0.3f;
+
     [Header("奖励")]
     public int coinReward = 10;
 

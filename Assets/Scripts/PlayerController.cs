@@ -26,7 +26,10 @@ public class PlayerController : MonoBehaviour
 
     [Header("攻击参数")]
     public float attackDuration = 0.5f;
-    public float attackDamageDelay = 0.3f;
+    [Tooltip("普通攻击造成伤害的延迟（秒），对齐普通攻击动画命中那一刻")]
+    public float attackDamageDelay = 0.35f;
+    [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
+    public float skillDamageDelay = 0.5f;
 
     [Header("地面检测")]
     public LayerMask groundLayer;
@@ -48,8 +51,8 @@ public class PlayerController : MonoBehaviour
     public float hitRedAlpha = 0.55f;
     [Tooltip("四角闪红时长（秒）")]
     public float hitRedDuration = 0.3f;
-    [Tooltip("自动生成时四角矩形占屏幕宽/高的比例（0~0.5）")]
-    public float cornerRatio = 0.35f;
+    [Tooltip("自动生成的受击红晕覆盖范围：小于它就全透明，越接近 1 红色范围越大（0~1）")]
+    public float vignetteInnerRatio = 0.6f;
 
     // ==================== 摇杆 UI ====================
     public RectTransform joystickBg;
@@ -69,9 +72,9 @@ public class PlayerController : MonoBehaviour
     [Tooltip("闪避冷却时间（秒）")]
     public float dodgeCooldown = 5f;
     [Tooltip("闪避距离")]
-    public float dodgeDistance = 4f;
-    [Tooltip("闪避持续时间（秒）")]
-    public float dodgeDuration = 0.35f;
+    public float dodgeDistance = 8f;
+    [Tooltip("闪避持续时间（秒，越短闪得越快）")]
+    public float dodgeDuration = 0.25f;
 
     // ==================== 运行时数据 ====================
     private float currentHealth;
@@ -466,8 +469,10 @@ public class PlayerController : MonoBehaviour
             }
             else
             {
-                velocity.x *= 0.99f;
-                velocity.z *= 0.99f;
+                // 输入松开：水平速度快速归零（之前 *0.99 衰减太慢导致"跑后迟迟不 idle"）
+                float decel = currentSpeed * Time.deltaTime * 8f;
+                velocity.x = Mathf.MoveTowards(velocity.x, 0f, decel);
+                velocity.z = Mathf.MoveTowards(velocity.z, 0f, decel);
             }
         }
 
@@ -576,7 +581,7 @@ public class PlayerController : MonoBehaviour
 
     IEnumerator DelayedSkillDamage(int damage)
     {
-        yield return new WaitForSeconds(attackDamageDelay);
+        yield return new WaitForSeconds(skillDamageDelay);
 
         Collider[] hitColliders = Physics.OverlapSphere(
             transform.position + transform.forward * skillRange * 0.5f,
@@ -852,7 +857,7 @@ public class PlayerController : MonoBehaviour
         shakeRtn = null;
     }
 
-    // 自动创建四角红色 Image（无 Canvas 时自动建一个全屏 Overlay Canvas）
+    // 自动生成全屏径向渐晕红（中心透明、越靠边越红、柔和朦胧的受击效果）
     Image[] AutoCreateCornerImages()
     {
         Canvas canvas = FindObjectOfType<Canvas>();
@@ -866,34 +871,41 @@ public class PlayerController : MonoBehaviour
             canvas.sortingOrder = 999;
         }
 
-        // 用屏幕像素换算成 UI 坐标（考虑 Canvas 缩放）
-        float sf = canvas.scaleFactor > 0 ? canvas.scaleFactor : 1f;
-        float w = (Screen.width * cornerRatio) / sf;
-        float h = (Screen.height * cornerRatio) / sf;
-
-        Vector2[] anchors = { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) };
-        Vector2[] pivots  = { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) };
-        string[] names    = { "Corner_TL", "Corner_TR", "Corner_BL", "Corner_BR" };
-
-        Image[] result = new Image[4];
-        for (int i = 0; i < 4; i++)
+        // 生成径向渐晕纹理：中心透明，越往边缘越不透明
+        int size = 256;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        float half = size * 0.5f;
+        Color[] px = new Color[size * size];
+        for (int y = 0; y < size; y++)
         {
-            GameObject go = new GameObject(names[i], typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(canvas.transform, false);
-
-            RectTransform rt = (RectTransform)go.transform;
-            rt.anchorMin = anchors[i];
-            rt.anchorMax = anchors[i];
-            rt.pivot = pivots[i];
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(w, h);
-
-            Image img = go.GetComponent<Image>();
-            img.color = new Color(1f, 0.08f, 0.08f, 0f);
-            img.raycastTarget = false;
-            result[i] = img;
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(half + 0.5f, half + 0.5f)) / half;
+                float a = Mathf.SmoothStep(vignetteInnerRatio, 1f, d);
+                px[y * size + x] = new Color(1f, 1f, 1f, a);
+            }
         }
-        return result;
+        tex.SetPixels(px);
+        tex.Apply(false, true);
+        Sprite sp = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+
+        GameObject go = new GameObject("HitVignette", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(canvas.transform, false);
+
+        RectTransform rt = (RectTransform)go.transform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = Vector2.zero;
+
+        Image img = go.GetComponent<Image>();
+        img.sprite = sp;
+        img.color = new Color(1f, 0.06f, 0.06f, 0f);
+        img.raycastTarget = false;
+        return new Image[] { img };
     }
 
     // 击退：沿 dir 推 distance 米（用 CharacterController.Move，会被墙挡住）

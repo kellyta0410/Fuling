@@ -9040,7 +9040,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 57.037308, y: 0}
+  m_AnchoredPosition: {x: 57.037354, y: 0}
   m_SizeDelta: {x: -114.07471, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &3007039877771678280
@@ -10378,7 +10378,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &4931199585609538912
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10433,7 +10433,7 @@ GameObject:
   - component: {fileID: 3807148481947362605}
   - component: {fileID: 7641324321505713123}
   m_Layer: 5
-  m_Name: Final Coin
+  m_Name: Final Kill
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -10739,17 +10739,17 @@ RectTransform:
   m_GameObject: {fileID: 4825008834858574444}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3568725243758305801}
   m_Father: {fileID: 3007039877771678280}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 57.037354, y: 0}
-  m_SizeDelta: {x: -114.07471, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0, y: 0}
 --- !u!4 &5628903579771334350
 Transform:
   m_ObjectHideFlags: 0
@@ -11345,7 +11345,7 @@ GameObject:
   - component: {fileID: 2643463097747454841}
   - component: {fileID: 1319237439326465622}
   m_Layer: 5
-  m_Name: FInal Kill
+  m_Name: FInal Coin
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -12753,8 +12753,8 @@ MonoBehaviour:
   pausemenu: {fileID: 5535998195140623796}
   coinText: {fileID: 5477550404793486536}
   enemyCountText: {fileID: 2890723715364105803}
-  finalCoinText: {fileID: 7641324321505713123}
-  finalKillText: {fileID: 1319237439326465622}
+  finalCoinText: {fileID: 1319237439326465622}
+  finalKillText: {fileID: 7641324321505713123}
   restartButton: {fileID: 4245061610611804478}
   timerText: {fileID: 5999617378717338712}
   fullHealthColor: {r: 0, g: 1, b: 0, a: 1}

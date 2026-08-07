@@ -129,6 +129,7 @@ public abstract class EnemyAI : MonoBehaviour
             baseSpeed = enemyData.speed;
             baseHealth = enemyData.health;
             baseAttackDamage = enemyData.attackDamage;
+            attackDamageDelay = enemyData.attackDamageDelay;
 
             if (!isHealthInitialized)
             {
@@ -438,6 +439,11 @@ public abstract class EnemyAI : MonoBehaviour
         if (healthBarPrefab == null) return;
         healthBarInstance = Instantiate(healthBarPrefab, transform.position + healthBarOffset, Quaternion.identity);
         healthBarInstance.transform.SetParent(transform);
+
+        // 血条 Canvas 排序提到墙（X-Ray 半透明墙）之上，避免血条在墙后时被透明墙混合而"变透明"
+        Canvas hpCanvas = healthBarInstance.GetComponentInChildren<Canvas>();
+        if (hpCanvas != null) hpCanvas.sortingOrder = 10;
+
         healthSlider = healthBarInstance.GetComponent<Slider>();
         if (healthSlider == null) healthSlider = healthBarInstance.GetComponentInChildren<Slider>();
         if (healthSlider != null)
