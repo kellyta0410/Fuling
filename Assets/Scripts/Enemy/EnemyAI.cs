@@ -51,6 +51,13 @@ public abstract class EnemyAI : MonoBehaviour
     [Tooltip("攻击冷却（>0 时覆盖 EnemyType 资产的 attackCooldown，方便在 Inspect差 逐个手动调，无需改资产）")]
     public float attackCooldownOverride = 0f;
 
+    [Header("接近刹停（避免冲过头）")]
+    public bool enableApproachBrake = true;
+    [Tooltip("离目标的 stoppingDistance 还有这么大范围时开始减速")]
+    public float approachBrakeRange = 1.5f;
+    [Tooltip("到达 stoppingDistance 时保留的最低速度倍数（0 = 完全停住，不再蠕动推玩家）")]
+    public float approachStopSpeed = 0f;
+
     [Header("面向检测")]
     public float facingAngleThreshold = 45f;
     public float turnSpeed = 240f;
@@ -286,7 +293,11 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
-        HandleMovement();
+HandleMovement();
+
+        // 接近目标提前减速，避免冲出一小段才刹停
+        if (isChasing && !isAttacking)
+            ApplyApproachBrake();
 
         // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
         if (enableSeparation && distance > attackRange)
@@ -558,12 +569,46 @@ Vector3 center = player.transform.position;
     protected void StopAgent()
     {
         if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
             agent.isStopped = true;
+            agent.velocity = Vector3.zero; // 立即清零残速，避免停下时还滑/推一下
+        }
     }
 
     protected float GetCurrentSpeed()
     {
         return isAgentValid && agent != null ? agent.velocity.magnitude : 0f;
+    }
+
+    // 接近目标时按距离平滑减速，避免冲过 stoppingDistance 一点点再刹停
+    protected void ApplyApproachBrake()
+    {
+        if (!enableApproachBrake || agent == null || !agent.isOnNavMesh || player == null) return;
+        float baseSpd = baseSpeed * currentSpeedMultiplier;
+        if (baseSpd <= 0f) return;
+
+        float sd = agent.stoppingDistance;
+        Vector3 toPlayer = player.transform.position - transform.position;
+        toPlayer.y = 0;
+        float distance = toPlayer.magnitude;
+
+        // 还没进减速区 → 全速
+        if (distance > sd + approachBrakeRange)
+        {
+            agent.speed = baseSpd;
+            return;
+        }
+
+        // 已到/超过 stoppingDistance → 用最低速度（趋近“准备停”）
+        if (distance <= sd)
+        {
+            agent.speed = baseSpd * approachStopSpeed;
+            return;
+        }
+
+        // 减速区内：按剩余距离从全速线性降到最低
+        float f = Mathf.Clamp01((distance - sd) / approachBrakeRange);
+        agent.speed = baseSpd * Mathf.Lerp(approachStopSpeed, 1f, f);
     }
 
     // 攻击冷却：优先用 Inspector 的手动覆盖值（>0），否则读 EnemyType 资产
