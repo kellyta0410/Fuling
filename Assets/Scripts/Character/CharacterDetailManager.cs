@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 
 public class CharacterDetailManager : MonoBehaviour
@@ -36,6 +37,13 @@ public class CharacterDetailManager : MonoBehaviour
 
     [Header("===== manager =====")]
     [SerializeField] private GameDataManager gameDataManager;
+
+    [Header("===== 提示气泡 =====")]
+    [Tooltip("按钮不可用时点击弹出的提示文字，留空则仅打印日志")]
+    public TextMeshProUGUI hintToastText;
+    [Tooltip("提示文字后面的背景 Panel（可选），显示提示时一起打开")]
+    public GameObject hintToastPanel;
+    private Coroutine hintToastCoroutine;
 
     /* ==================== 3D 模型（暂时不需要，已注释） ==================== */
     [Header("===== 3D 模型=====")]
@@ -520,24 +528,24 @@ public class CharacterDetailManager : MonoBehaviour
             }
         }
 
-        // 按钮（只控制可点，文字由场景固定，不自动创建字体）
+        // 按钮（始终可点用于弹提示，不可用时置灰）
         if (normalAttackUpgradeButton != null)
         {
             if (!unlocked)
             {
-                normalAttackUpgradeButton.interactable = false;
+                SetButtonClickable(normalAttackUpgradeButton, false);
                 Debug.Log($"[升级按钮] {name} 普通攻击禁用：未解锁");
             }
             else
             {
                 if (normalMaxed || nextNormal == null || normalConfig == null)
                 {
-                    normalAttackUpgradeButton.interactable = false;
+                    SetButtonClickable(normalAttackUpgradeButton, false);
                     Debug.Log($"[升级按钮] {name} 普通攻击禁用：maxed={normalMaxed} nextNull={nextNormal == null} configNull={normalConfig == null}");
                 }
                 else
                 {
-                    normalAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= normalConfig.GetLevelCost(normalLevel + 1);
+                    SetButtonClickable(normalAttackUpgradeButton, gameDataManager.TotalCoins >= normalConfig.GetLevelCost(normalLevel + 1));
                     Debug.Log($"[升级按钮] {name} 普通攻击 金币={gameDataManager.TotalCoins} 需要={normalConfig.GetLevelCost(normalLevel + 1)} => {normalAttackUpgradeButton.interactable}");
                 }
             }
@@ -591,19 +599,19 @@ public class CharacterDetailManager : MonoBehaviour
         {
             if (!unlocked)
             {
-                skillAttackUpgradeButton.interactable = false;
+                SetButtonClickable(skillAttackUpgradeButton, false);
                 Debug.Log($"[升级按钮] {name} 技能攻击禁用：未解锁");
             }
             else
             {
                 if (skillMaxed || nextSkill == null || skillConfig == null)
                 {
-                    skillAttackUpgradeButton.interactable = false;
+                    SetButtonClickable(skillAttackUpgradeButton, false);
                     Debug.Log($"[升级按钮] {name} 技能攻击禁用：maxed={skillMaxed} nextNull={nextSkill == null} configNull={skillConfig == null}");
                 }
                 else
                 {
-                    skillAttackUpgradeButton.interactable = gameDataManager.TotalCoins >= skillConfig.GetLevelCost(skillLevel + 1);
+                    SetButtonClickable(skillAttackUpgradeButton, gameDataManager.TotalCoins >= skillConfig.GetLevelCost(skillLevel + 1));
                     Debug.Log($"[升级按钮] {name} 技能攻击 金币={gameDataManager.TotalCoins} 需要={skillConfig.GetLevelCost(skillLevel + 1)} => {skillAttackUpgradeButton.interactable}");
                 }
             }
@@ -620,10 +628,18 @@ public class CharacterDetailManager : MonoBehaviour
 
         string name = currentDisplayCharacter.characterName;
         int current = GetNormalLevel(name);
-        if (current >= config.maxLevel) return;
+        if (current >= config.maxLevel)
+        {
+            ShowHint("普通攻击已满级");
+            return;
+        }
 
-        var next = config.GetLevelData(current + 1);
-        if (next == null || !gameDataManager.SpendCoins(config.GetLevelCost(current + 1))) return;
+        int cost = config.GetLevelCost(current + 1);
+        if (!gameDataManager.SpendCoins(cost))
+        {
+            ShowHint($"金币不足！升级需 {cost} 金币");
+            return;
+        }
 
         SetNormalLevel(name, current + 1);
         UpdateCharacterStats(currentDisplayCharacter);
@@ -639,10 +655,18 @@ public class CharacterDetailManager : MonoBehaviour
 
         string name = currentDisplayCharacter.characterName;
         int current = GetSkillLevel(name);
-        if (current >= config.maxLevel) return;
+        if (current >= config.maxLevel)
+        {
+            ShowHint("技能攻击已满级");
+            return;
+        }
 
-        var next = config.GetLevelData(current + 1);
-        if (next == null || !gameDataManager.SpendCoins(config.GetLevelCost(current + 1))) return;
+        int cost = config.GetLevelCost(current + 1);
+        if (!gameDataManager.SpendCoins(cost))
+        {
+            ShowHint($"金币不足！升级需 {cost} 金币");
+            return;
+        }
 
         SetSkillLevel(name, current + 1);
         UpdateCharacterStats(currentDisplayCharacter);
@@ -651,6 +675,24 @@ public class CharacterDetailManager : MonoBehaviour
     }
 
     // ==================== 华文字体（统一本面板所有文本） ====================
+
+    // ==================== 按钮可点/置灰 ====================
+
+    // 始终可点（用于不可用时点击弹提示），不可用时置灰，看起来像禁用
+    void SetButtonClickable(Button btn, bool available)
+    {
+        if (btn == null) return;
+        btn.interactable = true;
+        if (btn.targetGraphic != null)
+            btn.targetGraphic.color = available ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.8f);
+    }
+
+    // ==================== 提示气泡（从下往上弹入） ====================
+
+    public void ShowHint(string message)
+    {
+        HintToast.Show(message, uiFont, hintToastText, hintToastPanel);
+    }
 
     void ApplyGameFont()
     {
@@ -701,11 +743,11 @@ public class CharacterDetailManager : MonoBehaviour
         if (selectCharacterButton != null)
         {
             if (selected)
-                selectCharacterButton.interactable = false;
+                SetButtonClickable(selectCharacterButton, false);
             else if (unlocked)
-                selectCharacterButton.interactable = true;
+                SetButtonClickable(selectCharacterButton, true);
             else
-                selectCharacterButton.interactable = gameDataManager.TotalCoins >= character.unlockCost;
+                SetButtonClickable(selectCharacterButton, gameDataManager.TotalCoins >= character.unlockCost);
         }
     }
 
@@ -715,11 +757,13 @@ public class CharacterDetailManager : MonoBehaviour
 
         if (!gameDataManager.IsCharacterUnlocked(currentDisplayCharacter))
         {
-            if (gameDataManager.UnlockCharacter(currentDisplayCharacter))
+            if (!gameDataManager.UnlockCharacter(currentDisplayCharacter))
             {
-                gameDataManager.SelectCharacter(currentDisplayCharacter);
-                gameDataManager.NotifyDataChanged();
+                ShowHint($"金币不足！解锁需 {currentDisplayCharacter.unlockCost} 金币");
+                return;
             }
+            gameDataManager.SelectCharacter(currentDisplayCharacter);
+            gameDataManager.NotifyDataChanged();
             return;
         }
 
@@ -757,14 +801,14 @@ public class CharacterDetailManager : MonoBehaviour
         if (normalAttackCoinText != null) normalAttackCoinText.text = "";
         if (skillAttackCoinText != null) skillAttackCoinText.text = "";
 
-        // 按钮（文字由场景固定，只禁用）
+        // 按钮（文字由场景固定，只置灰不可用）
         if (normalAttackUpgradeButton != null)
         {
-            normalAttackUpgradeButton.interactable = false;
+            SetButtonClickable(normalAttackUpgradeButton, false);
         }
         if (skillAttackUpgradeButton != null)
         {
-            skillAttackUpgradeButton.interactable = false;
+            SetButtonClickable(skillAttackUpgradeButton, false);
         }
 
         if (selectButtonText != null)
@@ -773,7 +817,7 @@ public class CharacterDetailManager : MonoBehaviour
             UpdateSelectButtonShadow();
         }
         if (selectCharacterButton != null)
-            selectCharacterButton.interactable = false;
+            SetButtonClickable(selectCharacterButton, false);
     }
 
     public CharacterData GetCurrentDisplayCharacter()

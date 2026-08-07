@@ -14,6 +14,8 @@ public class SceneSelectionManager : MonoBehaviour
     public DifficultySettings normalConfig;
     public DifficultySettings hardConfig;
     public DifficultySettings infiniteConfig;
+    [Tooltip("普通模式按钮（未开放，启动时置灰但仍可点击弹提示）")]
+    public Button normalModeButton;
 
     [Header("===== UI 面板 =====")]
     public GameObject mainPanel;
@@ -55,6 +57,8 @@ public class SceneSelectionManager : MonoBehaviour
     [Header("===== 提示气泡（可选）=====")]
     [Tooltip("显示“未开放/金币不足”等提示的文本，留空则仅打印日志")]
     public TextMeshProUGUI hintToastText;
+    [Tooltip("提示文字后面的背景 Panel（可选），显示提示时一起打开")]
+    public GameObject hintToastPanel;
     private Coroutine hintToastCoroutine;
 
     private CharacterData pendingUnlockCharacter;
@@ -83,6 +87,8 @@ public class SceneSelectionManager : MonoBehaviour
             unlockCancelButton.onClick.AddListener(CancelUnlock);
 
         BindCharacterButtons();
+
+        SetupNormalModeButton();
 
         ShowMainPanel();
         RefreshAllUI();
@@ -357,7 +363,7 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void SelectNormal()
     {
-        ShowHint("普通模式正在开发中，敬请期待！请先体验其他模式");
+        ShowHint("普通模式正在开发中");
     }
 
     public void SelectHard()
@@ -556,30 +562,27 @@ public class SceneSelectionManager : MonoBehaviour
         return gameDataManager;
     }
 
+    // ==================== 普通模式按钮（未开放） ====================
+
+    void SetupNormalModeButton()
+    {
+        if (normalModeButton == null) return;
+
+        // 保持可点击（用于弹提示），但外观置灰，看起来像禁用
+        normalModeButton.onClick.RemoveListener(SelectNormal);
+        normalModeButton.onClick.AddListener(SelectNormal);
+
+        normalModeButton.interactable = true;
+        if (normalModeButton.targetGraphic != null)
+            normalModeButton.targetGraphic.color = new Color(0.55f, 0.55f, 0.55f, 0.7f);
+    }
+
     // ==================== 提示气泡 ====================
 
     public void ShowHint(string message)
     {
-        if (hintToastText != null)
-        {
-            hintToastText.gameObject.SetActive(true);
-            hintToastText.text = message;
-
-            if (hintToastCoroutine != null) StopCoroutine(hintToastCoroutine);
-            hintToastCoroutine = StartCoroutine(HideHintToast(2f));
-        }
-        else
-        {
-            Debug.Log(message);
-        }
-    }
-
-    IEnumerator HideHintToast(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        if (hintToastText != null)
-            hintToastText.gameObject.SetActive(false);
-        hintToastCoroutine = null;
+        TMP_FontAsset font = playerNameText != null ? playerNameText.font : null;
+        HintToast.Show(message, font, hintToastText, hintToastPanel);
     }
 
     public void RefreshCharacterDetail()
