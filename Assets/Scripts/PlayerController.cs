@@ -105,6 +105,9 @@ public class PlayerController : MonoBehaviour
     private float skillRange = 3f;
     private float skillCooldownTimer = 0f;
     private bool canUseSkill = true;
+    private bool isUsingSkill = false;
+    private float skillTimer = 0f;
+    public float skillDuration = 0.8f;
     private Image[] cooldownMasks = new Image[3];
 
     // ==================== 闪避相关 ====================
@@ -411,10 +414,21 @@ public class PlayerController : MonoBehaviour
             }
         }
 
+        if (isUsingSkill)
+        {
+            skillTimer += Time.deltaTime;
+            if (skillTimer >= skillDuration)
+            {
+                isUsingSkill = false;
+                skillTimer = 0f;
+            }
+        }
+
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        if (moveDir.magnitude > 0.1f && !isAttacking && !isDodging)
+        // 攻击时也能转向（跟手），但移动归零（原地挥击）
+        if (moveDir.magnitude > 0.1f && !isDodging)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -437,7 +451,7 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking ? speed * 0.3f : speed);
+        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking || isUsingSkill ? 0f : speed);
         if (isGrounded)
         {
             if (inputMagnitude > 0.1f)
@@ -573,6 +587,8 @@ public class PlayerController : MonoBehaviour
 
         canUseSkill = false;
         skillCooldownTimer = 0f;
+        isUsingSkill = true;
+        skillTimer = 0f;
         animator.SetTrigger("SkillAction");
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
@@ -1105,7 +1121,7 @@ public class PlayerController : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0)) PerformAction();
         if (Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.Space)) PerformSkillAttack();
-        if (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift)) PerformDodge();
+        if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift)) PerformDodge();
         if (Input.GetKeyDown(KeyCode.K)) TakeDamage(999f);
     }
 
