@@ -64,6 +64,17 @@ public abstract class EnemyAI : MonoBehaviour
     public float separationRadius = 2f;
     public float separationForce = 5f;
     public float separationSmoothSpeed = 10f;
+    [Header("前方拥挤检测")]
+    [Tooltip("追击时前方此距离内有敌人（朝玩家方向）则先停下，避免把前面敌人一路推挤到玩家")]
+    public float frontEnemyStopRange = 1.5f;
+
+    [Header("环形站位（寻找玩家周围空位往返占位）")]
+    public bool enableFormation = true;
+    public int formationSlots = 8;
+    [Tooltip("某环占位点被附近敌人占据的判定半径")]
+    public float formationOccupancyRadius = 1.2f;
+    [Tooltip("站位环半径的附加余量（实际 = max(余量, attackRange*0.9)）")]
+    public float formationRingPadding = 0.5f;
 
     // 分离力相关
     private Vector3 separationVelocity = Vector3.zero;
@@ -144,10 +155,11 @@ public abstract class EnemyAI : MonoBehaviour
                 isHealthInitialized = true;
             }
 
-            if (isAgentValid && !useDirectChase)
+            if (isAgentValid)
             {
                 agent.speed = baseSpeed;
-                agent.stoppingDistance = enemyData.attackRange * 0.9f;
+                // 两个模式都设置 stoppingDistance：否则无限模式默认 0，敌人会走到玩家脚底贴脸才停
+                agent.stoppingDistance = enemyData.attackRange * 0.8f;
                 agent.autoBraking = true;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
@@ -263,9 +275,17 @@ public abstract class EnemyAI : MonoBehaviour
         else if (distance > lose)
             isChasing = false;
 
+        // 追击时若前方有敌人挤成一团，先停下（仅非环形占位时启用兜底排队）
+        if (isChasing && !isAttacking && !enableFormation && IsEnemyBlockingForward())
+        {
+            StopAgent();
+            return;
+        }
+
         HandleMovement();
 
-        if (enableSeparation && !isAttacking)
+        // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
+        if (enableSeparation && distance > attackRange)
         {
             ApplySeparation();
         }
@@ -278,6 +298,159 @@ public abstract class EnemyAI : MonoBehaviour
     }
 
     // ---------- 分离力 ----------
+
+    // 朝玩家方向前方是否有敌人堵路（避免成群把前面的敌人推挤到玩家）
+    private bool IsEnemyBlockingForward()
+    {
+        if (player == null) return false;
+        if (enemyLayerMask == 0) enemyLayerMask = LayerMask.GetMask("Enemy");
+
+        Vector3 dir = player.transform.position - transform.position;
+        dir.y = 0;
+        float dist = dir.magnitude;
+        if (dist < 0.01f) return false;
+        dir /= dist;
+
+        float range = Mathf.Min(frontEnemyStopRange, dist);
+        Collider[] hits = Physics.OverlapSphere(transform.position + dir * range * 0.5f, range, enemyLayerMask);
+        foreach (var c in hits)
+        {
+            if (c == null) continue;
+            EnemyAI other = c.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.isDead) continue;
+
+            Vector3 toOther = other.transform.position - transform.position;
+            toOther.y = 0;
+            if (toOther.sqrMagnitude < 0.0001f) continue;
+            if (Vector3.Dot(dir, toOther.normalized) > 0.5f)
+                return true;
+        }
+        return false;
+    }
+
+    // ---------- 环形占位 ----------
+
+    // 玩家周围取 formationSlots 个等距占位点，找离自己最近且未被其他敌人占据的空位。
+    // 返回 null 表示所有占位点都被占满（调用方应去排队）。
+    protected Vector3? GetFormationTarget()
+    {
+        if (!enableFormation || player == null) return null;
+        if (enemyLayerMask == 0) enemyLayerMask = LayerMask.GetMask("Enemy");
+
+        float attackRange = enemyData != null ? enemyData.attackRange : 1.5f;
+        float ringR = Mathf.Max(formationRingPadding, attackRange * 0.9f);
+        if (ringR <= 0f) return null;
+
+Vector3 center = player.transform.position;
+        center.y = transform.position.y;
+
+        int N = Mathf.Max(6, formationSlots);
+        Vector3? best = null;
+        float bestSq = float.MaxValue;
+
+        for (int i = 0; i < N; i++)
+        {
+            float ang = i * (Mathf.PI * 2f / N);
+            Vector3 slot = center + new Vector3(Mathf.Cos(ang), 0, Mathf.Sin(ang)) * ringR;
+
+            // 空位被占 或 朝该空位的小通道被敌人挡着 → 不硬挤，跳过（改去畅通的空位）
+            if (IsSlotOccupied(slot)) continue;
+            if (IsForwardBlockedTo(slot)) continue;
+
+            float d2 = (slot - transform.position).sqrMagnitude;
+            if (d2 < bestSq)
+            {
+                bestSq = d2;
+                best = slot;
+            }
+        }
+        return best;
+    }
+
+    // 占位点附近是否已有其他存活敌人
+    private bool IsSlotOccupied(Vector3 slot)
+    {
+        Collider[] cols = Physics.OverlapSphere(slot, formationOccupancyRadius, enemyLayerMask);
+        foreach (var c in cols)
+        {
+            if (c == null) continue;
+            EnemyAI other = c.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.isDead) continue;
+            return true;
+        }
+        return false;
+    }
+
+    // 从自身到目标空位的连线上（狭窄走廊内）是否挡着其他敌人。
+    // 采用沿路径投影判定：只有在路径中间且横向偏移很小（即真的堵在通道上）才算挡，
+    // 避免因侧后方敌人或远处敌人而误判，让敌人能正常绕到畅通空位。
+    private bool IsForwardBlockedTo(Vector3 slot)
+    {
+        Vector3 to = slot - transform.position;
+        to.y = 0;
+        float dist = to.magnitude;
+        if (dist < 0.6f) return false;
+        Vector3 dir = to / dist;
+
+        if (enemyLayerMask == 0) enemyLayerMask = LayerMask.GetMask("Enemy");
+        Collider[] cols = Physics.OverlapSphere(transform.position, dist + formationOccupancyRadius, enemyLayerMask);
+        foreach (var c in cols)
+        {
+            if (c == null) continue;
+            EnemyAI other = c.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.isDead) continue;
+
+            Vector3 off = other.transform.position - transform.position;
+            off.y = 0;
+            float along = Vector3.Dot(off, dir);
+            // 只在路径中段 0.2~dist 才算挡（避免堵在紧身后侧或目标点后的敌人）
+            if (along < 0.2f || along > dist) continue;
+            Vector3 perp = off - dir * along;
+            if (perp.magnitude < formationOccupancyRadius)
+                return true;
+        }
+        return false;
+    }
+
+    // 所有空位被占满时的兜底：站到"最近一个比我还接近玩家且挡在路上的敌人"身后排队。
+    // 找不到则返回 null（调用方按原逻辑直追玩家）。
+    protected Vector3? GetQueueTarget()
+    {
+        if (player == null) return null;
+        if (enemyLayerMask == 0) enemyLayerMask = LayerMask.GetMask("Enemy");
+
+        Vector3 center = player.transform.position;
+        center.y = transform.position.y;
+        float myDist = (transform.position - center).magnitude;
+
+        float checkR = Mathf.Max(myDist + 3f, 8f);
+        Collider[] cols = Physics.OverlapSphere(center, checkR, enemyLayerMask);
+
+        EnemyAI nearest = null;
+        float bestD = float.MaxValue;
+        foreach (var c in cols)
+        {
+            if (c == null) continue;
+            EnemyAI other = c.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.isDead) continue;
+
+            Vector3 o = other.transform.position; o.y = transform.position.y;
+            if ((o - center).sqrMagnitude >= myDist * myDist) continue; // 只排更接近玩家的敌人后面
+
+            float d2 = (o - transform.position).sqrMagnitude;
+            if (d2 < bestD) { bestD = d2; nearest = other; }
+        }
+
+        if (nearest == null) return null;
+
+        Vector3 p = nearest.transform.position; p.y = transform.position.y;
+        Vector3 away = p - center;
+        away.y = 0;
+        if (away.sqrMagnitude < 0.0001f) return null;
+        away.Normalize();
+        return p + away * Mathf.Max(1.2f, formationOccupancyRadius + 0.3f);
+    }
+
     private void ApplySeparation()
     {
         if (myCollider == null) return;
@@ -600,6 +773,10 @@ public abstract class EnemyAI : MonoBehaviour
             animator.SetBool("IsMoving", false);
             animator.SetTrigger("Die");
         }
+
+        // 保留尸体的实体碰撞体（玩家仍会被拦住），只禁用 NavMeshAgent：
+        // 尸体是静态碰撞（无 agent 驱动），不会被后续敌人物理推动，也就不会把尸体顶到玩家身上
+        if (agent != null) agent.enabled = false;
 
         if (ownerTile != null)
         {

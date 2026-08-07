@@ -20,10 +20,10 @@ public class ChaserEnemy : EnemyAI
         {
             if (enableTelegraph)
                 // Snake（蓄力命中）：贴近到 2m 内再蓄力
-                agent.stoppingDistance = Mathf.Min(2f, enemyData != null ? enemyData.attackRange * 0.9f : 2f);
+                agent.stoppingDistance = Mathf.Min(1.8f, (enemyData != null ? enemyData.attackRange * 0.8f : 1.8f));
             else
-                // Basic（直接攻击）：停在攻击范围边缘稍远，再发动攻击
-                agent.stoppingDistance = Mathf.Min(3f, enemyData != null ? enemyData.attackRange : 3f);
+                // Basic（直接攻击）：停在攻击范围边缘（attackRange），不贴脸
+                agent.stoppingDistance = Mathf.Min(2.5f, (enemyData != null ? enemyData.attackRange : 2f));
         }
         CreateTelegraph();
     }
@@ -85,8 +85,25 @@ public class ChaserEnemy : EnemyAI
         telegraphing = false;
         if (isAgentValid)
         {
+            Vector3 target = player.transform.position;
+
+            // 环形占位：有免费空位就过去绕玩家，全满则排到前面敌人身后
+            if (enableFormation)
+            {
+                Vector3? slot = GetFormationTarget();
+                if (slot.HasValue)
+                {
+                    target = slot.Value;
+                }
+                else
+                {
+                    Vector3? queue = GetQueueTarget();
+                    if (queue.HasValue) target = queue.Value;
+                }
+            }
+
             agent.isStopped = false;
-            agent.SetDestination(player.transform.position);
+            agent.SetDestination(target);
         }
     }
 

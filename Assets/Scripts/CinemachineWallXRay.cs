@@ -133,7 +133,6 @@ public class CinemachineWallXRay : MonoBehaviour
         };
         mat.shader = xrayShader;
         mat.SetFloat("_Transparency", 1f);
-        mat.EnableKeyword("_XRAY_OPAQUE");
         return data;
     }
 
@@ -141,11 +140,6 @@ public class CinemachineWallXRay : MonoBehaviour
     {
         if (data == null || data.material == null) return;
         data.material.SetFloat("_Transparency", data.currentAlpha);
-
-        if (data.currentAlpha >= 0.98f)
-            data.material.EnableKeyword("_XRAY_OPAQUE");
-        else
-            data.material.DisableKeyword("_XRAY_OPAQUE");
     }
 
     void RestoreWallSmooth(WallData data)
@@ -159,8 +153,6 @@ public class CinemachineWallXRay : MonoBehaviour
     {
         if (data == null || data.material == null) return;
 
-        // 清理 X-Ray 专用 keyword，避免残留到原 shader
-        data.material.DisableKeyword("_XRAY_OPAQUE");
         if (data.originalShader != null)
         {
             data.material.shader = data.originalShader;

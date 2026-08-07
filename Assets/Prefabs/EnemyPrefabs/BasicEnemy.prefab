@@ -325,7 +325,7 @@ NavMeshAgent:
   m_Acceleration: 8
   avoidancePriority: 80
   m_AngularSpeed: 120
-  m_StoppingDistance: 1
+  m_StoppingDistance: 2.5
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 1
   m_AutoRepath: 1
@@ -378,6 +378,7 @@ MonoBehaviour:
   isDead: 0
   canAttack: 1
   attackDuration: 0.5
+  staggerDuration: 0.4
   attackDamageDelay: 0.3
   facingAngleThreshold: 45
   turnSpeed: 240
@@ -389,5 +390,12 @@ MonoBehaviour:
   separationRadius: 1.5
   separationForce: 3
   separationSmoothSpeed: 8
+  frontEnemyStopRange: 1.5
+  enableFormation: 1
+  formationSlots: 8
+  formationOccupancyRadius: 1.2
+  formationRingPadding: 0.5
+  backSideDot: 0
   ownerTile: {fileID: 0}
   enableTelegraph: 0
+  telegraphDuration: 2.5
