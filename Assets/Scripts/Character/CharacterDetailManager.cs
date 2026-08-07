@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
@@ -37,6 +37,7 @@ public class CharacterDetailManager : MonoBehaviour
     [Header("===== manager =====")]
     [SerializeField] private GameDataManager gameDataManager;
 
+    /* ==================== 3D 模型（暂时不需要，已注释） ==================== */
     [Header("===== 3D 模型=====")]
     [Tooltip("3D 角色的模型预制体")]
     [SerializeField] private Transform modelContainer;
@@ -65,9 +66,11 @@ public class CharacterDetailManager : MonoBehaviour
     private GameObject currentModelInstance;
     private float modelYaw;
     private float lastDragX = -1f;
+    /* ==================== 3D 模型字段注释结束 ==================== */
 
     private CharacterData currentDisplayCharacter;
 
+    /* ==================== 3D 模型旋转（暂时不需要，已注释） ==================== */
     void Update()
     {
         if (!allowRotate || currentModelInstance == null || currentDisplayCharacter == null)
@@ -115,6 +118,7 @@ public class CharacterDetailManager : MonoBehaviour
         currentModelInstance.transform.localRotation =
             Quaternion.Euler(currentDisplayCharacter.modelSpawnRotation) * Quaternion.Euler(0f, modelYaw, 0f);
     }
+    /* ==================== 3D 模型旋转注释结束 ==================== */
 
     void Start()
     {
@@ -271,6 +275,14 @@ public class CharacterDetailManager : MonoBehaviour
 
     // ==================== 3D ???? ====================
 
+    // 暂时不需要 3D 模型，直接显示全身图
+    void UpdateCharacterModel(CharacterData character)
+    {
+        if (fullBodyImage != null)
+            fullBodyImage.gameObject.SetActive(true);
+    }
+
+    /* ==================== 3D 模型（暂时不需要，已注释） ====================
     void UpdateCharacterModel(CharacterData character)
     {
         if (currentModelInstance != null)
@@ -408,22 +420,18 @@ public class CharacterDetailManager : MonoBehaviour
         }
         else
         {
-            // ScreenSpace-Camera / World：corners 是世界坐标，沿相机→中心方向取一段
+            // ScreenSpace-Camera / World：corners 是世界坐标，沿相机>中心方向取一段
             Vector3 dir = (center - cam.transform.position).normalized;
             modelContainer.position = cam.transform.position + dir * modelViewDistance;
         }
 
         modelContainer.rotation = cam.transform.rotation;
     }
+    // ==================== 3D 模型注释结束 ==================== */
 
+    // 暂时不需要 3D 模型，只恢复显示全身图
     void DestroyCurrentModel()
     {
-        if (currentModelInstance != null)
-        {
-            Destroy(currentModelInstance);
-            currentModelInstance = null;
-        }
-        SetModelRenderActive(false);
         if (fullBodyImage != null)
             fullBodyImage.gameObject.SetActive(true);
     }
@@ -475,7 +483,7 @@ public class CharacterDetailManager : MonoBehaviour
         var nextNormal = normalConfig?.GetLevelData(normalLevel + 1);
         var currentNormal = normalConfig?.GetLevelData(normalLevel);
 
-        // 等级显示（当前等级 → 下一等级，满级显示 MAX）
+        // 等级显示（当前等级 > 下一等级，满级显示 MAX）
         if (normalAttackLevelText != null)
         {
             if (!unlocked)
@@ -483,7 +491,7 @@ public class CharacterDetailManager : MonoBehaviour
             else if (normalMaxed)
                 normalAttackLevelText.text = "MAX";
             else
-                normalAttackLevelText.text = $"Lv.{normalLevel} → {normalLevel + 1}";
+                normalAttackLevelText.text = $"Lv.{normalLevel} > {normalLevel + 1}";
         }
 
         // 升级所需金币（满级清空）
@@ -541,7 +549,7 @@ public class CharacterDetailManager : MonoBehaviour
         var nextSkill = skillConfig?.GetLevelData(skillLevel + 1);
         var currentSkill = skillConfig?.GetLevelData(skillLevel);
 
-        // 等级显示（当前等级 → 下一等级，满级显示 MAX）
+        // 等级显示（当前等级 > 下一等级，满级显示 MAX）
         if (skillAttackLevelText != null)
         {
             if (!unlocked)
@@ -549,7 +557,7 @@ public class CharacterDetailManager : MonoBehaviour
             else if (skillMaxed)
                 skillAttackLevelText.text = "MAX";
             else
-                skillAttackLevelText.text = $"Lv.{skillLevel} → {skillLevel + 1}";
+                skillAttackLevelText.text = $"Lv.{skillLevel} > {skillLevel + 1}";
         }
 
         // 升级所需金币（满级清空）

@@ -22,6 +22,7 @@ public class SceneSelectionManager : MonoBehaviour
     [Header("===== 玩家信息 =====")]
     public TextMeshProUGUI coinText;
     public TextMeshProUGUI playerNameText;
+    public Image playerAvatarImage;
 
     [Header("===== 记录显示 =====")]
     public TextMeshProUGUI easyCoinsText;
@@ -199,15 +200,23 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void RefreshPlayerName()
     {
-        if (playerNameText != null && gameDataManager != null)
+        if (gameDataManager == null) return;
+
+        CharacterData current = gameDataManager.CurrentCharacter;
+        bool hasCharacter = current != null;
+
+        if (playerNameText != null)
+            playerNameText.text = hasCharacter ? current.characterName : "未选择";
+
+        if (playerAvatarImage != null)
         {
-            if (gameDataManager.CurrentCharacter != null)
+            // 始终显示角色头像（未选择角色时隐藏）
+            playerAvatarImage.gameObject.SetActive(hasCharacter);
+            if (hasCharacter)
             {
-                playerNameText.text = $"{gameDataManager.CurrentCharacter.characterName}";
-            }
-            else
-            {
-                playerNameText.text = "未选择";
+                playerAvatarImage.sprite = current.GetAvatarSprite(true);
+                playerAvatarImage.color = Color.white;
+                playerAvatarImage.preserveAspect = true;
             }
         }
     }

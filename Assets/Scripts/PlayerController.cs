@@ -9,6 +9,8 @@ public class PlayerController : MonoBehaviour
     private Animator animator;
     private UIManager uiManager;
     private GameDataManager dataManager;
+    private Coroutine shakeRtn;
+    private Coroutine hitCornerRtn;
 
     // ==================== 基础属性（从角色配置加载） ====================
     [Header("基础属性（运行时从角色配置加载）")]
@@ -32,6 +34,22 @@ public class PlayerController : MonoBehaviour
 
     [Header("死亡参数")]
     public float deathDelay = 1.5f;
+
+    [Header("受击反馈（镜头晃动 + 四角闪红）")]
+    [Tooltip("受击时晃动的相机（留空自动用 Camera.main）")]
+    public Camera hitCam;
+    [Tooltip("屏幕四角的红色 Image（从上到下、从左到右，各自锚在四个角）")]
+    public Image[] hitCornerImages;
+    [Tooltip("镜头晃动强度（米）")]
+    public float hitShakeStrength = 0.12f;
+    [Tooltip("镜头晃动时长（秒）")]
+    public float hitShakeDuration = 0.18f;
+    [Tooltip("四角红色最大透明度（0~1）")]
+    public float hitRedAlpha = 0.55f;
+    [Tooltip("四角闪红时长（秒）")]
+    public float hitRedDuration = 0.3f;
+    [Tooltip("自动生成时四角矩形占屏幕宽/高的比例（0~0.5）")]
+    public float cornerRatio = 0.35f;
 
     // ==================== 摇杆 UI ====================
     public RectTransform joystickBg;
@@ -143,6 +161,21 @@ public class PlayerController : MonoBehaviour
         animator = GetComponent<Animator>();
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
+
+        // 受击四角先设为透明
+        if (hitCornerImages == null || hitCornerImages.Length == 0)
+            hitCornerImages = AutoCreateCornerImages();
+
+        if (hitCornerImages != null)
+        {
+            for (int i = 0; i < hitCornerImages.Length; i++)
+            {
+                if (hitCornerImages[i] == null) continue;
+                Color c = hitCornerImages[i].color;
+                c.a = 0f;
+                hitCornerImages[i].color = c;
+            }
+        }
 
         LoadCharacterData();
 
@@ -744,7 +777,123 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || isDying) return;
 
+        PlayHitFeedback();
         StartCoroutine(SmoothDamage(damage));
+    }
+
+    // 受击反馈：镜头微微晃动 + 四角闪红
+    void PlayHitFeedback()
+    {
+        if (hitCornerImages != null && hitCornerImages.Length > 0)
+        {
+            if (hitCornerRtn != null) StopCoroutine(hitCornerRtn);
+            hitCornerRtn = StartCoroutine(CornerFlashRoutine());
+        }
+        if (shakeRtn != null) StopCoroutine(shakeRtn);
+        shakeRtn = StartCoroutine(CameraShakeRoutine());
+    }
+
+    IEnumerator CornerFlashRoutine()
+    {
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / Mathf.Max(hitRedDuration, 0.001f);
+            float a = hitRedAlpha * Mathf.Sin(t * Mathf.PI); // 0→红→0
+            for (int i = 0; i < hitCornerImages.Length; i++)
+            {
+                if (hitCornerImages[i] == null) continue;
+                Color c = hitCornerImages[i].color;
+                c.a = a;
+                hitCornerImages[i].color = c;
+            }
+            yield return null;
+        }
+        for (int i = 0; i < hitCornerImages.Length; i++)
+        {
+            if (hitCornerImages[i] == null) continue;
+            Color c = hitCornerImages[i].color;
+            c.a = 0f;
+            hitCornerImages[i].color = c;
+        }
+        hitCornerRtn = null;
+    }
+
+    IEnumerator CameraShakeRoutine()
+    {
+        Camera cam = hitCam != null ? hitCam : Camera.main;
+        if (cam == null) { shakeRtn = null; yield break; }
+
+        Vector3 basePos = cam.transform.localPosition;
+        Quaternion baseRot = cam.transform.localRotation;
+        float elapsed = 0f;
+        while (elapsed < hitShakeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / hitShakeDuration;
+            float decay = 1f - t;
+            float strength = hitShakeStrength * decay;
+
+            Vector3 offset = new Vector3(
+                (Mathf.PerlinNoise(elapsed * 60f, 0f) * 2f - 1f),
+                (Mathf.PerlinNoise(0f, elapsed * 60f) * 2f - 1f),
+                0f) * strength;
+
+            cam.transform.localPosition = basePos + offset;
+            cam.transform.localRotation = baseRot * Quaternion.Euler(
+                (Mathf.PerlinNoise(elapsed * 60f, 5f) * 2f - 1f) * 2f * decay,
+                (Mathf.PerlinNoise(8f, elapsed * 60f) * 2f - 1f) * 2f * decay, 0f);
+
+            yield return null;
+        }
+
+        cam.transform.localPosition = basePos;
+        cam.transform.localRotation = baseRot;
+        shakeRtn = null;
+    }
+
+    // 自动创建四角红色 Image（无 Canvas 时自动建一个全屏 Overlay Canvas）
+    Image[] AutoCreateCornerImages()
+    {
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            GameObject canvasGO = new GameObject("HitOverlayCanvas");
+            canvas = canvasGO.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            canvasGO.AddComponent<GraphicRaycaster>();
+            canvas.sortingOrder = 999;
+        }
+
+        // 用屏幕像素换算成 UI 坐标（考虑 Canvas 缩放）
+        float sf = canvas.scaleFactor > 0 ? canvas.scaleFactor : 1f;
+        float w = (Screen.width * cornerRatio) / sf;
+        float h = (Screen.height * cornerRatio) / sf;
+
+        Vector2[] anchors = { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) };
+        Vector2[] pivots  = { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) };
+        string[] names    = { "Corner_TL", "Corner_TR", "Corner_BL", "Corner_BR" };
+
+        Image[] result = new Image[4];
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject go = new GameObject(names[i], typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(canvas.transform, false);
+
+            RectTransform rt = (RectTransform)go.transform;
+            rt.anchorMin = anchors[i];
+            rt.anchorMax = anchors[i];
+            rt.pivot = pivots[i];
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(w, h);
+
+            Image img = go.GetComponent<Image>();
+            img.color = new Color(1f, 0.08f, 0.08f, 0f);
+            img.raycastTarget = false;
+            result[i] = img;
+        }
+        return result;
     }
 
     // 击退：沿 dir 推 distance 米（用 CharacterController.Move，会被墙挡住）
