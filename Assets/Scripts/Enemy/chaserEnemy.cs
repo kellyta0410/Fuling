@@ -22,8 +22,8 @@ public class ChaserEnemy : EnemyAI
                 // Snake（蓄力命中）：贴近到 2m 内再蓄力
                 agent.stoppingDistance = Mathf.Min(1.8f, (enemyData != null ? enemyData.attackRange * 0.8f : 1.8f));
             else
-                // Basic（直接攻击）：停在攻击范围边缘（attackRange），不贴脸
-                agent.stoppingDistance = Mathf.Min(2.5f, (enemyData != null ? enemyData.attackRange : 2f));
+                // Basic（直接攻击）：停在 2.5m（略多于攻击范围，不贴脸）
+                agent.stoppingDistance = 2.5f;
         }
         CreateTelegraph();
     }

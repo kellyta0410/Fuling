@@ -710,6 +710,26 @@ Vector3 center = player.transform.position;
     public void AddKnockback(Vector3 dir, float distance)
     {
         if (isDead) return;
+
+        // 击退方向：尽量按敌人自身朝后的方向退（向后倒退），而不是单纯沿玩家攻击方向侧移。
+        // 以敌人自身的 -forward 为主，仅轻微保留一点玩家攻击方向成分，避免纯侧向推开很违和。
+        Vector3 back = -transform.forward;
+        back.y = 0;
+        if (back.sqrMagnitude > 0.0001f)
+        {
+            back.Normalize();
+            dir.y = 0;
+            if (dir.sqrMagnitude > 0.0001f)
+                dir = Vector3.Slerp(back, dir.normalized, 0.25f).normalized;
+            else
+                dir = back;
+        }
+        else
+        {
+            dir.y = 0;
+        }
+        if (dir.sqrMagnitude < 0.0001f) return;
+
         if (knockRoutine != null) StopCoroutine(knockRoutine);
         knockRoutine = StartCoroutine(KnockbackRoutine(dir, distance));
     }
