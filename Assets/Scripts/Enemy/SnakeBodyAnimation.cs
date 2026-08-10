@@ -189,15 +189,19 @@ public class SnakeBodyAnimation : MonoBehaviour
         bool moving = enemyAI != null
             ? enemyAI.IsMovingNow
             : (animator != null && animator.GetBool("IsMoving"));
-        float movingAmt = Mathf.Max(chasing && moving ? 1f : 0f, idleSlither);
+        // 追击/攻击状态下蠕动前进；完全盘卷时静止（盘卷为闭圈的过渡期保留微蠕动）
+        bool chaseActive = chasing || attacking;
+        float movingAmt = chaseActive
+            ? (moving ? 1f : 0f)
+            : Mathf.Lerp(idleSlither, 0f, Mathf.Clamp01(coilK));
 
         float time = Time.time * slitherSpeed;
 
-        // —— 状态驱动：非追击盘卷；追击/攻击保持展开；仅攻击时前半段直立 ——
+        // —— 状态驱动：非追击盘卷；追击/攻击保持展开，且整个追击期间前半段直立（眼镜蛇姿态）——
         bool keepUncoiled = chasing || attacking;
         coilK = Mathf.MoveTowards(coilK, keepUncoiled ? 0f : (coilTurns > 0f ? 1f : 0f),
             Time.deltaTime / Mathf.Max(coilTime, 0.01f));
-        rearLift = Mathf.MoveTowards(rearLift, attacking ? 1f : 0f,
+        rearLift = Mathf.MoveTowards(rearLift, chaseActive ? 1f : 0f,
             Time.deltaTime / Mathf.Max(poiseLiftTime, 0.01f));
 
         // 记录头部当前朝向（世界 yaw），供贪吃蛇式滞后跟随采样
@@ -257,12 +261,13 @@ public class SnakeBodyAnimation : MonoBehaviour
 
             // 3.5) 贪吃蛇式转向：追击移动中，头部跟随当前朝向，身体后段按
             //      "弧长→时间滞后"采样头部当时的朝向，绕颈部铰链水平旋转，形成拖尾弧线
-            if (moving && turnLag > 0.001f && coilK < 0.999f && facingCount >= 2)
+            //      幅度随 rearLift 平滑淡入淡出（追击立起后尾随曲线渐强，退出追击渐退，避免突然拉直）
+            if (chaseActive && turnLag > 0.001f && coilK < 0.999f && facingCount >= 2)
             {
                 float arcFromHead = Mathf.Clamp01(rearAtBigU ? (1f - u) : u);
                 float histYaw = SampleFacingYaw(curYaw, arcFromHead * turnLag);
                 float arcK = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(turnNeck, 1f, arcFromHead));
-                float ang = -Mathf.DeltaAngle(histYaw, curYaw) * arcK;
+                float ang = -Mathf.DeltaAngle(histYaw, curYaw) * arcK * rearLift;
                 if (Mathf.Abs(ang) > 0.02f)
                 {
                     // 颈部铰链点（朝头的第 turnNeck 段处），绕它竖直旋转拖尾
@@ -280,6 +285,12 @@ public class SnakeBodyAnimation : MonoBehaviour
             bool inRear = rearAtBigU ? (u >= rearBaseU) : (u <= rearBaseU);
             if (inRear && rearLift > 0f)
             {
+                // 从仰起段底部算起的长度比例：0=贴地处, 1=头部
+                float part = rearAtBigU
+                    ? Mathf.Clamp01((u - rearBaseU) / Mathf.Max(rearBodyEnd, 0.001f))
+                    : Mathf.Clamp01((rearBaseU - u) / Mathf.Max(rearBodyEnd, 0.001f));
+                float bendK = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(part));
+
                 Vector3 pivotStraight = center0;
                 pivotStraight[longAxis] = rearAtBigU ? (maxU - rearBodyEnd * bodyLen) : (minU + rearBodyEnd * bodyLen);
                 float pTheta = (rearBaseU - 0.5f) * Mathf.PI * 2f * turns;
@@ -290,7 +301,8 @@ public class SnakeBodyAnimation : MonoBehaviour
                     : lVec;
                 Vector3 liftAxis = Vector3.Cross(tPivot, uVec).normalized;   // 水平横轴，向上抬
                 if (liftAxis.sqrMagnitude < 0.5f) liftAxis = sVec;
-                float ang = rearLift * rearRaiseAngle * Mathf.Deg2Rad * rearFlipSign;
+                // 沿仰起段渐进弯曲：基部贴地、越靠头部弯得越多 → 蛇颈自然 S 形弯弧
+                float ang = rearLift * rearRaiseAngle * Mathf.Deg2Rad * rearFlipSign * bendK;
                 point = pivotRef + Quaternion.AngleAxis(ang * Mathf.Rad2Deg, liftAxis) * (point - pivotRef);
             }
 
