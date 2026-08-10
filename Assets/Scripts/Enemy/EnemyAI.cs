@@ -153,7 +153,6 @@ public abstract class EnemyAI : MonoBehaviour
                 Vector3 fixedPos = hit.position;
                 transform.position = fixedPos;
                 agent.Warp(fixedPos);
-                Debug.Log($"{name} 已吸附到 NavMesh 位置: {fixedPos}");
             }
             else
             {
