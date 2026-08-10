@@ -28,15 +28,24 @@ public class SnakeBodyAnimation : MonoBehaviour
     public bool showGizmos = true;
 
     [Header("===== 攻击动作 =====")]
-    [Tooltip("甩尾：绕尾根横扫；头锤：前段(头)向下砸")]
-    public AttackMotion attackMotion = AttackMotion.TailSwing;
+    [Tooltip("后扑：头+身体抬起后头向前扑出；冲撞：整条前冲")]
+    public AttackMotion attackMotion = AttackMotion.RearStrike;
     [Tooltip("攻击动作时长（秒）")]
     public float attackDuration = 0.35f;
-    [Tooltip("尾巴起点（0=根部, 1=尖）")]
-    public float tailStart = 0.62f;
-    public float tailSwingAngle = 55f;
     [Tooltip("冲撞：整条蛇沿朝向向前一冲再回原位（米）")]
     public float bodyRushDistance = 1.5f;
+
+    [Header("===== 攻击：抬身扑击 =====")]
+    [Tooltip("抬起部分的身长比例（头+身体，如 0.7 = 前七成抬起）")]
+    public float rearBodyEnd = 0.7f;
+    [Tooltip("抬起最大角度（度）")]
+    public float rearRaiseAngle = 60f;
+    [Tooltip("头向前扑出的距离（相对身长的比例）")]
+    public float headLungeRatio = 0.25f;
+    [Tooltip("头在哪一端：关=小端(常见), 开=大端。抬起的若是尾巴就切换它")]
+    public bool rearAtBigU = false;
+    [Tooltip("抬/扑方向符号（头没上抬反而下压就设 -1）")]
+    public float rearFlipSign = 1f;
 
     [Header("===== 死亡倒下 =====")]
     public float deathFallDuration = 0.7f;
@@ -47,7 +56,7 @@ public class SnakeBodyAnimation : MonoBehaviour
     [Tooltip("无玩家时的回退倒下轴（如 (1,0,0) 左右倒）")]
     public Vector3 fallAxis = new Vector3(1f, 0f, 0f);
 
-    public enum AttackMotion { TailSwing, BodyRush }
+    public enum AttackMotion { TailSwing, BodyRush, RearStrike }
 
     private MeshFilter meshFilter;
     private Mesh instanceMesh;
@@ -79,11 +88,16 @@ public class SnakeBodyAnimation : MonoBehaviour
     void Awake()
     {
         meshFilter = GetComponent<MeshFilter>();
+        if (meshFilter == null) meshFilter = GetComponentInChildren<MeshFilter>();
         animator = GetComponentInParent<Animator>();
         enemyAI = GetComponentInParent<EnemyAI>();
         bodyCollider = GetComponentInParent<Collider>();
 
-        if (meshFilter == null || meshFilter.sharedMesh == null) return;
+        if (meshFilter == null || meshFilter.sharedMesh == null)
+        {
+            Debug.LogWarning("[SnakeBodyAnimation] 未找到有效的 MeshFilter（自身或子物体都没有），蛇身蠕动/攻击动画不会运行。挂点路径: " + TransformPath(transform), this);
+            return;
+        }
 
         // 克隆一份 mesh，避免污染原始资源
         instanceMesh = Instantiate(meshFilter.sharedMesh);
@@ -99,6 +113,9 @@ public class SnakeBodyAnimation : MonoBehaviour
         bodyLen = Mathf.Max(b.size[longAxis], 0.0001f);
         minU = b.min[longAxis];
         maxU = b.max[longAxis];
+        Debug.Log("[SnakeBodyAnimation] 蛇身初始化: 长轴=" + longAxis + " 侧轴=" + sideAxis
+            + " 身长=" + bodyLen.ToString("F2") + " 顶点数=" + baseVertices.Length
+            + " 包围盒size=" + b.size + " attackMotion=" + attackMotion, this);
 
         // 蛇身很长，把分离半径按世界尺寸调到身长一半，避免互相穿插推挤
         if (enemyAI != null)
@@ -108,6 +125,17 @@ public class SnakeBodyAnimation : MonoBehaviour
             float want = worldLen * 0.5f;
             if (enemyAI.separationRadius < want) enemyAI.separationRadius = want;
         }
+    }
+
+    static string TransformPath(Transform t)
+    {
+        string s = t.name;
+        while (t.parent != null)
+        {
+            t = t.parent;
+            s = t.name + "/" + s;
+        }
+        return s;
     }
 
     void Update()
@@ -125,12 +153,15 @@ public class SnakeBodyAnimation : MonoBehaviour
 
     void UpdateBody()
     {
-        // 攻击动作：检测 IsAttacking 上升沿
-        bool attacking = animator != null && animator.GetBool("IsAttacking");
+        // 攻击动作：检测攻击上升沿（优先 EnemyAI 状态，无骨骼模型 Animator 参数不可靠）
+        bool attacking = enemyAI != null
+            ? enemyAI.IsAttackingNow
+            : (animator != null && animator.GetBool("IsAttacking"));
         if (attacking && !wasAttacking)
         {
             attackTimer = 1f;                       // 攻击动画 1 -> 0
             rushStartPos = transform.position;
+            Debug.Log("[SnakeBodyAnimation] 攻击触发 attackMotion=" + attackMotion, this);
             // 冲撞期间把身体碰撞临时设为 Trigger，穿过玩家而不推开
             if (attackMotion == AttackMotion.BodyRush && bodyCollider != null)
                 bodyCollider.isTrigger = true;
@@ -144,14 +175,15 @@ public class SnakeBodyAnimation : MonoBehaviour
                 bodyCollider.isTrigger = false;
         }
 
-        bool moving = animator != null && animator.GetBool("IsMoving");
+        bool moving = enemyAI != null
+            ? enemyAI.IsMovingNow
+            : (animator != null && animator.GetBool("IsMoving"));
         float movingAmt = Mathf.Max(moving ? 1f : 0f, idleSlither);
 
         float time = Time.time * slitherSpeed;
-        int normalAxis = 3 - longAxis - sideAxis;
-        Vector3 rotAxisVec = normalAxis == 0 ? Vector3.right
-                           : normalAxis == 1 ? Vector3.up
-                           : Vector3.forward;
+        Vector3 sideVec = sideAxis == 0 ? Vector3.right
+                        : sideAxis == 1 ? Vector3.up
+                        : Vector3.forward;
         Vector3 headFwdLocal = transform.InverseTransformDirection(transform.forward);
         Vector3 headDownLocal = transform.InverseTransformDirection(Vector3.down);
 
@@ -187,16 +219,42 @@ public class SnakeBodyAnimation : MonoBehaviour
             // 攻击动作
             if (attackTimer > 0f)
             {
-                float arc = Mathf.Sin(attackTimer * Mathf.PI);      // 0→1→0
-
-                if (attackMotion == AttackMotion.TailSwing && u > tailStart)
+                if (attackMotion == AttackMotion.RearStrike)
                 {
-                    float localT = Mathf.Clamp01((u - tailStart) / Mathf.Max(1f - tailStart, 0.001f));
-                    float theta = arc * tailSwingAngle * localT * Mathf.Deg2Rad;
-                    Vector3 pivot = v; pivot[longAxis] = minU + tailStart * bodyLen;
-                    Vector3 dir = v - pivot;
-                    Quaternion rot = Quaternion.AngleAxis(theta * Mathf.Rad2Deg, rotAxisVec);
-                    o += rot * dir - dir;
+                    // 时间包络：快速立起 → 保持 → 前扑
+                    float t = 1f - attackTimer;                                           // 0→1
+                    float up = t < 0.45f ? t / 0.45f
+                             : t < 0.85f ? 1f
+                             : 1f - (t - 0.85f) / 0.15f;                                 // 抬身
+                    float lunge = (t >= 0.45f && t <= 0.85f)
+                        ? Mathf.Sin(Mathf.Clamp01((t - 0.45f) / 0.4f) * Mathf.PI)        // 0→1→0
+                        : 0f;                                                            // 头前扑
+
+                    // “头”所在端（rearAtBigU 切换头尾）
+                    bool inHead = rearAtBigU ? (u >= 1f - rearBodyEnd) : (u <= rearBodyEnd);
+
+                    if (inHead)
+                    {
+                        // 头+身体以 rearBodyEnd 处为轴抬起
+                        float angle = up * rearRaiseAngle * rearFlipSign * Mathf.Deg2Rad;
+                        Vector3 pivot = v;
+                        pivot[longAxis] = rearAtBigU
+                            ? (maxU - rearBodyEnd * bodyLen)
+                            : (minU + rearBodyEnd * bodyLen);
+                        Vector3 dir = v - pivot;
+                        o += (Quaternion.AngleAxis(angle * Mathf.Rad2Deg, sideVec) * dir) - dir;
+                    }
+
+                    // 抢出的那一段（头端）再向前扑出一点
+                    if (lunge > 0f && inHead)
+                    {
+                        float part = rearAtBigU ? (u - (1f - rearBodyEnd)) / Mathf.Max(rearBodyEnd, 0.001f)
+                                                : u / Mathf.Max(rearBodyEnd, 0.001f);
+                        float falloff = Mathf.Pow(Mathf.Clamp01(1f - part), 2f);
+                        Vector3 longVec = Vector3.zero; longVec[longAxis] = 1f;
+                        Vector3 headDir = rearAtBigU ? longVec : -longVec;
+                        o += headDir * (bodyLen * headLungeRatio) * lunge * falloff;
+                    }
                 }
             }
 
@@ -255,7 +313,9 @@ public class SnakeBodyAnimation : MonoBehaviour
     void OnDrawGizmos()
     {
         if (!showGizmos) return;
-        Mesh m = meshFilter != null ? meshFilter.sharedMesh : null;
+        MeshFilter mf = meshFilter;
+        if (mf == null) mf = GetComponentInChildren<MeshFilter>();
+        Mesh m = mf != null ? mf.sharedMesh : null;
         if (m == null) return;
         Bounds b = m.bounds;
 

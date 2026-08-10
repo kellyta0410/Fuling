@@ -32,6 +32,16 @@ public abstract class EnemyAI : MonoBehaviour
 
     [Header("状态")]
     public bool isDead = false;
+    // 只读状态，供蛇身动画等外部组件读取（无骨骼模型没有有效 Animator 参数）
+    public bool IsAttackingNow { get { return isAttacking; } }
+    public bool IsMovingNow
+    {
+        get
+        {
+            if (isAttacking) return false;
+            return agent != null && agent.velocity.sqrMagnitude > 0.01f;
+        }
+    }
 
     [Header("攻击通用")]
     protected float attackCooldownTimer = 0f;

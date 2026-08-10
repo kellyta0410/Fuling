@@ -286,6 +286,17 @@ public class CharacterDetailManager : MonoBehaviour
     // 暂时不需要 3D 模型，直接显示全身图
     void UpdateCharacterModel(CharacterData character)
     {
+        // 3D 模型相关物体全部停用，防止它们盖在全身图上
+        //（尤其 Android 上 3D 相机/RawImage 会渲染成黑块，把贴图遮成一片黑）
+        if (modelContainer != null) modelContainer.gameObject.SetActive(false);
+        if (modelCamera != null) modelCamera.gameObject.SetActive(false);
+        if (modelRenderImage != null) modelRenderImage.gameObject.SetActive(false);
+        if (currentModelInstance != null)
+        {
+            Destroy(currentModelInstance);
+            currentModelInstance = null;
+        }
+
         if (fullBodyImage != null)
             fullBodyImage.gameObject.SetActive(true);
     }

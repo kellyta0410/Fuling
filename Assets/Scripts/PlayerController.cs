@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using Cinemachine;
 
 public class PlayerController : MonoBehaviour
 {
@@ -44,15 +45,17 @@ public class PlayerController : MonoBehaviour
     [Tooltip("屏幕四角的红色 Image（从上到下、从左到右，各自锚在四个角）")]
     public Image[] hitCornerImages;
     [Tooltip("镜头晃动强度（米）")]
-    public float hitShakeStrength = 0.12f;
+    public float hitShakeStrength = 0.35f;
     [Tooltip("镜头晃动时长（秒）")]
-    public float hitShakeDuration = 0.18f;
+    public float hitShakeDuration = 0.25f;
     [Tooltip("四角红色最大透明度（0~1）")]
-    public float hitRedAlpha = 0.55f;
+    public float hitRedAlpha = 0.7f;
     [Tooltip("四角闪红时长（秒）")]
-    public float hitRedDuration = 0.3f;
+    public float hitRedDuration = 0.35f;
     [Tooltip("自动生成的受击红晕覆盖范围：小于它就全透明，越接近 1 红色范围越大（0~1）")]
     public float vignetteInnerRatio = 0.6f;
+    // Cinemachine 相机下的受击镜头晃动（ImpulseSource -> ImpulseListener）
+    private CinemachineImpulseSource hitImpulse;
 
     // ==================== 摇杆 UI ====================
     public RectTransform joystickBg;
@@ -168,9 +171,34 @@ public class PlayerController : MonoBehaviour
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
-        // 受击四角先设为透明
-        if (hitCornerImages == null || hitCornerImages.Length == 0)
+        // 受击四角先设为透明（数组里有失效引用就重建）
+        bool anyValid = false;
+        if (hitCornerImages != null)
+        {
+            for (int i = 0; i < hitCornerImages.Length; i++)
+                if (hitCornerImages[i] != null) { anyValid = true; break; }
+        }
+        if (!anyValid)
             hitCornerImages = AutoCreateCornerImages();
+
+        // Cinemachine 相机：Brain 每帧覆写 transform，晃动要用 Impulse 才能生效
+        hitCam = hitCam != null ? hitCam : Camera.main;
+        hitImpulse = GetComponent<CinemachineImpulseSource>();
+        if (hitCam != null && hitCam.GetComponent<CinemachineBrain>() != null)
+        {
+            if (hitCam.GetComponent<CinemachineImpulseListener>() == null)
+                hitCam.gameObject.AddComponent<CinemachineImpulseListener>();
+            if (hitImpulse == null)
+            {
+                hitImpulse = gameObject.AddComponent<CinemachineImpulseSource>();
+                CinemachineImpulseDefinition d = hitImpulse.m_ImpulseDefinition;
+                d.m_AmplitudeGain = 1f;
+                d.m_FrequencyGain = 2f;
+                d.m_TimeEnvelope.m_AttackTime = 0.02f;
+                d.m_TimeEnvelope.m_SustainTime = 0f;
+                d.m_TimeEnvelope.m_DecayTime = 0.18f;
+            }
+        }
 
         if (hitCornerImages != null)
         {
@@ -845,9 +873,13 @@ public class PlayerController : MonoBehaviour
         Camera cam = hitCam != null ? hitCam : Camera.main;
         if (cam == null) { shakeRtn = null; yield break; }
 
+        // 相机被 CinemachineBrain 驱动时直接改 transform 每帧都被覆写，
+        // 受击镜头晃动：无论相机是否被 Cinemachine 接管都跑 transform 晃动（没被接管时最直接），
+        // 同时若检测到 CinemachineBrain，再同步补发冲量，保证被 Brain 覆写时依然有晃动
         Vector3 basePos = cam.transform.localPosition;
         Quaternion baseRot = cam.transform.localRotation;
         float elapsed = 0f;
+        float impulseTimer = 0f;
         while (elapsed < hitShakeDuration)
         {
             elapsed += Time.deltaTime;
@@ -864,6 +896,22 @@ public class PlayerController : MonoBehaviour
             cam.transform.localRotation = baseRot * Quaternion.Euler(
                 (Mathf.PerlinNoise(elapsed * 60f, 5f) * 2f - 1f) * 2f * decay,
                 (Mathf.PerlinNoise(8f, elapsed * 60f) * 2f - 1f) * 2f * decay, 0f);
+
+            if (hitImpulse != null)
+            {
+                impulseTimer += Time.deltaTime;
+                if (impulseTimer >= 0.045f)
+                {
+                    impulseTimer = 0f;
+                    Vector3 dir = new Vector3(
+                        Random.Range(-1f, 1f),
+                        Random.Range(-0.7f, 0.7f),
+                        Random.Range(-1f, 1f));
+                    if (dir.sqrMagnitude < 0.0001f) dir = Vector3.up;
+                    dir.Normalize();
+                    hitImpulse.GenerateImpulse(dir * hitShakeStrength * 2.5f * (0.4f + 0.6f * decay));
+                }
+            }
 
             yield return null;
         }
