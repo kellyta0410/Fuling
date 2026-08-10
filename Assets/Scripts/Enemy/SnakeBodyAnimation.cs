@@ -23,7 +23,11 @@ public class SnakeBodyAnimation : MonoBehaviour
     [Tooltip("直身段在身长的哪一端：关=0端(小端)直身, 开=1端(大端)直身。前后反了就切换它")]
     public bool stiffAtBigU = true;
 
-    [Header("===== 转向跟随（路径跟随，无需参数）=====")]
+    [Header("===== 转向跟随（贪吃蛇式：头先转、身体后段延迟跟随）=====")]
+    [Tooltip("整个身体追认头部转向所需的总时长（秒）。越大身体越拖、转弯越蛇形")]
+    public float turnLag = 1.0f;
+    [Tooltip("紧跟头部（不滞后）的身体段长度比例（0~1，从头部算起）。越小=只有头跟着转，越大=更多身体跟着转")]
+    public float turnNeck = 0.25f;
 
     [Header("===== 调试预览 =====")]
     [Tooltip("Scene 中始终显示分段/波形预览")]
@@ -80,6 +84,14 @@ public class SnakeBodyAnimation : MonoBehaviour
     private float coilK = 0f;                       // 盘卷程度 0=直线 1=盘成圆
 
     private int normalFrame = 0;
+
+    // 贪吃蛇式转向：记录头部朝向历史，按弧长取滞后朝向做跟随旋转
+    private const int FacingHistN = 256;
+    private readonly float[] facingTimes = new float[FacingHistN];
+    private readonly float[] facingYaws = new float[FacingHistN];
+    private int facingHead = 0;
+    private int facingCount = 0;
+    private float lastFacingTime = -1f;
 
     private bool isFalling;
     private float fallProgress = 0f;
@@ -171,24 +183,26 @@ public class SnakeBodyAnimation : MonoBehaviour
             if (attackTimer < 0f) attackTimer = 0f;
         }
 
+        bool chasing = enemyAI != null
+            ? enemyAI.IsChasingNow
+            : (animator != null && animator.GetBool("IsMoving"));
         bool moving = enemyAI != null
             ? enemyAI.IsMovingNow
             : (animator != null && animator.GetBool("IsMoving"));
-        float movingAmt = Mathf.Max(moving ? 1f : 0f, idleSlither);
+        float movingAmt = Mathf.Max(chasing && moving ? 1f : 0f, idleSlither);
 
         float time = Time.time * slitherSpeed;
 
-        // —— 状态驱动：闲置盘卷、靠近仰起、移动展开 ——
-        coilK = Mathf.MoveTowards(coilK, moving ? 0f : (coilTurns > 0f ? 1f : 0f),
+        // —— 状态驱动：非追击盘卷；追击/攻击保持展开；仅攻击时前半段直立 ——
+        bool keepUncoiled = chasing || attacking;
+        coilK = Mathf.MoveTowards(coilK, keepUncoiled ? 0f : (coilTurns > 0f ? 1f : 0f),
             Time.deltaTime / Mathf.Max(coilTime, 0.01f));
-
-        float distToPlayer = float.MaxValue;
-        PlayerController pc = enemyAI != null ? enemyAI.Player : null;
-        if (pc != null) distToPlayer = Vector3.Distance(transform.position, pc.transform.position);
-        bool poising = !moving && pc != null && enemyAI != null && !enemyAI.isDead
-            && distToPlayer <= Mathf.Max(poiseRange, 0.01f);
-        rearLift = Mathf.MoveTowards(rearLift, (poising || attacking) ? 1f : 0f,
+        rearLift = Mathf.MoveTowards(rearLift, attacking ? 1f : 0f,
             Time.deltaTime / Mathf.Max(poiseLiftTime, 0.01f));
+
+        // 记录头部当前朝向（世界 yaw），供贪吃蛇式滞后跟随采样
+        float curYaw = GetWorldYaw(transform.forward);
+        PushFacing(curYaw);
 
         // —— 轴系（网格局部空间，全部顶点运算不带世界坐标往返）——
         int upAxis = 3 - longAxis - sideAxis;                       // 剩下的第三个轴=竖直
@@ -240,6 +254,27 @@ public class SnakeBodyAnimation : MonoBehaviour
             o3[sideAxis] += wave;                                   // 蠕动沿横向
             Vector3 tDir = coilK > 0.001f ? tCoil : lVec;           // 该处切线方向
             Vector3 point = pRef + Quaternion.FromToRotation(lVec, tDir) * o3;
+
+            // 3.5) 贪吃蛇式转向：追击移动中，头部跟随当前朝向，身体后段按
+            //      "弧长→时间滞后"采样头部当时的朝向，绕颈部铰链水平旋转，形成拖尾弧线
+            if (moving && turnLag > 0.001f && coilK < 0.999f && facingCount >= 2)
+            {
+                float arcFromHead = Mathf.Clamp01(rearAtBigU ? (1f - u) : u);
+                float histYaw = SampleFacingYaw(curYaw, arcFromHead * turnLag);
+                float arcK = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(turnNeck, 1f, arcFromHead));
+                float ang = -Mathf.DeltaAngle(histYaw, curYaw) * arcK;
+                if (Mathf.Abs(ang) > 0.02f)
+                {
+                    // 颈部铰链点（朝头的第 turnNeck 段处），绕它竖直旋转拖尾
+                    float nU = rearAtBigU ? (1f - turnNeck) : turnNeck;
+                    Vector3 neckStraight = center0;
+                    neckStraight[longAxis] = Mathf.Lerp(minU, maxU, nU);
+                    float nTheta = (nU - 0.5f) * Mathf.PI * 2f * turns;
+                    Vector3 neckRef = Vector3.Lerp(neckStraight,
+                        coilCenter + (Mathf.Cos(nTheta) * lVec + Mathf.Sin(nTheta) * sVec) * coilR, coilK);
+                    point = neckRef + Quaternion.AngleAxis(ang, uVec) * (point - neckRef);
+                }
+            }
 
             // 4) 前半段仰起（绕“仰起部底部”的水平横轴旋转，头抬向上）
             bool inRear = rearAtBigU ? (u >= rearBaseU) : (u <= rearBaseU);
@@ -387,5 +422,50 @@ public class SnakeBodyAnimation : MonoBehaviour
         return axis == 0 ? Vector3.right
              : axis == 1 ? Vector3.up
              : Vector3.forward;
+    }
+
+    // 世界朝向 → yaw 角（度，-180~180）
+    static float GetWorldYaw(Vector3 forward)
+    {
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f) return 0f;
+        return Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+    }
+
+    // 每帧记录头部朝向（同帧只记一次，环形缓冲）
+    void PushFacing(float yaw)
+    {
+        if (facingCount > 0 && Mathf.Abs(Time.time - lastFacingTime) < 0.0001f)
+            return;
+        facingTimes[facingHead] = Time.time;
+        facingYaws[facingHead] = yaw;
+        facingHead = (facingHead + 1) % FacingHistN;
+        if (facingCount < FacingHistN) facingCount++;
+        lastFacingTime = Time.time;
+    }
+
+    // 采样 lagT 秒前头部的朝向（线性插值，超出历史返回最旧值）
+    float SampleFacingYaw(float curYaw, float lagT)
+    {
+        if (facingCount < 2) return curYaw;
+        float target = Time.time - lagT;
+        int latest = (facingHead - 1 + FacingHistN) % FacingHistN;
+        if (target >= facingTimes[latest]) return curYaw;
+
+        int idx = latest;
+        for (int k = 0; k < facingCount - 1; k++)
+        {
+            int prev = (idx - 1 + FacingHistN) % FacingHistN;
+            float tPrev = facingTimes[prev];
+            float tCur = facingTimes[idx];
+            if (target >= tPrev && target <= tCur)
+            {
+                float f = (tCur - tPrev) > 0.0001f
+                    ? Mathf.Clamp01((target - tPrev) / (tCur - tPrev)) : 0f;
+                return Mathf.LerpAngle(facingYaws[prev], facingYaws[idx], f);
+            }
+            idx = prev;
+        }
+        return facingYaws[(facingHead - facingCount + FacingHistN) % FacingHistN];
     }
 }

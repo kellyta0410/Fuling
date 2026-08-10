@@ -31,6 +31,11 @@ public class PlayerController : MonoBehaviour
     public float attackDamageDelay = 0.35f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
     public float skillDamageDelay = 0.5f;
+    [Header("攻击特效")]
+    [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
+    public GameObject attackVFXPrefab;
+    [Tooltip("武器挂点（留空则运行时按名字 coin sword 2 自动查找）")]
+    public Transform weaponPivot;
 
     [Header("地面检测")]
     public LayerMask groundLayer;
@@ -98,10 +103,13 @@ public class PlayerController : MonoBehaviour
     private bool wasGrounded = false;
 
     // ==================== 攻击相关 ====================
+    private static readonly string[] attackStateNames = { "Attack", "Attack2", "Attack3" };
     private float attackTimer = 0f;
     private bool isAttacking = false;
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
+    private int comboIndex = 0;
+    private int currentAttackStateHash = 0;
 
     // ==================== 技能相关 ====================
     private int skillDamage = 0;
@@ -170,6 +178,11 @@ public class PlayerController : MonoBehaviour
         animator = GetComponent<Animator>();
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
+
+        if (weaponPivot == null)
+        {
+            weaponPivot = FindDeepChild(transform, "coin sword 2");
+        }
 
         // 受击四角先设为透明（运行时总是重建，避免场景里残留的失效引用挡住红光）
         hitCornerImages = AutoCreateCornerImages();
@@ -413,7 +426,9 @@ public class PlayerController : MonoBehaviour
         if (isAttacking)
         {
             attackTimer += Time.deltaTime;
-            if (attackTimer >= attackDuration)
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+            bool animFinished = stateInfo.shortNameHash != currentAttackStateHash || stateInfo.normalizedTime >= 1f;
+            if (animFinished || attackTimer >= attackDuration)
             {
                 isAttacking = false;
                 attackTimer = 0f;
@@ -560,9 +575,76 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        animator.SetTrigger("Action");
+
+        SpawnAttackVFX();
+
+        string stateName = attackStateNames[comboIndex];
+        animator.ResetTrigger("Action");
+        animator.Play(stateName, 0, 0f);
+        currentAttackStateHash = Animator.StringToHash(stateName);
+        comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
         StartCoroutine(DelayedDamage());
+    }
+
+    void SpawnAttackVFX()
+    {
+        if (attackVFXPrefab == null || weaponPivot == null) return;
+
+        Vector3 spawnPos = GetWeaponTipPosition();
+        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up);
+
+        GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
+        vfx.transform.SetParent(weaponPivot, true);
+        Destroy(vfx, 1f);
+    }
+
+    // 用剑渲染网格包围盒，取离剑根(手柄)最远的角点当作刀尖
+    Vector3 GetWeaponTipPosition()
+    {
+        Renderer[] renderers = weaponPivot.GetComponentsInChildren<Renderer>(true);
+        bool has = false;
+        Vector3 center = weaponPivot.position;
+        Vector3 extents = Vector3.zero;
+
+        foreach (Renderer r in renderers)
+        {
+            if (r is ParticleSystemRenderer || r is TrailRenderer) continue;
+            if (!has)
+            {
+                center = r.bounds.center;
+                extents = r.bounds.extents;
+                has = true;
+            }
+            else
+            {
+                center = Vector3.Lerp(center, r.bounds.center, 0.5f);
+                extents = Vector3.Max(extents, r.bounds.extents);
+            }
+        }
+
+        if (!has) return weaponPivot.position;
+
+        Vector3 pivot = weaponPivot.position;
+        Vector3 tip = center;
+        float best = float.MinValue;
+        for (int x = -1; x <= 1; x += 2)
+        {
+            for (int y = -1; y <= 1; y += 2)
+            {
+                for (int z = -1; z <= 1; z += 2)
+                {
+                    Vector3 corner = center + new Vector3(extents.x * x, extents.y * y, extents.z * z);
+                    float d = (corner - pivot).sqrMagnitude;
+                    if (d > best)
+                    {
+                        best = d;
+                        tip = corner;
+                    }
+                }
+            }
+        }
+        return tip;
     }
 
     IEnumerator DelayedDamage()
@@ -1305,5 +1387,18 @@ public class PlayerController : MonoBehaviour
 
         Gizmos.color = Color.blue;
         Gizmos.DrawRay(transform.position + Vector3.up * 0.5f, Vector3.down * 10f);
+    }
+
+    Transform FindDeepChild(Transform parent, string childName)
+    {
+        if (parent == null) return null;
+        if (parent.name == childName) return parent;
+
+        foreach (Transform child in parent)
+        {
+            Transform result = FindDeepChild(child, childName);
+            if (result != null) return result;
+        }
+        return null;
     }
 }

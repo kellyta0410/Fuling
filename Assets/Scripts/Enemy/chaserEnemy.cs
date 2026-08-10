@@ -9,6 +9,12 @@ public class ChaserEnemy : EnemyAI
     [Tooltip("蓄力填充时长（秒），填满才命中")]
     public float telegraphDuration = 2.5f;
 
+    [Header("蛇形移动（头先转，身体后段跟随）")]
+    [Tooltip("关闭 NavMeshAgent 的自动旋转（否则整个身体瞬转抽搐），由蛇自己平滑转动头部引导方向")]
+    public bool serpentineMove = true;
+    [Tooltip("追击时头部最大转向速度（度/秒）。越小形态越呆、拖尾越明显")]
+    public float headTurnSpeed = 160f;
+
     private GameObject telegraph;
     private bool telegraphing = false;
     private float fillTimer = 0f;
@@ -24,6 +30,10 @@ public class ChaserEnemy : EnemyAI
             else
                 // Basic（直接攻击）：停在 2.5m（略多于攻击范围，不贴脸）
                 agent.stoppingDistance = 2.5f;
+
+            // 蛇式移动：旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
+            if (serpentineMove)
+                agent.updateRotation = false;
         }
         CreateTelegraph();
     }
@@ -102,9 +112,36 @@ public class ChaserEnemy : EnemyAI
                 }
             }
 
+            bool wasStopped = agent.isStopped;
             agent.isStopped = false;
             agent.SetDestination(target);
+
+            // 蛇式移动：头先平滑转向移动方向，身体后段由 SnakeBodyAnimation 延迟跟随。
+            // 用“步进方向”而非玩家方位，这样转弯时是头先拐、身体被拖着走。
+            if (serpentineMove)
+            {
+                Vector3 moveDir = agent.desiredVelocity;
+                moveDir.y = 0f;
+                if (moveDir.sqrMagnitude > 0.0001f)
+                    RotateHeadTowards(moveDir.normalized, Time.deltaTime);
+                else
+                    RotateHeadTowards(target - transform.position, Time.deltaTime);
+            }
+            else if (wasStopped)
+            {
+                agent.isStopped = true;
+            }
         }
+    }
+
+    // 限速转动头部（蛇身体不整体瞬转；超过最大转向速度时按速度截断）
+    private void RotateHeadTowards(Vector3 dir, float dt)
+    {
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        Quaternion target = Quaternion.LookRotation(dir.normalized);
+        float step = headTurnSpeed * Mathf.Max(dt, 0f);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, step);
     }
 
     private void RotateTowardPlayer()

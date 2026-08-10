@@ -456,26 +456,26 @@ public class SceneSelectionManager : MonoBehaviour
         }
 
         pendingUnlockCharacter = character;
-        ShowUnlockConfirmPanel(character);
+        //ShowUnlockConfirmPanel(character);
     }
 
     // ==================== 解锁确认面板 ====================
 
-    void ShowUnlockConfirmPanel(CharacterData character)
-    {
-        if (unlockConfirmPanel == null)
-        {
-            UnlockCharacterDirect(character);
-            return;
-        }
+    //void ShowUnlockConfirmPanel(CharacterData character)
+    //{
+        //if (unlockConfirmPanel == null)
+        //{
+            //UnlockCharacterDirect(character);
+            //return;
+        //}
 
-        if (unlockConfirmText != null)
-        {
-            unlockConfirmText.text = $"是否花费 {character.unlockCost} 金币解锁\n<color=#FFD700>{character.characterName}</color>？";
-        }
+        //if (unlockConfirmText != null)
+        //{
+            //unlockConfirmText.text = $"是否花费 {character.unlockCost} 金币解锁\n<color=#FFD700>{character.characterName}</color>？";
+        //}
 
-        unlockConfirmPanel.SetActive(true);
-    }
+        //unlockConfirmPanel.SetActive(true);
+    //}
 
     void ConfirmUnlock()
     {
