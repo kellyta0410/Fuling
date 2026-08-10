@@ -30,8 +30,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 2, y: 2, z: 2}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 6830997980291666104}
   m_Father: {fileID: 0}
@@ -115,7 +115,7 @@ NavMeshAgent:
   m_GameObject: {fileID: 2190662386543830987}
   m_Enabled: 1
   m_AgentTypeID: 0
-  m_Radius: 0.5
+  m_Radius: 0.9
   m_Speed: 3.5
   m_Acceleration: 8
   avoidancePriority: 50
@@ -147,8 +147,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1, y: 1.7520112, z: 1.6297274}
-  m_Center: {x: 0, y: 0.7958234, z: 0.00000011920929}
+  m_Size: {x: 1, y: 1.6298629, z: 3.7842922}
+  m_Center: {x: 0, y: 0.73474926, z: -0.027840614}
 --- !u!1001 &6432878621304518483
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -160,17 +160,17 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.2
+      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.2
+      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.2
+      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
@@ -180,7 +180,7 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.234
+      value: 0.38
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b2081d2db23880440858e5f6f5ae9b7f,
         type: 3}
@@ -284,14 +284,14 @@ MonoBehaviour:
   stiffFeather: 0.12
   stiffAtBigU: 1
   showGizmos: 1
-  attackMotion: 2
   attackDuration: 0.35
-  bodyRushDistance: 1.5
-  rearBodyEnd: 0.7
+  rearBodyEnd: 0.5
   rearRaiseAngle: 60
   headLungeRatio: 0.25
-  rearAtBigU: 0
+  rearAtBigU: 1
   rearFlipSign: 1
+  poiseRange: 3
+  poiseLiftTime: 0.3
   deathFallDuration: 0.7
   deathFallLift: 0.5
   fallDirection: -1

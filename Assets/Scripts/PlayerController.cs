@@ -54,7 +54,7 @@ public class PlayerController : MonoBehaviour
     public float hitRedDuration = 0.35f;
     [Tooltip("自动生成的受击红晕覆盖范围：小于它就全透明，越接近 1 红色范围越大（0~1）")]
     public float vignetteInnerRatio = 0.6f;
-    // Cinemachine 相机下的受击镜头晃动（ImpulseSource -> ImpulseListener）
+    // 受击镜头晃动（CinemachineImpulseSource，由相机 vcam 上的 ImpulseListener 接收）
     private CinemachineImpulseSource hitImpulse;
 
     // ==================== 摇杆 UI ====================
@@ -171,34 +171,13 @@ public class PlayerController : MonoBehaviour
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
-        // 受击四角先设为透明（数组里有失效引用就重建）
-        bool anyValid = false;
-        if (hitCornerImages != null)
-        {
-            for (int i = 0; i < hitCornerImages.Length; i++)
-                if (hitCornerImages[i] != null) { anyValid = true; break; }
-        }
-        if (!anyValid)
-            hitCornerImages = AutoCreateCornerImages();
+        // 受击四角先设为透明（运行时总是重建，避免场景里残留的失效引用挡住红光）
+        hitCornerImages = AutoCreateCornerImages();
 
-        // Cinemachine 相机：Brain 每帧覆写 transform，晃动要用 Impulse 才能生效
+        // 受击镜头晃动：相机被 CinemachineBrain 驱动（场景里有 vcam）时 transform 每帧被覆写，
+        // 所以要把 ImpulseListener 挂在 vcam 上，用冲量做晃动；纯 transform 摇作兜底
         hitCam = hitCam != null ? hitCam : Camera.main;
-        hitImpulse = GetComponent<CinemachineImpulseSource>();
-        if (hitCam != null && hitCam.GetComponent<CinemachineBrain>() != null)
-        {
-            if (hitCam.GetComponent<CinemachineImpulseListener>() == null)
-                hitCam.gameObject.AddComponent<CinemachineImpulseListener>();
-            if (hitImpulse == null)
-            {
-                hitImpulse = gameObject.AddComponent<CinemachineImpulseSource>();
-                CinemachineImpulseDefinition d = hitImpulse.m_ImpulseDefinition;
-                d.m_AmplitudeGain = 1f;
-                d.m_FrequencyGain = 2f;
-                d.m_TimeEnvelope.m_AttackTime = 0.02f;
-                d.m_TimeEnvelope.m_SustainTime = 0f;
-                d.m_TimeEnvelope.m_DecayTime = 0.18f;
-            }
-        }
+        SetupHitImpulse();
 
         if (hitCornerImages != null)
         {
@@ -868,14 +847,42 @@ public class PlayerController : MonoBehaviour
         hitCornerRtn = null;
     }
 
+    // 相机是 CinemachineBrain 驱动的：把 ImpulseListener 挂到场景 vcam 上，用冲量做受击晃动
+    void SetupHitImpulse()
+    {
+        if (hitCam == null) return;
+        if (hitCam.GetComponent<CinemachineBrain>() == null) return;
+
+        CinemachineVirtualCameraBase vcam = null;
+        CinemachineVirtualCameraBase[] all = FindObjectsOfType<CinemachineVirtualCameraBase>();
+        foreach (CinemachineVirtualCameraBase v in all)
+        {
+            if (v != null && v.isActiveAndEnabled) { vcam = v; break; }
+        }
+        if (vcam == null) return;
+
+        if (vcam.GetComponent<CinemachineImpulseListener>() == null)
+            vcam.gameObject.AddComponent<CinemachineImpulseListener>();
+
+        hitImpulse = GetComponent<CinemachineImpulseSource>();
+        if (hitImpulse == null)
+        {
+            hitImpulse = gameObject.AddComponent<CinemachineImpulseSource>();
+            CinemachineImpulseDefinition d = hitImpulse.m_ImpulseDefinition;
+            d.m_AmplitudeGain = 1f;
+            d.m_FrequencyGain = 2f;
+            d.m_TimeEnvelope.m_AttackTime = 0.02f;
+            d.m_TimeEnvelope.m_SustainTime = 0f;
+            d.m_TimeEnvelope.m_DecayTime = 0.18f;
+        }
+    }
+
     IEnumerator CameraShakeRoutine()
     {
         Camera cam = hitCam != null ? hitCam : Camera.main;
         if (cam == null) { shakeRtn = null; yield break; }
 
-        // 相机被 CinemachineBrain 驱动时直接改 transform 每帧都被覆写，
-        // 受击镜头晃动：无论相机是否被 Cinemachine 接管都跑 transform 晃动（没被接管时最直接），
-        // 同时若检测到 CinemachineBrain，再同步补发冲量，保证被 Brain 覆写时依然有晃动
+        // 两条并行：冲量（vcam 接管时生效）+ 纯 transform 晃动（没被接管时兜底）
         Vector3 basePos = cam.transform.localPosition;
         Quaternion baseRot = cam.transform.localRotation;
         float elapsed = 0f;

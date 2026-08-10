@@ -42,6 +42,7 @@ public abstract class EnemyAI : MonoBehaviour
             return agent != null && agent.velocity.sqrMagnitude > 0.01f;
         }
     }
+    public PlayerController Player { get { return player; } }
 
     [Header("攻击通用")]
     protected float attackCooldownTimer = 0f;
