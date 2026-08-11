@@ -14589,15 +14589,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHealth: 100
-  speed: 10
+  speed: 9
   attackDamage: 5
   attackRange: 4
   attackCooldown: 0
   gravity: 3.5
   smoothRotation: 10
   attackDuration: 0.5
-  attackDamageDelay: 0.7
-  skillDamageDelay: 0.6
+  attackDamageDelay: 0.3
+  skillDamageDelay: 0.5
   attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
     type: 3}
   weaponPivot: {fileID: 8674598679725498658}
@@ -14606,6 +14606,9 @@ MonoBehaviour:
     m_Bits: 8
   groundCheckDistance: 0.5
   deathDelay: 1.5
+  reviveInvincibleDuration: 3
+  reviveKnockbackRadius: 6
+  reviveKnockbackDistance: 5
   hitCam: {fileID: 0}
   hitCornerImages: []
   hitShakeStrength: 0.35
@@ -14733,6 +14736,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: Mei new Idle
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: d24a8a5d0faca7842b1233f5875dc907,
+        type: 3}
+      propertyPath: m_Avatar
+      value: 
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

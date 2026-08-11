@@ -36,6 +36,10 @@ public class InfiniteEnemySpawner : MonoBehaviour
     public float rebuildDelay = 1.5f;
     public bool autoRebuildOnTileGenerated = true;
 
+    [Header("玩家避让")]
+    [Tooltip("生成位置与玩家的最小水平距离；随机点落在玩家周围这段距离内会重试，避免生成在玩家身上/旁边引起推挤")]
+    public float playerClearRadius = 4f;
+
     [Header("敌人权重")]
     public List<EnemyWeight> enemyWeights = new List<EnemyWeight>();
 
@@ -184,17 +188,7 @@ public class InfiniteEnemySpawner : MonoBehaviour
             GameObject enemyPrefab = GetWeightedRandomEnemy();
             if (enemyPrefab == null) continue;
 
-            Vector3 spawnPos = GetRandomPositionAroundPoint(spawnData.point.position, spawnRadius);
-            spawnPos = GetValidNavMeshPosition(spawnPos, navMeshSampleRadius);
-            if (!IsPositionValid(spawnPos))
-            {
-                spawnPos = GetValidNavMeshPosition(spawnData.point.position, navMeshSampleRadius);
-                if (!IsPositionValid(spawnPos))
-                {
-                    if (showDebugLogs) Debug.LogWarning($"无法找到有效 NavMesh 位置，使用原始生成点 {spawnData.point.position}");
-                    spawnPos = spawnData.point.position;
-                }
-            }
+            Vector3 spawnPos = GetSpawnPositionAvoidingPlayer(spawnData.point.position, spawnRadius);
 
             GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.Euler(0, Random.Range(0, 360), 0));
             enemy.transform.parent = null;
@@ -579,6 +573,41 @@ public class InfiniteEnemySpawner : MonoBehaviour
         float angle = Random.Range(0f, Mathf.PI * 2f);
         float distance = Mathf.Sqrt(Random.Range(0f, 1f)) * radius;
         return new Vector3(center.x + Mathf.Cos(angle) * distance, center.y, center.z + Mathf.Sin(angle) * distance);
+    }
+
+    // 生成位置避开玩家：随机点必须落在 NavMesh 上，且与玩家保持至少 playerClearRadius 的水平距离，
+    // 否则重试（避免生成在玩家身上/周围把玩家推开）。全部失败则回退，并把太靠近玩家的点沿远离方向推到安全距离。
+    public Vector3 GetSpawnPositionAvoidingPlayer(Vector3 center, float radius)
+    {
+        for (int i = 0; i < maxSpawnAttempts; i++)
+        {
+            Vector3 candidate = GetRandomPositionAroundPoint(center, radius);
+            candidate = GetValidNavMeshPosition(candidate, navMeshSampleRadius);
+            if (!IsPositionValid(candidate)) continue;
+            if (IsTooCloseToPlayer(candidate)) continue;
+            return candidate;
+        }
+
+        Vector3 fallback = GetValidNavMeshPosition(center, navMeshSampleRadius);
+        if (IsTooCloseToPlayer(fallback) && playerTarget != null)
+        {
+            Vector3 dir = fallback - playerTarget.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.0001f)
+            {
+                fallback = playerTarget.position + dir.normalized * playerClearRadius;
+                fallback = GetValidNavMeshPosition(fallback, navMeshSampleRadius);
+            }
+        }
+        return fallback;
+    }
+
+    private bool IsTooCloseToPlayer(Vector3 pos)
+    {
+        if (playerTarget == null) return false;
+        Vector3 a = pos; a.y = 0f;
+        Vector3 b = playerTarget.position; b.y = 0f;
+        return Vector3.Distance(a, b) < playerClearRadius;
     }
 
     public Vector3 GetValidNavMeshPosition(Vector3 position, float sampleRadius)
