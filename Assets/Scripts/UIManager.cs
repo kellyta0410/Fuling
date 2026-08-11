@@ -41,6 +41,14 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI buffToastText;
     private Coroutine buffToastCoroutine;
 
+    [Header("GameOver 复活")]
+    [Tooltip("看广告复活面板（在场景里摆好，含两个按钮）")]
+    public GameObject revivePanel;
+    [Tooltip("「观看广告」按钮")]
+    public Button reviveButton;
+    [Tooltip("「结束游戏」按钮（进入 GameOver 结算）")]
+    public Button reviveEndButton;
+
     private Vector2 timerOriginalPosition;
     private float timeLimit;
 
@@ -409,7 +417,110 @@ public class UIManager : MonoBehaviour
     public void OnPlayerDamaged() => UpdateHealthUI();
     public void OnPlayerCoinChanged() => UpdateCoinUI();
     public void OnPlayerKillChanged() => UpdateKillUI();
-    public void OnPlayerDied() => ShowGameOver();
+
+    // ==================== 死亡 / 复活 ====================
+
+    /// <summary>
+    /// 玩家死亡后的入口：第一次死亡可看广告复活，否则直接进 GameOver 结算。
+    /// </summary>
+    public void HandlePlayerDied(PlayerController diedPlayer)
+    {
+        if (gameManager != null && gameManager.CanRevive())
+        {
+            ShowRevivePanel();
+        }
+        else
+        {
+            ShowGameOver();
+            if (gameManager != null)
+            {
+                gameManager.GameOver(false);
+            }
+        }
+    }
+
+    // ==================== 复活面板 ====================
+
+    public void ShowRevivePanel()
+    {
+        if (revivePanel == null) return;
+
+        revivePanel.SetActive(true);
+        Time.timeScale = 0f;
+
+        if (player != null)
+        {
+            player.SetJoystickEnabled(false);
+        }
+    }
+
+    public void HideRevivePanel()
+    {
+        if (revivePanel != null) revivePanel.SetActive(false);
+        Time.timeScale = 1f;
+
+        if (player != null)
+        {
+            player.SetJoystickEnabled(true);
+        }
+    }
+
+    /// <summary>「观看广告」按钮</summary>
+    public void OnReviveWatchAd()
+    {
+        RewardVideoAdService.ShowRewardedAd((watchedFull) =>
+        {
+            if (watchedFull)
+            {
+                DoRevive();
+            }
+            else
+            {
+                // 广告未看完/失败：不复活，直接结算
+                HandleReviveDecline();
+            }
+        });
+    }
+
+    /// <summary>「结束游戏」按钮（进入 GameOver 结算）</summary>
+    public void OnReviveEndGame()
+    {
+        HandleReviveDecline();
+    }
+
+    void DoRevive()
+    {
+        HideRevivePanel();
+
+        if (gameManager != null)
+        {
+            gameManager.MarkReviveUsed();
+        }
+
+        if (player != null)
+        {
+            player.ReviveInPlace();
+        }
+    }
+
+    void HandleReviveDecline()
+    {
+        HideRevivePanel();
+
+        ShowGameOver();
+        if (gameManager != null)
+        {
+            gameManager.GameOver(false);
+        }
+    }
+
+    /// <summary>复活完成后由 PlayerController 调用</summary>
+    public void OnPlayerRevived()
+    {
+        UpdateHealthUI();
+        UpdateCoinUI();
+        UpdateKillUI();
+    }
 
     // ==================== Buff 提示 ====================
 

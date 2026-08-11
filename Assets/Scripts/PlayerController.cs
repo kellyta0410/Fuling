@@ -44,6 +44,14 @@ public class PlayerController : MonoBehaviour
     [Header("死亡参数")]
     public float deathDelay = 1.5f;
 
+    [Header("复活参数")]
+    [Tooltip("看广告复活后短暂无敌时长（秒），避免原地被围殴")]
+    public float reviveInvincibleDuration = 3f;
+    [Tooltip("复活时推开周围敌人的范围（米）")]
+    public float reviveKnockbackRadius = 6f;
+    [Tooltip("复活时周围敌人被推开的距离（米）")]
+    public float reviveKnockbackDistance = 5f;
+
     [Header("受击反馈（镜头晃动 + 四角闪红）")]
     [Tooltip("受击时晃动的相机（留空自动用 Camera.main）")]
     public Camera hitCam;
@@ -90,6 +98,7 @@ public class PlayerController : MonoBehaviour
     private int kills = 0;
     private bool isDead = false;
     private bool isDying = false;
+    private bool isInvincible = false;
 
     // ==================== 移动相关 ====================
     private Vector3 velocity = Vector3.zero;
@@ -885,7 +894,7 @@ public class PlayerController : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
-        if (isDead || isDying) return;
+        if (isDead || isDying || isInvincible) return;
 
         PlayHitFeedback();
         StartCoroutine(SmoothDamage(damage));
@@ -1179,15 +1188,18 @@ public class PlayerController : MonoBehaviour
 
         if (controller != null) controller.enabled = false;
 
+        // 交给 UIManager 决定：第一次死亡弹复活面板，其余直接结算
         if (uiManager != null)
         {
-            uiManager.OnPlayerDied();
+            uiManager.HandlePlayerDied(this);
         }
-
-        GameManager gm = GameManager.Instance;
-        if (gm != null)
+        else
         {
-            gm.GameOver(false);
+            GameManager gm = GameManager.Instance;
+            if (gm != null)
+            {
+                gm.GameOver(false);
+            }
         }
     }
 
@@ -1372,6 +1384,68 @@ public class PlayerController : MonoBehaviour
         {
             if (col != null && !col.isTrigger) col.enabled = true;
         }
+    }
+
+    // ==================== 看广告原地复活 ====================
+
+    /// <summary>
+    /// 原地复活：满血、恢复控制、推开周围敌人、短暂无敌。
+    /// 金币/击杀/计时等全部保留（由调用方保证未进入 GameOver 结算）。
+    /// </summary>
+    public void ReviveInPlace()
+    {
+        if (!isDead) return;
+
+        isDead = false;
+        isDying = false;
+        isInvincible = true;
+        currentHealth = maxHealth;
+        velocity = Vector3.zero;
+
+        if (controller != null) controller.enabled = true;
+
+        Collider[] colliders = GetComponents<Collider>();
+        foreach (Collider col in colliders)
+        {
+            if (col != null && !col.isTrigger) col.enabled = true;
+        }
+
+        // 动画复位：从死亡状态回到正常移动
+        if (animator != null)
+        {
+            animator.ResetTrigger("Die");
+            animator.SetBool("IsMoving", false);
+            animator.SetBool("IsAttacking", false);
+            animator.Play("Idle", 0, 0f);
+        }
+
+        // 推开周围敌人，给复活留出安全空间
+        Vector3 playerPos = transform.position;
+        foreach (var enemy in FindObjectsOfType<EnemyAI>())
+        {
+            if (enemy == null || enemy.isDead) continue;
+            Vector3 toEnemy = enemy.transform.position - playerPos;
+            toEnemy.y = 0f;
+            if (toEnemy.sqrMagnitude > reviveKnockbackRadius * reviveKnockbackRadius) continue;
+            if (toEnemy.sqrMagnitude < 0.0001f) toEnemy = Vector3.forward;
+            enemy.AddKnockback(toEnemy.normalized, reviveKnockbackDistance);
+        }
+
+        if (uiManager != null)
+        {
+            uiManager.OnPlayerRevived();
+        }
+
+        // 无敌计时
+        StartCoroutine(ReviveInvincibleRoutine(reviveInvincibleDuration));
+
+        Debug.Log("⚡ 玩家原地复活（满血 + 短暂无敌 + 推开敌人）");
+    }
+
+    IEnumerator ReviveInvincibleRoutine(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        isInvincible = false;
     }
 
     void OnDrawGizmosSelected()
