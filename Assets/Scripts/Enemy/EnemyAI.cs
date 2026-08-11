@@ -107,6 +107,9 @@ public abstract class EnemyAI : MonoBehaviour
     private Vector3 separationVelocity = Vector3.zero;
     private Collider myCollider;
     private int enemyLayerMask;
+    protected Collider cachedPlayerCollider;
+    // 被击退硬直结束后强制先走回 agent 停止距离，再进入攻击态（避免击退后原地站定攻击）
+    protected bool forceReturnToRange = false;
 
     // 缩放倍率
     protected float currentSpeedMultiplier = 1f;
@@ -281,6 +284,22 @@ public abstract class EnemyAI : MonoBehaviour
         // （子类可重写 TryPerformInRangeAttack 接管该行为，如蓄力/咏唱）
         if (distance <= attackRange)
         {
+            // 被击退硬直结束后的回位：即使已在攻击激活范围内，也先走回 agent 停止距离再攻，
+            // 否则被推远一点后敌人会原地站定攻击、不再贴回玩家。
+            if (forceReturnToRange)
+            {
+                float stopping = isAgentValid && agent != null ? agent.stoppingDistance : 0f;
+                if (distance > stopping)
+                {
+                    isChasing = true;
+                    HandleMovement();
+                    ApplyApproachBrake();
+                    UpdateAnimations(GetCurrentSpeed(), true);
+                    return;
+                }
+                forceReturnToRange = false;
+            }
+
             if (TryPerformInRangeAttack())
                 return;
             UpdateAnimations(0f, false);
@@ -529,6 +548,9 @@ Vector3 center = player.transform.position;
             // 后排推前排时，前排的"指向玩家的分量"会被剔除，只保留横向/向外扩散，
             // 避免敌人被顶到玩家身上、物理解算把玩家一起推挤（玩家是 CharacterController，会被挤走）。
             FilterSeparationTowardPlayer();
+            // 封死边缘情况：横向/切向位移也不得把敌人的碰撞体扫进玩家体积（否则橡皮式擦碰仍会推玩家，
+            // 甚至把玩家顶到贴墙的 X-Ray 墙里）。以敌人包围球沿移动方向球扫玩家，命中则把位移缩到其表面外。
+            ClampSeparationToPlayer();
 
             if (useDirectChase)
             {
@@ -559,6 +581,42 @@ Vector3 center = player.transform.position;
         float inward = Vector3.Dot(separationVelocity, toPlayer);
         if (inward > 0f)
             separationVelocity -= toPlayer * inward;
+    }
+
+    // 分离期间避免敌人碰撞体扫入玩家体积：沿本帧位移方向，用敌人包围球向玩家球扫，
+    // 若一路会撞进玩家再把位移缩到恰好停在玩家表面外（留小缓冲）。
+    // 解决：玩家被横移的蛇身/敌人擦到后，物理解算把玩家顶进贴墙的 X-Ray 墙里推出墙外。
+    private void ClampSeparationToPlayer()
+    {
+        if (player == null || separationVelocity.sqrMagnitude < 1e-6f) return;
+        if (myCollider == null) return;
+
+        Collider pc = cachedPlayerCollider;
+        if (pc == null)
+        {
+            cachedPlayerCollider = player.GetComponentInChildren<Collider>();
+            pc = cachedPlayerCollider;
+        }
+        if (pc == null) return;
+
+        float moveLen = separationVelocity.magnitude * Time.deltaTime;
+        if (moveLen <= 0f) return;
+        Vector3 moveDir = separationVelocity.normalized;
+
+        // 敌人碰撞体近似成包围球（蛇长盒也能包住），从中心向前球扫
+        Vector3 from = myCollider.bounds.center;
+        float castR = Mathf.Max(myCollider.bounds.extents.magnitude, 0.2f);
+
+        if (Physics.SphereCast(from, castR, moveDir, out RaycastHit hit,
+                moveLen + castR + 0.1f, 1 << pc.gameObject.layer))
+        {
+            float allow = Mathf.Max(hit.distance - castR, 0f);  // 表面距离玩家还有多远可走
+            if (allow < moveLen)
+            {
+                float scale = Mathf.Clamp01(Mathf.Max(allow - 0.05f, 0f) / moveLen);
+                separationVelocity *= scale;
+            }
+        }
     }
 
     // ---------- 子类需要重写的方法 ----------
@@ -882,6 +940,9 @@ Vector3 center = player.transform.position;
         // 硬直结束：恢复移动状态，避免停在原地不再追击
         // （击退可能把 agent 推到 NavMesh 外或使其 isStopped，这里统一复位）
         if (isDead) yield break;
+        // 被击退后强制先走回 agent 停止距离再攻击，防击退后仍在攻击范围内就原地站定
+        isChasing = true;
+        forceReturnToRange = true;
         ResumeChaseAfterStagger();
     }
 

@@ -39,6 +39,9 @@ public class GameManager : MonoBehaviour
     private bool isGameOver = false;
     private bool hasProcessedGameOver = false;
 
+    // ⭐ 复活：每局只允许「第一次死亡」看广告复活一次，之后死亡直接结算
+    private bool reviveUsedThisRun = false;
+
     public System.Action<float, float> OnTimerUpdated;
     public System.Action<bool> OnTimerVisibilityChanged;
     public System.Action OnGameOver;
@@ -116,6 +119,7 @@ public class GameManager : MonoBehaviour
         isGameRunning = true;
         isGameOver = false;
         hasProcessedGameOver = false;
+        reviveUsedThisRun = false;
         scalingLevel = 0;
         scalingTimer = 0f;
         gameStartTime = Time.time;
@@ -463,11 +467,26 @@ public class GameManager : MonoBehaviour
     public bool IsGameRunning() => isGameRunning && !isGameOver;
     public bool IsGameOver() => isGameOver;
 
+    // ==================== 复活 ====================
+
+    /// <summary>本局是否还可以看广告复活（只在第一次死亡时提供）</summary>
+    public bool CanRevive()
+    {
+        return !isGameOver && !hasProcessedGameOver && !reviveUsedThisRun;
+    }
+
+    /// <summary>标记本局复活已用掉（后续死亡直接结算）</summary>
+    public void MarkReviveUsed()
+    {
+        reviveUsedThisRun = true;
+    }
+
     public void ResetGameState()
     {
         isGameRunning = false;
         isGameOver = false;
         hasProcessedGameOver = false;
+        reviveUsedThisRun = false;
         scalingLevel = 0;
         scalingTimer = 0f;
         gameStartTime = 0f;

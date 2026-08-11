@@ -293,6 +293,36 @@ public class SnakeBodyAnimation : MonoBehaviour
                     GetWorldYaw(fwdWorld), GetWorldYaw(toPlayer)), -headAimMax, headAimMax);
         }
 
+        // 攻击"头部带动身体"：不再逐顶点平移蛇头（会拉长）。改成把整个仰起段绕基部铰点
+        // 整体旋转前扑（杠杆式）：各顶点相对位置不变 → 头不拉长；头端离铰点最远、前扑位移
+        // 最大 → 头部带动身体，尾部锚定不动。
+        float lungeSweep = 0f;
+        Vector3 lungeHinge = archPts[0];
+        if (lunge > 0f && rearLift > 0.01f)
+        {
+            Vector3 headDirH = Quaternion.AngleAxis(aimYaw, uVec) * (rearAtBigU ? tPivot : -tPivot);
+            headDirH[upAxis] = 0f;
+            if (headDirH.sqrMagnitude < 1e-5f) headDirH = rearAtBigU ? tPivot : -tPivot;
+            else headDirH.Normalize();
+
+            // 目标前扑量 → 绕侧轴的扫掠角：头端到铰点≈弧长 rearBodyEnd·bodyLen，
+            // 弧长×角 ≈ 前扑距离 → ang(rad) = headLungeRatio / rearBodyEnd
+            float sweepAng = Mathf.Clamp(headLungeRatio / Mathf.Max(rearBodyEnd, 0.01f), 0f, 1.2f) * Mathf.Rad2Deg;
+
+            // 试探符号：头端绕 liftAxis 正/负旋转哪个让"朝 headDirH"的分量更大（顺玩家方向前扑）
+            Vector3 tip = archPts[ArchSamples] - archPts[0];
+            float baseAlong = Vector3.Dot(tip, headDirH);
+            if (baseAlong > 1e-5f)
+            {
+                float plusAlong = Vector3.Dot(Quaternion.AngleAxis(sweepAng, liftAxis) * tip, headDirH);
+                float minusAlong = Vector3.Dot(Quaternion.AngleAxis(-sweepAng, liftAxis) * tip, headDirH);
+                if (Mathf.Abs(minusAlong - baseAlong) > Mathf.Abs(plusAlong - baseAlong))
+                    sweepAng = -sweepAng;
+            }
+
+            lungeSweep = sweepAng * lunge;
+        }
+
         for (int i = 0; i < baseVertices.Length; i++)
         {
             Vector3 v = baseVertices[i];
@@ -392,19 +422,11 @@ public class SnakeBodyAnimation : MonoBehaviour
                 }
             }
 
-            // 5) 攻击：蛇头沿水平方向朝玩家快速突刺，前段身体紧跟其后（尾/后半身锚定不动）。
-            //    falloff 从"头端最大、根部为零"：根部是支撑点不动，越靠近蛇头扑得越远，
-            //    这样是蛇头先接近玩家，而不是整条身体平移撞人。
-            if (lunge > 0f && inRear)
+            // 5) 攻击：头部带动身体前扑——整个仰起段绕基部铰点刚性旋转（内部不变形，头不拉长），
+            //    头端离铰点最远→前扑最远（头部带动身体），尾段锚定不动。
+            if (lungeSweep != 0f && inRear)
             {
-                float part = rearAtBigU ? (u - rearBaseU) / Mathf.Max(rearBodyEnd, 0.001f)
-                                        : (rearBaseU - u) / Mathf.Max(rearBodyEnd, 0.001f);
-                float falloff = Mathf.Pow(Mathf.Clamp01(part), 2f);
-                Vector3 headDir = Quaternion.AngleAxis(aimYaw, uVec) * (rearAtBigU ? tDir : -tDir);
-                headDir[upAxis] = 0f;                       // 只水平扑向玩家，不朝上
-                if (headDir.sqrMagnitude < 1e-5f) headDir = rearAtBigU ? lVec : -lVec;
-                else headDir.Normalize();
-                point += headDir * (bodyLen * headLungeRatio) * lunge * falloff;
+                point = lungeHinge + Quaternion.AngleAxis(lungeSweep, liftAxis) * (point - lungeHinge);
             }
 
             tempVerts[i] = point;
