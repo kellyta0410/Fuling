@@ -185,7 +185,8 @@ public abstract class EnemyAI : MonoBehaviour
             {
                 agent.speed = baseSpeed;
                 // 两个模式都设置 stoppingDistance：否则无限模式默认 0，敌人会走到玩家脚底贴脸才停
-                agent.stoppingDistance = enemyData.attackRange * 0.8f;
+                // 取"攻击范围×0.5"且不小于 1m：让敌人更靠近玩家再停，避免离玩家太远就停下
+                agent.stoppingDistance = Mathf.Max(1f, enemyData.attackRange * 0.5f);
                 agent.autoBraking = true;
                 agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
                 agent.avoidancePriority = Random.Range(0, 100);
@@ -217,6 +218,9 @@ public abstract class EnemyAI : MonoBehaviour
     }
 
     protected virtual void OnStart() { }
+
+    /// <summary>被击退时调用（子类可重写清理自己的状态，如蓄力/索敌）</summary>
+    protected virtual void OnKnockback() { }
 
     protected virtual void Update()
     {
@@ -635,7 +639,7 @@ Vector3 center = player.transform.position;
 
     // 有效攻击触发距离：取"攻击范围"与"agent 停距"较大者，
     // 否则像 Basic(stop 2.5 > attackRange 2) 会停在攻击范围外而永远不攻。
-    protected float GetAttackActivationRange()
+    protected virtual float GetAttackActivationRange()
     {
         float attack = enemyData != null ? enemyData.attackRange : 1.5f;
         float stopping = isAgentValid && agent != null ? agent.stoppingDistance : 0f;
@@ -792,6 +796,17 @@ Vector3 center = player.transform.position;
         if (isDead) return;
         if (knockRoutine != null) StopCoroutine(knockRoutine);
 
+        // 被击退立即中断当前攻击，避免攻击/蓄力状态残留导致击退后卡住
+        if (attackCoroutine != null)
+        {
+            StopCoroutine(attackCoroutine);
+            attackCoroutine = null;
+        }
+        isAttacking = false;
+        attackTimer = 0f;
+        if (animator != null) animator.SetBool("IsAttacking", false);
+        OnKnockback();
+
         // 击退方向：始终以"远离玩家"为主（保证玩家能追踪到、打得到），
         // 只轻微掺少量"敌人自身后方"的朝向成分避免侧移太违和。
         // 不能只靠敌人自身朝向——蛇蓄力时转向，其"后方"有时会对着玩家，导致击退方向反了玩家打不到。
@@ -842,6 +857,43 @@ Vector3 center = player.transform.position;
         isStaggering = true;
         yield return new WaitForSeconds(staggerDuration);
         isStaggering = false;
+
+        // 硬直结束：恢复移动状态，避免停在原地不再追击
+        // （击退可能把 agent 推到 NavMesh 外或使其 isStopped，这里统一复位）
+        if (isDead) yield break;
+        ResumeChaseAfterStagger();
+    }
+
+    // 击退硬直结束后的恢复：重新进入追击（若玩家仍在检测范围内），
+    // 并复位 agent 的停止/寻路状态，确保不会因击退、停止移动或状态切换而卡住。
+    protected virtual void ResumeChaseAfterStagger()
+    {
+        if (player == null || player.IsDead()) return;
+
+        float dist = Vector3.Distance(transform.position, player.transform.position);
+        float detection, lose;
+        if (useDirectChase)
+        {
+            detection = infiniteDetectionRange;
+            lose = infiniteLoseTargetRange;
+        }
+        else
+        {
+            detection = detectionRange;
+            lose = loseTargetRange;
+        }
+
+        if (dist <= detection)
+            isChasing = true;
+        else if (dist > lose)
+            isChasing = false;
+
+        if (isAgentValid && agent != null && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
+            agent.ResetPath();
+            agent.SetDestination(player.transform.position);
+        }
     }
 
     protected virtual IEnumerator SmoothDamage(int damage)

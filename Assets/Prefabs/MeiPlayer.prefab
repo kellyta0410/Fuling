@@ -14575,7 +14575,7 @@ CharacterController:
   m_StepOffset: 0
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 2, z: 0}
+  m_Center: {x: 0, y: 2.03, z: 0}
 --- !u!114 &5666960912331255701
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14589,22 +14589,30 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHealth: 100
-  speed: 5
-  attackDamage: 20
-  attackRange: 2
-  attackCooldown: 1
+  speed: 10
+  attackDamage: 5
+  attackRange: 4
+  attackCooldown: 0
   gravity: 3.5
   smoothRotation: 10
   attackDuration: 0.5
-  attackDamageDelay: 0.3
-  skillDamageDelay: 0.5
-  attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083, type: 3}
+  attackDamageDelay: 0.7
+  skillDamageDelay: 0.6
+  attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
+    type: 3}
   weaponPivot: {fileID: 8674598679725498658}
   groundLayer:
     serializedVersion: 2
     m_Bits: 8
   groundCheckDistance: 0.5
   deathDelay: 1.5
+  hitCam: {fileID: 0}
+  hitCornerImages: []
+  hitShakeStrength: 0.35
+  hitShakeDuration: 0.25
+  hitRedAlpha: 0.2
+  hitRedDuration: 0.4
+  vignetteInnerRatio: 0.8
   joystickBg: {fileID: 0}
   joystickHandle: {fileID: 0}
   joystickRadius: 150
@@ -14614,8 +14622,9 @@ MonoBehaviour:
   enemyKnockbackDistance: 2
   dodgeButton: {fileID: 0}
   dodgeCooldown: 5
-  dodgeDistance: 4
-  dodgeDuration: 0.35
+  dodgeDistance: 12
+  dodgeDuration: 0.2
+  skillDuration: 0.8
 --- !u!95 &920520777187579428
 Animator:
   serializedVersion: 5

@@ -85,6 +85,10 @@ MonoBehaviour:
   ownerTile: {fileID: 0}
   enableTelegraph: 1
   telegraphDuration: 2.5
+  serpentineMove: 1
+  headTurnSpeed: 160
+  headHitRadius: 0.5
+  enableHeadHitbox: 1
 --- !u!95 &8400769819179368277
 Animator:
   serializedVersion: 5
@@ -274,8 +278,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f3a9c2e1b4d5f6a8b9c0d1e2f3a4b5c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  segmentCount: 10
-  slitherAmplitude: 0.12
+  segmentCount: 15
+  slitherAmplitude: 0.05
   slitherWaves: 2
   slitherSpeed: 3
   tailGain: 1.4
@@ -283,19 +287,22 @@ MonoBehaviour:
   stiffFront: 0.15
   stiffFeather: 0.12
   stiffAtBigU: 1
+  turnLag: 1
+  turnNeck: 0.25
+  followBendAmt: 0.45
   showGizmos: 1
   attackDuration: 0.35
   rearBodyEnd: 0.5
   rearRaiseAngle: 60
-  headLungeRatio: 0.25
+  headLungeRatio: 0.35
   rearAtBigU: 1
   rearFlipSign: 1
   poiseRange: 3
   poiseLiftTime: 0.3
+  headAimMax: 30
+  headAimPortion: 0.12
   coilTurns: 1
   coilTime: 0.8
-  turnLag: 1
-  turnNeck: 0.25
   deathFallDuration: 0.7
   deathFallLift: 0.5
   fallDirection: -1

@@ -5,7 +5,7 @@ public class Coin : MonoBehaviour
     [Header("金币设置")]
     public int coinValue = 5;
     public float autoCollectRadius = 3f;
-    public float autoCollectSpeed = 5f;
+    public float autoCollectSpeed = 10f;
     public float lifeTime = 10f; // 自动吸附延迟
 
     private PlayerController player;
@@ -19,6 +19,9 @@ public class Coin : MonoBehaviour
 
         // 设置标签
         gameObject.tag = "Coin";
+
+        // 金币生成后立即飞向玩家，不停留等待（掉落即飞）
+        isCollecting = true;
     }
 
     void Update()
@@ -26,28 +29,6 @@ public class Coin : MonoBehaviour
         if (player == null) return;
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
-
-        // 如果距离小于自动吸附范围，开始吸附
-        if (distance <= autoCollectRadius)
-        {
-            isCollecting = true;
-        }
-        else
-        {
-            // 如果玩家距离较远，减少计时器
-            timer -= Time.deltaTime;
-            if (timer <= 0)
-            {
-                // 时间到，自动吸附
-                isCollecting = true;
-            }
-        }
-
-        // 如果玩家在范围内，重置计时器
-        if (distance <= autoCollectRadius)
-        {
-            timer = lifeTime;
-        }
 
         // 吸附到玩家
         if (isCollecting)
@@ -76,7 +57,6 @@ public class Coin : MonoBehaviour
         if (player != null)
         {
             player.AddCoin(coinValue);
-            Debug.Log($"💰 收集 {coinValue} 金币");
         }
         Destroy(gameObject);
     }

@@ -1462,7 +1462,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 50.19, y: 12, z: 9.5}
+  m_LocalPosition: {x: 50.19, y: 11.973, z: 9.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -12654,7 +12654,7 @@ Transform:
   m_GameObject: {fileID: 2088829779648433623}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 50.19, y: 12, z: 9.5}
+  m_LocalPosition: {x: 50.19, y: 11.973, z: 9.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -12865,26 +12865,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 49167521812554384, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: looping
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 49167521812554384, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: lengthInSec
-      value: 5
-      objectReference: {fileID: 0}
-    - target: {fileID: 49167521812554384, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: EmissionModule.rateOverTime.scalar
-      value: 20
-      objectReference: {fileID: 0}
-    - target: {fileID: 49167521812554384, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: InitialModule.startLifetime.scalar
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: hitCam
@@ -12902,11 +12882,6 @@ PrefabInstance:
       objectReference: {fileID: 3162115908678090512}
     - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
-      propertyPath: hitRedAlpha
-      value: 0.2
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
       propertyPath: skillButton
       value: 
       objectReference: {fileID: 1512711094036257779}
@@ -12917,48 +12892,13 @@ PrefabInstance:
       objectReference: {fileID: 4468994384464837634}
     - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
-      propertyPath: dodgeDistance
-      value: 12
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: dodgeDuration
-      value: 0.2
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: hitRedDuration
-      value: 0.4
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
       propertyPath: joystickHandle
       value: 
       objectReference: {fileID: 6479886318240088414}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: skillDamageDelay
-      value: 0.6
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: attackDamageDelay
-      value: 0.7
-      objectReference: {fileID: 0}
-    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: vignetteInnerRatio
-      value: 0.8
-      objectReference: {fileID: 0}
     - target: {fileID: 6337212771832704822, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: m_Name
       value: MeiPlayer
-      objectReference: {fileID: 0}
-    - target: {fileID: 6396335570215502987, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
-        type: 3}
-      propertyPath: InitialModule.startLifetime.scalar
-      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
@@ -12968,7 +12908,7 @@ PrefabInstance:
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.027
       objectReference: {fileID: 0}
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}

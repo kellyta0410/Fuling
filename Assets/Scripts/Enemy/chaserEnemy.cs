@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 using UnityEngine.AI;
 
 public class ChaserEnemy : EnemyAI
@@ -15,7 +16,12 @@ public class ChaserEnemy : EnemyAI
     [Tooltip("追击时头部最大转向速度（度/秒）。越小形态越呆、拖尾越明显")]
     public float headTurnSpeed = 160f;
 
-    private GameObject telegraph;
+    [Header("蛇头攻击判定（以蛇头为攻击点）")]
+    [Tooltip("蛇头攻击判定球半径（世界单位）。攻击动画期间跟随蛇头变形位置，只有蛇头碰到玩家才造成伤害")]
+    public float headHitRadius = 0.5f;
+    [Tooltip("蛇头判定球只在攻击动画期间启用（true），结束后关闭避免身体误伤")]
+    public bool enableHeadHitbox = true;
+
     private bool telegraphing = false;
     private float fillTimer = 0f;
 
@@ -23,29 +29,47 @@ public class ChaserEnemy : EnemyAI
     // 蛇身动画挂在子物体上，用 GetComponentInChildren 查找）
     private bool IsSerpentine => serpentineMove && GetComponentInChildren<SnakeBodyAnimation>(true) != null;
 
+    private SnakeBodyAnimation snakeBody;
+    private GameObject headHitbox;
+    private SnakeHeadHitbox headHitboxScript;
+    private bool wasAttacking;   // 攻击上升沿检测（启用判定球/重置命中标志）
+
     protected override void OnStart()
     {
         base.OnStart();
         if (isAgentValid && agent != null)
         {
-            if (enableTelegraph)
-                // Snake（蓄力命中）：贴近到 2m 内再蓄力
-                agent.stoppingDistance = Mathf.Min(1.8f, (enemyData != null ? enemyData.attackRange * 0.8f : 1.8f));
-            else
-                // Basic（直接攻击）：停在 2.5m（略多于攻击范围，不贴脸）
-                agent.stoppingDistance = 2.5f;
-
-            // 蛇式移动：旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
             if (IsSerpentine)
+            {
+                // 蛇（眼镜蛇式）：身体停远些，攻击靠蛇头突刺命中。
+                // 蛇头在根前方约半个身长，突刺+判定球还能再够 ~1.9m，
+                // 根停约 0.9×攻击范围时蛇头(前伸+突刺)恰好够到玩家。
+                agent.stoppingDistance = (enemyData != null ? enemyData.attackRange * 0.9f : 3.6f);
+                // 旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
                 agent.updateRotation = false;
+            }
+            else if (enableTelegraph)
+                // Snake（蓄力命中）：贴近到约 1.5m 内再蓄力
+                agent.stoppingDistance = Mathf.Min(1.5f, (enemyData != null ? enemyData.attackRange * 0.7f : 1.5f));
+            else
+                // Basic（直接攻击）：停到 1.5m 再出拳，更贴近玩家
+                agent.stoppingDistance = 1.5f;
         }
-        CreateTelegraph();
+        CreateHeadHitbox();
+    }
+
+    // 被击退后立即打断蓄力（红条归零、重新索敌），避免击退结束时仍处于蓄力态而卡住
+    protected override void OnKnockback()
+    {
+        base.OnKnockback();
+        telegraphing = false;
+        fillTimer = 0f;
     }
 
     protected override void Update()
     {
         base.Update();
-        if (!telegraphing) HideTelegraph();
+        UpdateHeadHitbox();
     }
 
     // 进入攻击范围时由 EnemyAI.Update 调用（每帧）。接管蛇的蓄力-命中逻辑。
@@ -63,12 +87,10 @@ public class ChaserEnemy : EnemyAI
         {
             fillTimer += Time.deltaTime;
             float progress = Mathf.Clamp01(fillTimer / telegraphDuration);
-            ShowTelegraph(transform.position, player.transform.position, progress);
 
             if (progress >= 1f)
             {
                 telegraphing = false;
-                HideTelegraph();
                 if (canAttack && !isAttacking)
                     PerformAttack();
             }
@@ -154,50 +176,85 @@ public class ChaserEnemy : EnemyAI
         RotateHeadTowards(dir, Time.deltaTime);
     }
 
-    private void CreateTelegraph()
+    // 生成蛇头攻击判定球（只对蛇生效）。攻击动画期间启用并跟随蛇头世界位置。
+    private void CreateHeadHitbox()
     {
-        telegraph = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        telegraph.name = "SnakeAttackTelegraph";
-        Material mat = new Material(Shader.Find("Custom/XRayWall"));
-        if (mat != null)
+        if (!IsSerpentine || !enableHeadHitbox) return;
+
+        snakeBody = GetComponentInChildren<SnakeBodyAnimation>(true);
+        headHitbox = new GameObject("SnakeHeadHitbox");
+        headHitbox.transform.SetParent(transform, false);
+
+        SphereCollider sc = headHitbox.AddComponent<SphereCollider>();
+        sc.isTrigger = true;
+        sc.radius = Mathf.Max(0.1f, headHitRadius);
+
+        // 触发球需要刚体才能与玩家触发；kinematic 避免被物理推动
+        Rigidbody rb = headHitbox.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.useGravity = false;
+
+        headHitboxScript = headHitbox.AddComponent<SnakeHeadHitbox>();
+        headHitboxScript.SetOwner(this);
+        headHitbox.SetActive(false);
+    }
+
+    // 攻击动画期间：把判定球贴到蛇头变形后的世界位置并启用；攻击结束关闭（身体/尾巴无判定）
+    private void UpdateHeadHitbox()
+    {
+        if (headHitbox == null) return;
+
+        bool attacking = isAttacking && !isDead;
+        if (attacking)
         {
-            mat.SetColor("_Color", new Color(1f, 0.15f, 0.1f, 1f));
-            mat.SetFloat("_Transparency", 0.5f);
-            telegraph.GetComponent<Renderer>().sharedMaterial = mat;
+            if (!wasAttacking && headHitboxScript != null)
+                headHitboxScript.BeginAttack();     // 攻击上升沿：重置本轮命中
+            headHitbox.SetActive(true);
+            if (snakeBody != null)
+                headHitbox.transform.position = snakeBody.HeadWorldPosition;
         }
-        telegraph.SetActive(false);
+        else
+        {
+            headHitbox.SetActive(false);
+        }
+        wasAttacking = attacking;
     }
 
-    // progress: 0→1, 红条长度 = 蛇到玩家距离 × progress（从蛇往玩家填满）
-    private void ShowTelegraph(Vector3 from, Vector3 to, float progress)
+    // 由 SnakeHeadHitbox 回调：蛇头碰到玩家时才造成伤害；返回是否已造成伤害
+    public bool TryDealHeadDamage(PlayerController target)
     {
-        if (telegraph == null) return;
-
-        Vector3 a = from; a.y = 0f;
-        Vector3 b = to; b.y = 0f;
-        Vector3 delta = b - a;
-        float fullLength = delta.magnitude;
-        if (fullLength < 0.1f) { HideTelegraph(); return; }
-
-        Vector3 dir = delta / fullLength;
-        float length = Mathf.Max(0.1f, fullLength * Mathf.Clamp01(progress));
-        telegraph.SetActive(true);
-        telegraph.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
-        telegraph.transform.localScale = new Vector3(0.8f, 0.02f, length);
-        telegraph.transform.position = a + dir * (length * 0.5f);
-        Vector3 p = telegraph.transform.position;
-        p.y = 0.02f;
-        telegraph.transform.position = p;
+        if (isDead || target == null || target.IsDead()) return false;
+        float finalDamage = baseAttackDamage * currentDamageMultiplier;
+        target.TakeDamage(Mathf.RoundToInt(finalDamage));
+        return true;
     }
 
-    private void HideTelegraph()
+    // 蛇的伤害判定交给蛇头判定球，不再使用“身体中心到玩家距离”的通用判定，避免身体误伤
+    protected override IEnumerator DelayedDamage()
     {
-        if (telegraph != null) telegraph.SetActive(false);
+        if (IsSerpentine) yield break;
+        yield return base.DelayedDamage();
+    }
+
+    // 攻击触发距离以蛇头为基准：蛇头在身体前端（约身长一半的前方）。
+    // 基类用根(agent)到玩家的距离判断，对长身体的蛇来说根停 4m 时蛇头已在 2m 外、够不着；
+    // 改成把触发距离减去蛇头前伸量，让根停得足够近、蛇头(前伸+突刺)恰好够到玩家，
+    // 同时不低于 stoppingDistance，避免永远停不到攻击位置。
+    protected override float GetAttackActivationRange()
+    {
+        if (!IsSerpentine || snakeBody == null) return base.GetAttackActivationRange();
+
+        float baseRange = base.GetAttackActivationRange();
+        float headOffset = snakeBody.HeadForwardOffset;     // 蛇头在根前方多远（世界单位）
+        // 蛇头已经把"根到玩家"的有效距离前伸了半个身长，触发距离相应收紧半个身长，
+        // 但至少不小于 agent 停距（否则蛇永远进不了攻击态）。
+        return Mathf.Max(agent != null ? agent.stoppingDistance : baseRange,
+                         baseRange - headOffset);
     }
 
     protected override void OnDestroy()
     {
         base.OnDestroy();
-        if (telegraph != null) Destroy(telegraph);
+        if (headHitbox != null) Destroy(headHitbox);
     }
 }

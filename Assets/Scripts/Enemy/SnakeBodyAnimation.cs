@@ -6,7 +6,7 @@ public class SnakeBodyAnimation : MonoBehaviour
     [Tooltip("视觉分段数（仅影响波浪密度）")]
     public int segmentCount = 10;
     [Tooltip("蠕动幅度（相对身长的比例）")]
-    public float slitherAmplitude = 0.05f;
+    public float slitherAmplitude = 0.03f;
     [Tooltip("身体有几个 S 弯（越小越缓）")]
     public float slitherWaves = 1.5f;
     [Tooltip("波的传播速度（抽搐就调小）")]
@@ -28,6 +28,8 @@ public class SnakeBodyAnimation : MonoBehaviour
     public float turnLag = 1.0f;
     [Tooltip("紧跟头部（不滞后）的身体段长度比例（0~1，从头部算起）。越小=只有头跟着转，越大=更多身体跟着转")]
     public float turnNeck = 0.25f;
+    [Tooltip("拖尾跟随曲线的弯曲幅度比例(0~1)。0=完全贴行进方向(最直), 1=满幅拖尾。调小让追击时整体线条更伸展，但仍保留蛇形跟随")]
+    public float followBendAmt = 0.45f;
 
     [Header("===== 调试预览 =====")]
     [Tooltip("Scene 中始终显示分段/波形预览")]
@@ -50,6 +52,10 @@ public class SnakeBodyAnimation : MonoBehaviour
     public float poiseRange = 3f;
     [Tooltip("立起/趴下切换的平滑时长（秒）")]
     public float poiseLiftTime = 0.3f;
+    [Tooltip("头部尖端独立水平转向锁定的最大角度（度）：头保持水平、可单独转头看玩家，身体不动")]
+    public float headAimMax = 30f;
+    [Tooltip("头部尖端可独立转向的占身长比例（从头部算起，0.12=仅头部附近12%身长会转头）")]
+    public float headAimPortion = 0.12f;
     [Tooltip("不移动时盘成圆形的圈数（0=不盘）")]
     public float coilTurns = 1f;
     [Tooltip("盘卷的平滑时长（秒）")]
@@ -100,6 +106,12 @@ public class SnakeBodyAnimation : MonoBehaviour
     private Vector3 fallPivotWorld;
     private Vector3 fallAxisWorld;
 
+    /// <summary>变形后蛇头的世界坐标（供头部攻击判定使用）。每帧在 UpdateBody 末尾更新</summary>
+    public Vector3 HeadWorldPosition { get; private set; }
+
+    /// <summary>蛇头相对根(agent)在身体前进方向上的世界偏移量（约身长一半）。供 ChaserEnemy 以蛇头为基准折算攻击距离</summary>
+    public float HeadForwardOffset { get; private set; }
+
     void Awake()
     {
         meshFilter = GetComponent<MeshFilter>();
@@ -128,6 +140,8 @@ public class SnakeBodyAnimation : MonoBehaviour
         bodyLen = Mathf.Max(b.size[longAxis], 0.0001f);
         minU = b.min[longAxis];
         maxU = b.max[longAxis];
+        // 蛇头相对根的世界偏移 = 网格长轴半长换算到世界（带子物体缩放）
+        HeadForwardOffset = Mathf.Abs(transform.TransformVector(b.size)[longAxis]) * 0.5f;
         Debug.Log("[SnakeBodyAnimation] 蛇身初始化: 长轴=" + longAxis + " 侧轴=" + sideAxis
             + " 身长=" + bodyLen.ToString("F2") + " 顶点数=" + baseVertices.Length
             + " 包围盒size=" + b.size, this);
@@ -197,7 +211,8 @@ public class SnakeBodyAnimation : MonoBehaviour
 
         float time = Time.time * slitherSpeed;
 
-        // —— 状态驱动：非追击盘卷；追击/攻击保持展开，且整个追击期间前半段直立（眼镜蛇姿态）——
+        // 追击/攻击状态保持展开：追击时保持前半身直立（眼镜蛇姿态）抬头前进，
+        // 只把身体弯曲幅度压小（蠕动用 slitherAmplitude，拖尾跟随用 turnLag），不趴地。
         bool keepUncoiled = chasing || attacking;
         coilK = Mathf.MoveTowards(coilK, keepUncoiled ? 0f : (coilTurns > 0f ? 1f : 0f),
             Time.deltaTime / Mathf.Max(coilTime, 0.01f));
@@ -227,6 +242,56 @@ public class SnakeBodyAnimation : MonoBehaviour
             ? Mathf.Sin(Mathf.Clamp01((tA - 0.45f) / 0.4f) * Mathf.PI)
             : 0f;
         float rearBaseU = rearAtBigU ? (1f - rearBodyEnd) : rearBodyEnd;  // 仰起部分的底部
+
+        // —— 眼镜蛇 S 形拱起：预计算前段中心线沿弧长的切线角曲线（0=贴地, 1=头端）——
+        // 切线角 profile: θ(s)=θmax·sin(π·s)，基部水平、中段抬高、头端回到水平(头不朝天)
+        // 把整段"前段抬起"从原来的"单铰点整根竖成 L 形"改成沿身长渐变的弧形，身体保持 S/Z 弯
+        Vector3 pivotStraight = center0;
+        pivotStraight[longAxis] = rearAtBigU ? (maxU - rearBodyEnd * bodyLen) : (minU + rearBodyEnd * bodyLen);
+        float pTheta = (rearBaseU - 0.5f) * Mathf.PI * 2f * turns;
+        Vector3 pivotRef = Vector3.Lerp(pivotStraight,
+            coilCenter + (Mathf.Cos(pTheta) * lVec + Mathf.Sin(pTheta) * sVec) * coilR, coilK);
+        Vector3 tPivot = coilK > 0.001f
+            ? (-Mathf.Sin(pTheta) * lVec + Mathf.Cos(pTheta) * sVec).normalized
+            : lVec;
+        Vector3 liftAxis = Vector3.Cross(tPivot, uVec).normalized;
+        if (liftAxis.sqrMagnitude < 0.5f) liftAxis = sVec;
+
+        // 前段中心线（直线段）采样：u 沿身长的位置 → 对应这条直线中心线上的点
+        float arcLen = rearBodyEnd * bodyLen;                     // 抬起段的弧长（局部单位）
+        float peakRad = rearRaiseAngle * Mathf.Deg2Rad * rearFlipSign;   // 最大切线角(弧度)
+        const int ArchSamples = 24;
+        Vector3[] archPts = new Vector3[ArchSamples + 1];
+        float[] archAngs = new float[ArchSamples + 1];
+        {
+            Vector3 acc = pivotRef;
+            archPts[0] = acc;
+            archAngs[0] = 0f;
+            for (int k = 1; k <= ArchSamples; k++)
+            {
+                float s01 = k / (float)ArchSamples;
+                float sMid = s01 - 0.5f / ArchSamples;
+                float aMid = peakRad * Mathf.Sin(Mathf.PI * sMid);   // 中点切线角，用来积分位移
+                Vector3 dir = Mathf.Cos(aMid) * tPivot + Mathf.Sin(aMid) * uVec;
+                acc += dir * (arcLen / ArchSamples);
+                archPts[k] = acc;
+                archAngs[k] = peakRad * Mathf.Sin(Mathf.PI * s01);   // 该采样点的切线角
+            }
+        }
+
+        // 头部独立水平转向：蛇身(transform)已转向玩家，这里只算它跟玩家的水平夹角，
+        // 限幅后让头部尖端额外转一点，模拟"头自己盯着玩家"
+        float aimYaw = 0f;
+        if (chaseActive && rearLift > 0.05f && headAimMax > 1f
+            && enemyAI != null && enemyAI.Player != null && !enemyAI.Player.IsDead())
+        {
+            Vector3 fwdWorld = transform.forward; fwdWorld.y = 0f;
+            Vector3 toPlayer = enemyAI.Player.transform.position - transform.position;
+            toPlayer.y = 0f;
+            if (fwdWorld.sqrMagnitude > 1e-5f && toPlayer.sqrMagnitude > 1e-5f)
+                aimYaw = Mathf.Clamp(Mathf.DeltaAngle(
+                    GetWorldYaw(fwdWorld), GetWorldYaw(toPlayer)), -headAimMax, headAimMax);
+        }
 
         for (int i = 0; i < baseVertices.Length; i++)
         {
@@ -267,7 +332,8 @@ public class SnakeBodyAnimation : MonoBehaviour
                 float arcFromHead = Mathf.Clamp01(rearAtBigU ? (1f - u) : u);
                 float histYaw = SampleFacingYaw(curYaw, arcFromHead * turnLag);
                 float arcK = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(turnNeck, 1f, arcFromHead));
-                float ang = -Mathf.DeltaAngle(histYaw, curYaw) * arcK * rearLift;
+                // 拖尾幅度 × followBendAmt：追击时压小弯曲，身体更伸展；保留蛇形跟随但不出现明显 Z 形
+                float ang = -Mathf.DeltaAngle(histYaw, curYaw) * arcK * rearLift * followBendAmt;
                 if (Mathf.Abs(ang) > 0.02f)
                 {
                     // 颈部铰链点（朝头的第 turnNeck 段处），绕它竖直旋转拖尾
@@ -281,7 +347,8 @@ public class SnakeBodyAnimation : MonoBehaviour
                 }
             }
 
-            // 4) 前半段仰起（绕“仰起部底部”的水平横轴旋转，头抬向上）
+            // 4) 前半段 S 形拱起（眼镜蛇式）：不再"整根绕一个铰点竖成 L 形"，
+            //    而是沿弧长渐进弯曲——基部贴地、中段抬高、头端切线回到水平（头不朝天）
             bool inRear = rearAtBigU ? (u >= rearBaseU) : (u <= rearBaseU);
             if (inRear && rearLift > 0f)
             {
@@ -289,35 +356,62 @@ public class SnakeBodyAnimation : MonoBehaviour
                 float part = rearAtBigU
                     ? Mathf.Clamp01((u - rearBaseU) / Mathf.Max(rearBodyEnd, 0.001f))
                     : Mathf.Clamp01((rearBaseU - u) / Mathf.Max(rearBodyEnd, 0.001f));
-                float bendK = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(part));
 
-                Vector3 pivotStraight = center0;
-                pivotStraight[longAxis] = rearAtBigU ? (maxU - rearBodyEnd * bodyLen) : (minU + rearBodyEnd * bodyLen);
-                float pTheta = (rearBaseU - 0.5f) * Mathf.PI * 2f * turns;
-                Vector3 pivotRef = Vector3.Lerp(pivotStraight,
-                    coilCenter + (Mathf.Cos(pTheta) * lVec + Mathf.Sin(pTheta) * sVec) * coilR, coilK);
-                Vector3 tPivot = coilK > 0.001f
-                    ? (-Mathf.Sin(pTheta) * lVec + Mathf.Cos(pTheta) * sVec).normalized
-                    : lVec;
-                Vector3 liftAxis = Vector3.Cross(tPivot, uVec).normalized;   // 水平横轴，向上抬
-                if (liftAxis.sqrMagnitude < 0.5f) liftAxis = sVec;
-                // 沿仰起段渐进弯曲：基部贴地、越靠头部弯得越多 → 蛇颈自然 S 形弯弧
-                float ang = rearLift * rearRaiseAngle * Mathf.Deg2Rad * rearFlipSign * bendK;
-                point = pivotRef + Quaternion.AngleAxis(ang * Mathf.Rad2Deg, liftAxis) * (point - pivotRef);
+                // 该顶点在"拱起前直线中心线"上的位置，以及相对它的截面偏移（含蠕动）
+                Vector3 straightPt = pivotRef + tPivot * (part * arcLen);
+                Vector3 offset = point - straightPt;
+
+                // 采样 S 形拱弧中心线与局部切线角
+                float sIdx = part * ArchSamples;
+                int k0 = Mathf.Clamp(Mathf.FloorToInt(sIdx), 0, ArchSamples - 1);
+                float kf = Mathf.Clamp01(sIdx - k0);
+                Vector3 archPt = Vector3.Lerp(archPts[k0], archPts[k0 + 1], kf);
+                float archAng = Mathf.Lerp(archAngs[k0], archAngs[k0 + 1], kf) * rearLift;
+
+                // 拱弧位置按立起程度混合，截面随局部切线角旋转（保持与弧线垂直，头端恢复水平）
+                Vector3 raised = Vector3.Lerp(straightPt, archPt, rearLift);
+                point = raised + Quaternion.AngleAxis(archAng * Mathf.Rad2Deg, liftAxis) * offset;
             }
 
-            // 5) 攻击：头部再沿切线前扑
+            // 4.5) 头部独立水平转向锁定玩家（身体不动，只有头部尖端转头盯着玩家）
+            if (aimYaw != 0f && inRear && headAimPortion > 0.001f)
+            {
+                float headFrom = rearAtBigU ? (1f - u) : u;   // 0=头端, 1=尾端
+                if (headFrom <= headAimPortion)
+                {
+                    float amt = Mathf.SmoothStep(0f, 1f,
+                        1f - Mathf.Clamp01(headFrom / headAimPortion));
+                    if (amt > 0.01f)
+                    {
+                        float nU = rearAtBigU ? (1f - headAimPortion) : headAimPortion;
+                        Vector3 neckStraight = center0;
+                        neckStraight[longAxis] = Mathf.Lerp(minU, maxU, nU);
+                        Vector3 neckPt = neckStraight;   // 颈部铰链，绕竖直轴水平转头
+                        point = neckPt + Quaternion.AngleAxis(aimYaw * amt, uVec) * (point - neckPt);
+                    }
+                }
+            }
+
+            // 5) 攻击：蛇头沿水平方向朝玩家快速突刺，前段身体紧跟其后（尾/后半身锚定不动）。
+            //    falloff 从"头端最大、根部为零"：根部是支撑点不动，越靠近蛇头扑得越远，
+            //    这样是蛇头先接近玩家，而不是整条身体平移撞人。
             if (lunge > 0f && inRear)
             {
                 float part = rearAtBigU ? (u - rearBaseU) / Mathf.Max(rearBodyEnd, 0.001f)
                                         : (rearBaseU - u) / Mathf.Max(rearBodyEnd, 0.001f);
-                float falloff = Mathf.Pow(Mathf.Clamp01(1f - part), 2f);
-                Vector3 headDir = rearAtBigU ? tDir : -tDir;
+                float falloff = Mathf.Pow(Mathf.Clamp01(part), 2f);
+                Vector3 headDir = Quaternion.AngleAxis(aimYaw, uVec) * (rearAtBigU ? tDir : -tDir);
+                headDir[upAxis] = 0f;                       // 只水平扑向玩家，不朝上
+                if (headDir.sqrMagnitude < 1e-5f) headDir = rearAtBigU ? lVec : -lVec;
+                else headDir.Normalize();
                 point += headDir * (bodyLen * headLungeRatio) * lunge * falloff;
             }
 
             tempVerts[i] = point;
         }
+
+        // 变形完成后更新蛇头世界坐标（取长轴大端附近顶点的平均，即蛇头尖端）
+        HeadWorldPosition = ComputeHeadWorldPosition();
 
         instanceMesh.vertices = tempVerts;
         if (++normalFrame % 3 == 0)
@@ -325,6 +419,31 @@ public class SnakeBodyAnimation : MonoBehaviour
             try { instanceMesh.RecalculateNormals(); }
             catch { /* 法线不可重算时跳过，不影响顶点蠕动 */ }
         }
+    }
+
+    // 蛇头 = 长轴大端（maxU，prefab 中 rearAtBigU=1 表示头部在大端）附近所有顶点的平均，
+    // 这样即使盘卷/仰起/突进变形后，判定点也始终贴合蛇头视觉位置
+    Vector3 ComputeHeadWorldPosition()
+    {
+        if (tempVerts == null || baseVertices == null || tempVerts.Length == 0)
+            return transform.position;
+
+        Vector3 acc = Vector3.zero;
+        int count = 0;
+        float headU = maxU - bodyLen * 0.06f;   // 取大端最后 ~6% 身长的顶点
+        for (int i = 0; i < tempVerts.Length; i++)
+        {
+            if (baseVertices[i][longAxis] >= headU)
+            {
+                acc += tempVerts[i];
+                count++;
+            }
+        }
+        if (count == 0) return meshFilter != null ? meshFilter.transform.position : transform.position;
+
+        Vector3 headLocal = acc / count;
+        // 顶点在网格局部空间，需变换到世界空间（网格可能挂在子物体并有缩放）
+        return (meshFilter != null ? meshFilter.transform : transform).TransformPoint(headLocal);
     }
 
     void UpdateDeathFall()
