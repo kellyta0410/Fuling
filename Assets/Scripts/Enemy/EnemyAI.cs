@@ -525,6 +525,11 @@ Vector3 center = player.transform.position;
 
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
 
+            // 关键修复：分离位移不允许把敌人推向玩家。
+            // 后排推前排时，前排的"指向玩家的分量"会被剔除，只保留横向/向外扩散，
+            // 避免敌人被顶到玩家身上、物理解算把玩家一起推挤（玩家是 CharacterController，会被挤走）。
+            FilterSeparationTowardPlayer();
+
             if (useDirectChase)
             {
                 transform.position += separationVelocity * Time.deltaTime;
@@ -538,6 +543,22 @@ Vector3 center = player.transform.position;
         {
             separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
         }
+    }
+
+    // 分离速度只在"绕玩家横向/远离玩家"的方向上生效：剔除朝玩家的分量。
+    // 否则后排把前排推向玩家时，前排被顶进玩家碰撞体，会把玩家一起推挤着走。
+    private void FilterSeparationTowardPlayer()
+    {
+        if (player == null) return;
+        Vector3 toPlayer = player.transform.position - transform.position;
+        toPlayer.y = 0f;
+        float distSqr = toPlayer.sqrMagnitude;
+        if (distSqr < 0.0001f) return;
+
+        toPlayer /= Mathf.Sqrt(distSqr);
+        float inward = Vector3.Dot(separationVelocity, toPlayer);
+        if (inward > 0f)
+            separationVelocity -= toPlayer * inward;
     }
 
     // ---------- 子类需要重写的方法 ----------

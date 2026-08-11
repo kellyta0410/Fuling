@@ -9,6 +9,7 @@ public class CharacterData : ScriptableObject
 
     [Header("===== 角色图片 =====")]
     public Sprite avatarSprite;
+    public Sprite characterImage;          // 角色大图（详情面板主图，独立于头像）
     public Sprite fullBodySprite;
     public Sprite lockedAvatarSprite;      // 未解锁时显示的头像
 

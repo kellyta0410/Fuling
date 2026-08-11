@@ -226,7 +226,10 @@ public class SceneSelectionManager : MonoBehaviour
             playerAvatarImage.gameObject.SetActive(hasCharacter);
             if (hasCharacter)
             {
-                playerAvatarImage.sprite = current.GetAvatarSprite(true);
+                // 优先使用角色大图（characterImage），无大图时回退到头像
+                playerAvatarImage.sprite = current.characterImage != null
+                    ? current.characterImage
+                    : current.GetAvatarSprite(true);
                 playerAvatarImage.color = Color.white;
                 playerAvatarImage.preserveAspect = true;
             }

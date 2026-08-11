@@ -123,7 +123,9 @@ public class ChaserEnemy : EnemyAI
         {
             Vector3 target = player.transform.position;
 
-            // 环形占位：有免费空位就过去绕玩家，全满则排到前面敌人身后
+            // 环形占位：有免费空位就过去绕玩家。
+            // 蛇类：找不到空位也不排队堵到别的敌人身后（那样会停着不攻），直接压向玩家，
+            //       靠蛇头长距离突刺命中；普通敌人保留"全满则排前面敌人身后"的兜底。
             if (enableFormation)
             {
                 Vector3? slot = GetFormationTarget();
@@ -131,7 +133,7 @@ public class ChaserEnemy : EnemyAI
                 {
                     target = slot.Value;
                 }
-                else
+                else if (!IsSerpentine)
                 {
                     Vector3? queue = GetQueueTarget();
                     if (queue.HasValue) target = queue.Value;
@@ -141,17 +143,12 @@ public class ChaserEnemy : EnemyAI
             agent.isStopped = false;
             agent.SetDestination(target);
 
-            // 蛇式移动：头先平滑转向移动方向，身体后段由 SnakeBodyAnimation 延迟跟随。
-            // 用"步进方向"而非玩家方位，这样转弯时是头先拐、身体被拖着走。
-            // 非蛇类敌人不做蛇形转向，交给 agent 按原逻辑（updateRotation=true）自行转向
+            // 蛇式移动：追击时蛇头始终面向玩家（头先转锁玩家，身体后段由 SnakeBodyAnimation 延迟跟随）。
+            // 用"朝向玩家"而非"步进方向"，这样无论绕到哪一侧都保持对玩家的锁定姿态。
             if (IsSerpentine)
             {
-                Vector3 moveDir = agent.desiredVelocity;
-                moveDir.y = 0f;
-                if (moveDir.sqrMagnitude > 0.0001f)
-                    RotateHeadTowards(moveDir.normalized, Time.deltaTime);
-                else
-                    RotateHeadTowards(target - transform.position, Time.deltaTime);
+                Vector3 toPlayer = player.transform.position - transform.position;
+                RotateHeadTowards(toPlayer, Time.deltaTime);
             }
         }
     }
