@@ -9,9 +9,19 @@ public class ChaserEnemy : EnemyAI
     [Tooltip("蓄力填充时长（秒），填满才命中")]
     public float telegraphDuration = 2.5f;
 
+    [Header("蛇形移动（头先转，身体后段跟随）")]
+    [Tooltip("关闭 NavMeshAgent 的自动旋转（否则整个身体瞬转抽搐），由蛇自己平滑转动头部引导方向。仅挂有 SnakeBodyAnimation 的蛇类生效")]
+    public bool serpentineMove = true;
+    [Tooltip("追击时头部最大转向速度（度/秒）。越小形态越呆、拖尾越明显")]
+    public float headTurnSpeed = 160f;
+
     private GameObject telegraph;
     private bool telegraphing = false;
     private float fillTimer = 0f;
+
+    // 蛇形移动只在有蛇身分段动画时生效（避免影响同样挂 ChaserEnemy 的 Basic / Bumper 等普通敌人。
+    // 蛇身动画挂在子物体上，用 GetComponentInChildren 查找）
+    private bool IsSerpentine => serpentineMove && GetComponentInChildren<SnakeBodyAnimation>(true) != null;
 
     protected override void OnStart()
     {
@@ -24,6 +34,10 @@ public class ChaserEnemy : EnemyAI
             else
                 // Basic（直接攻击）：停在 2.5m（略多于攻击范围，不贴脸）
                 agent.stoppingDistance = 2.5f;
+
+            // 蛇式移动：旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
+            if (IsSerpentine)
+                agent.updateRotation = false;
         }
         CreateTelegraph();
     }
@@ -104,16 +118,40 @@ public class ChaserEnemy : EnemyAI
 
             agent.isStopped = false;
             agent.SetDestination(target);
+
+            // 蛇式移动：头先平滑转向移动方向，身体后段由 SnakeBodyAnimation 延迟跟随。
+            // 用"步进方向"而非玩家方位，这样转弯时是头先拐、身体被拖着走。
+            // 非蛇类敌人不做蛇形转向，交给 agent 按原逻辑（updateRotation=true）自行转向
+            if (IsSerpentine)
+            {
+                Vector3 moveDir = agent.desiredVelocity;
+                moveDir.y = 0f;
+                if (moveDir.sqrMagnitude > 0.0001f)
+                    RotateHeadTowards(moveDir.normalized, Time.deltaTime);
+                else
+                    RotateHeadTowards(target - transform.position, Time.deltaTime);
+            }
         }
     }
 
+    // 限速转动头部（蛇身体不整体瞬转；超过最大转向速度时按速度截断）
+    private void RotateHeadTowards(Vector3 dir, float dt)
+    {
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        Quaternion target = Quaternion.LookRotation(dir.normalized);
+        float step = headTurnSpeed * Mathf.Max(dt, 0f);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, step);
+    }
+
+    // 蓄力瞄准：与追击一致地限速平滑转向玩家（头先转，身体后段由 SnakeBodyAnimation 拖尾），
+    // 避免蓄力瞬间整个蛇身 "咔" 一下转向玩家
     private void RotateTowardPlayer()
     {
         if (player == null) return;
-        Vector3 dir = (player.transform.position - transform.position).normalized;
-        dir.y = 0;
-        if (dir != Vector3.zero)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 10f * Time.deltaTime);
+        Vector3 dir = player.transform.position - transform.position;
+        dir.y = 0f;
+        RotateHeadTowards(dir, Time.deltaTime);
     }
 
     private void CreateTelegraph()

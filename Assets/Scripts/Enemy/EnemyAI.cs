@@ -34,6 +34,7 @@ public abstract class EnemyAI : MonoBehaviour
     public bool isDead = false;
     // 只读状态，供蛇身动画等外部组件读取（无骨骼模型没有有效 Animator 参数）
     public bool IsAttackingNow { get { return isAttacking; } }
+    public bool IsChasingNow { get { return isChasing; } }
     public bool IsMovingNow
     {
         get
@@ -153,7 +154,6 @@ public abstract class EnemyAI : MonoBehaviour
                 Vector3 fixedPos = hit.position;
                 transform.position = fixedPos;
                 agent.Warp(fixedPos);
-                Debug.Log($"{name} 已吸附到 NavMesh 位置: {fixedPos}");
             }
             else
             {
