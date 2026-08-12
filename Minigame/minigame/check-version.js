@@ -60,7 +60,7 @@ export const isSupportCacheAudio = !isIOS || compareVersion(version, '8.0.31');
 export const isSupportInnerAudio = compareVersion(version, '8.0.38');
 // 检查是否支持brotli压缩，pc基础库>=2.29.2，真机基础库>=2.21.1
 // @ts-ignore
-const isPcBrotliInvalid = isPc && !compareVersion(SDKVersion, false ? '2.29.2' : '2.32.3');
+const isPcBrotliInvalid = isPc && !compareVersion(SDKVersion, true ? '2.29.2' : '2.32.3');
 const isMobileBrotliInvalid = isMobile && !compareVersion(SDKVersion, '2.21.1');
 // @ts-ignore
 const isBrotliInvalid = true && (isPcBrotliInvalid || isMobileBrotliInvalid);
