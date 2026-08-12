@@ -9,11 +9,11 @@ import checkVersion from './check-version';
 import { launchEventType, scaleMode } from './plugin-config';
 import { preloadWxCommonFont } from './unity-sdk/font/index';
 const managerConfig = {
-    DATA_FILE_MD5: '34d509e1830f5259',
+    DATA_FILE_MD5: '974b0048bc21fe52',
     CODE_FILE_MD5: '5b5189ba2df8353c',
     GAME_NAME: 'webgl',
     APPID: 'wx5ebd051fa1107dc6',
-    DATA_FILE_SIZE: '40938259',
+    DATA_FILE_SIZE: '39719308',
     OPT_DATA_FILE_SIZE: '$OPT_DATA_FILE_SIZE',
     DATA_CDN: 'https://kellyta0410.github.io/Fuling/Minigame/webgl/ ',
     // 资源包是否作为小游戏分包加载
