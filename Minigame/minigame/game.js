@@ -9,13 +9,13 @@ import checkVersion from './check-version';
 import { launchEventType, scaleMode } from './plugin-config';
 import { preloadWxCommonFont } from './unity-sdk/font/index';
 const managerConfig = {
-    DATA_FILE_MD5: 'cddd6a6d36f60b6e',
+    DATA_FILE_MD5: '1af1fcf2db20dafc',
     CODE_FILE_MD5: '5b5189ba2df8353c',
     GAME_NAME: 'webgl',
     APPID: 'wx5ebd051fa1107dc6',
-    DATA_FILE_SIZE: '40922522',
+    DATA_FILE_SIZE: '40938259',
     OPT_DATA_FILE_SIZE: '$OPT_DATA_FILE_SIZE',
-    DATA_CDN: '',
+    DATA_CDN: 'https://kellyta0410.github.io/Fuling/',
     // 资源包是否作为小游戏分包加载
     loadDataPackageFromSubpackage: false,
     // 资源包放小游戏分包加载时，是否br压缩
