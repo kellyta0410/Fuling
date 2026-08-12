@@ -448,10 +448,21 @@ public class PlayerController : MonoBehaviour
         if (isUsingSkill)
         {
             skillTimer += Time.deltaTime;
-            if (skillTimer >= skillDuration)
+            AnimatorStateInfo cur = animator.GetCurrentAnimatorStateInfo(0);
+            AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(0);
+            bool skillActive = cur.IsName("Skill Attack") || next.IsName("Skill Attack");
+
+            float safetyCap = skillDuration;
+            if (cur.IsName("Skill Attack") && cur.length > 0.01f)
+                safetyCap = cur.length + 0.5f;
+            else if (next.IsName("Skill Attack") && next.length > 0.01f)
+                safetyCap = next.length + 0.5f;
+
+            if (!skillActive || skillTimer >= safetyCap)
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
+                animator.applyRootMotion = false;
             }
         }
 
@@ -459,7 +470,7 @@ public class PlayerController : MonoBehaviour
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
         // 攻击时也能转向（跟手），但移动归零（原地挥击）
-        if (moveDir.magnitude > 0.1f && !isDodging)
+        if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -585,18 +596,17 @@ public class PlayerController : MonoBehaviour
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
 
-        SpawnAttackVFX();
-
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
         animator.Play(stateName, 0, 0f);
         currentAttackStateHash = Animator.StringToHash(stateName);
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
+        SpawnAttackVFX(stateName);
         StartCoroutine(DelayedDamage());
     }
 
-    void SpawnAttackVFX()
+    void SpawnAttackVFX(string stateName)
     {
         if (attackVFXPrefab == null || weaponPivot == null) return;
 
@@ -605,7 +615,21 @@ public class PlayerController : MonoBehaviour
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
         vfx.transform.SetParent(weaponPivot, true);
-        Destroy(vfx, 1f);
+
+        StartCoroutine(DestroyVfxAfterAnimation(vfx, stateName));
+    }
+
+    // 让 slash 特效与当前攻击动画等长，挥砍多久特效持续多久
+    IEnumerator DestroyVfxAfterAnimation(GameObject vfx, string stateName)
+    {
+        yield return null; // 等一帧让 Animator 切换到新状态
+        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+        float length = info.shortNameHash == Animator.StringToHash(stateName)
+            ? info.length
+            : attackDuration;
+        if (length <= 0.01f) length = attackDuration;
+        yield return new WaitForSeconds(length);
+        if (vfx != null) Destroy(vfx);
     }
 
     // 用剑渲染网格包围盒，取离剑根(手柄)最远的角点当作刀尖
@@ -672,7 +696,6 @@ public class PlayerController : MonoBehaviour
             {
                 enemy.TakeDamageImmediate(attackDamage);
                 enemy.AddKnockback(transform.forward, enemyKnockbackDistance);
-                Debug.Log($"攻击 {enemy.name}，造成 {attackDamage} 伤害");
             }
         }
     }
@@ -688,6 +711,7 @@ public class PlayerController : MonoBehaviour
         isUsingSkill = true;
         skillTimer = 0f;
         animator.SetTrigger("SkillAction");
+        animator.applyRootMotion = true;
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         StartCoroutine(DelayedSkillDamage(finalDamage));
@@ -1132,6 +1156,7 @@ public class PlayerController : MonoBehaviour
 
         animator.SetBool("IsMoving", false);
         animator.SetBool("IsAttacking", false);
+        animator.applyRootMotion = false;
         animator.SetTrigger("Die");
 
         Debug.Log($"玩家死亡");

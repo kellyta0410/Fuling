@@ -74,7 +74,9 @@ public class ChaserEnemy : EnemyAI
             // 环形占位：有免费空位就过去绕玩家。
             // 蛇类：找不到空位也不排队堵到别的敌人身后（那样会停着不攻），直接压向玩家，
             //       靠蛇头长距离突刺命中；普通敌人保留"全满则排前面敌人身后"的兜底。
-            if (enableFormation)
+            // 击退回位期间跳过环形占位：被击退时玩家就在身边，直接压回玩家贴到攻击距离，
+            // 否则蛇会先去绕远占位点（甚至被挡停在半路），表现为"击退后停着不走近"。
+            if (enableFormation && !forceReturnToRange)
             {
                 Vector3? slot = GetFormationTarget();
                 if (slot.HasValue)
@@ -207,6 +209,24 @@ public class ChaserEnemy : EnemyAI
     {
         if (IsSerpentine) yield break;
         yield return base.DelayedDamage();
+    }
+
+    // 蛇入攻击态不要求身体正对玩家（环形站位上朝向各异，只有正对的先打、其余干站）。
+    // 蛇头可独立转头+突刺前伸，蛇头几何够到玩家就能咬，不必等身体完全转身。
+    protected override bool TryPerformInRangeAttack()
+    {
+        if (IsSerpentine && player != null && !player.IsDead())
+        {
+            RotateHeadTowards(player.transform.position - transform.position, Time.deltaTime);
+            if (canAttack && CanHeadReach(player))
+            {
+                PerformAttack();
+                return true;
+            }
+            StopAgent();
+            return false;
+        }
+        return base.TryPerformInRangeAttack();
     }
 
     // 攻击触发距离以蛇头为基准：蛇头在身体前端（约身长一半的前方）。

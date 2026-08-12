@@ -165,6 +165,8 @@ public abstract class EnemyAI : MonoBehaviour
             useDirectChase = GameManager.Instance.IsInfiniteMode();
         }
 
+        SetupNonBlockingPhysics();
+
         if (enemyData != null)
         {
             baseSpeed = enemyData.speed;
@@ -207,8 +209,6 @@ public abstract class EnemyAI : MonoBehaviour
 
         CreateHealthBar();
         ApplyCurrentMultipliers();
-
-        isChasing = false;
         targetIdleRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
         idleRotationInterval = Random.Range(2f, 5f);
         idleRotationTimer = 0f;
@@ -217,6 +217,34 @@ public abstract class EnemyAI : MonoBehaviour
     }
 
     protected virtual void OnStart() { }
+
+    // 物理"不互推"设置：敌人移动全部由 NavMeshAgent / transform 驱动，碰撞体只做实体阻挡（防穿模）。
+    // 玩家是 CharacterController：一旦敌人碰撞体被物理穿透解算顶入玩家体积，会把玩家一起顶走。
+    protected void SetupNonBlockingPhysics()
+    {
+        // 敌人主体不允许挂动态刚体：动态刚体在物理更新里会对玩家(CharacterController)施加
+        // 冲量/穿透解算，把玩家顶开。若资产误挂了刚体，强制改成 kinematic + 无重力 + 零速度，
+        // 让它退化成纯"挡板"（阻挡穿模，不产生任何顶人力）。
+        if (TryGetComponent<Rigidbody>(out Rigidbody rb))
+        {
+            rb.isKinematic = true;
+            rb.useGravity = false;
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        // 实体碰撞保持非 Trigger：保证敌人与玩家/墙体不穿模。
+        // 距离由移动侧维持——近身刹停(stoppingDistance/approachBrake)、击退与分离的
+        // ClampSeparationToPlayer / FilterSeparationTowardPlayer 保证敌人绝不把碰撞体扫进玩家体积，
+        // 因此这块实体挡板在正常走位下不会顶动玩家。
+
+        // NavMeshAgent 用高等级局部避障：成群敌人各自绕开走位，而不是靠碰撞体硬挤出一条路，
+        // 避免互相顶推成堆、再把前排推进玩家。
+        if (isAgentValid && agent != null)
+        {
+            agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
+        }
+    }
 
     /// <summary>被击退时调用（子类可重写清理自己的状态，如蓄力/索敌）</summary>
     protected virtual void OnKnockback() { }
@@ -908,6 +936,10 @@ Vector3 center = player.transform.position;
         dir.y = 0;
         if (dir.sqrMagnitude < 0.0001f || distance <= 0f) { knockRoutine = null; yield break; }
 
+        // 整个击退过程（移动+硬直）都屏蔽追击/攻击：移动阶段若 isStaggering=false，
+        // Update 会照常进入攻击态，硬直结束后残留攻击状态导致"偶尔又停顿"。
+        isStaggering = true;
+
         Vector3 mv = dir.normalized;
         float duration = Mathf.Clamp(distance * 0.12f, 0.1f, 0.4f);
         float t = 0f;
@@ -927,8 +959,7 @@ Vector3 center = player.transform.position;
         }
         knockRoutine = null;
 
-        // 被击退后停顿（硬直）一下，再恢复行动
-        isStaggering = true;
+        // 击退完成后原地停顿（硬直）一下（此处 isStaggering 已为 true，仅等待计时）
         yield return new WaitForSeconds(staggerDuration);
         isStaggering = false;
 
@@ -951,10 +982,28 @@ Vector3 center = player.transform.position;
         // 否则 SetDestination 失效，敌人会原地站定永远不再靠近玩家。
         if (isAgentValid && agent != null && !agent.isOnNavMesh)
         {
+            // 多级搜索：先在原地附近找，找不到再以玩家位置附近兜底（蛇可能被推远/卡进墙角）
             Vector3 restore = transform.position;
             NavMeshHit hit;
-            if (NavMesh.SamplePosition(restore, out hit, 5f, NavMesh.AllAreas))
-                restore = hit.position;
+            bool found = NavMesh.SamplePosition(restore, out hit, 5f, NavMesh.AllAreas);
+            if (!found && player != null)
+            {
+                Vector3 towardPlayer = player.transform.position - transform.position;
+                towardPlayer.y = 0;
+                if (towardPlayer.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 dir = towardPlayer.normalized;
+                    for (float r = 6f; r <= 16f && !found; r += 5f)
+                    {
+                        Vector3 probe = transform.position + dir * r;
+                        found = NavMesh.SamplePosition(probe, out hit, 5f, NavMesh.AllAreas);
+                        if (found) restore = hit.position;
+                    }
+                }
+                if (!found)
+                    found = NavMesh.SamplePosition(player.transform.position, out hit, 8f, NavMesh.AllAreas);
+            }
+            if (found) restore = hit.position;
             agent.Warp(restore);
         }
 

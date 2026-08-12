@@ -69,7 +69,6 @@ public class EnemySpawner : MonoBehaviour
     // 阶层追踪
     private int currentTierIndex = -1;
     private int lastTierIndex = -1;
-    private float tierUpgradeCooldown = 0f;
     private bool showTierMessage = false;
     private float tierMessageTimer = 0f;
     private string currentTierMessage = "";
