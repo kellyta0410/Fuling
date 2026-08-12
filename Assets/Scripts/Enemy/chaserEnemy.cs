@@ -41,8 +41,7 @@ public class ChaserEnemy : EnemyAI
                 // 旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
                 agent.updateRotation = false;
 
-                // 蛇攻击节奏提速：缩短攻击冷却与击退硬直，让咬击更快更紧凑
-                attackCooldownOverride = Mathf.Min(attackCooldownOverride > 0f ? attackCooldownOverride : 99f, 0.9f);
+                // 蛇攻击节奏提速：缩短击退硬直，让咬击更紧凑（攻击冷却由 Snake.asset 的 attackCooldown 控制）
                 staggerDuration = 0.2f;
             }
             else

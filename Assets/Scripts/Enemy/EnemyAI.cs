@@ -63,10 +63,6 @@ public abstract class EnemyAI : MonoBehaviour
     [Tooltip("击退方向掺入\"敌人自身后方\"的比例（0~1；0 = 纯远离玩家，1 = 纯自身后方）")]
     public float knockbackOwnBackBlend = 0.3f;
 
-    [Header("攻击冷却")]
-    [Tooltip("攻击冷却（>0 时覆盖 EnemyType 资产的 attackCooldown，方便在 Inspect差 逐个手动调，无需改资产）")]
-    public float attackCooldownOverride = 0f;
-
     [Header("接近刹停（避免冲过头）")]
     public bool enableApproachBrake = true;
     [Tooltip("离目标的 stoppingDistance 还有这么大范围时开始减速")]
@@ -709,10 +705,9 @@ Vector3 center = player.transform.position;
         agent.speed = baseSpd * Mathf.Lerp(approachStopSpeed, 1f, f);
     }
 
-    // 攻击冷却：优先用 Inspector 的手动覆盖值（>0），否则读 EnemyType 资产
+    // 攻击冷却：读 EnemyType 资产，资产驱动
     protected float GetAttackCooldown()
     {
-        if (attackCooldownOverride > 0f) return attackCooldownOverride;
         return enemyData != null ? enemyData.attackCooldown : 1.5f;
     }
 

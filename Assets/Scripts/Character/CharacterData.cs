@@ -23,7 +23,7 @@ public class CharacterData : ScriptableObject
     public int baseAttack = 10;
     public float baseRange = 5f;
     public float baseSpeed = 3f;           // 后台计算，UI不显示
-    public float baseCooldown = 2f;
+    public float baseCooldown = 0.5f;
     public float baseHealth = 100f;        // 生命值
 
     [Header("===== 升级配置 =====")]
