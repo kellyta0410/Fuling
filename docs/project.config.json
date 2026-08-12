@@ -1,25 +1,75 @@
 {
+  "description": "项目配置文件",
   "setting": {
+    "urlCheck": false,
     "es6": true,
-    "postcss": true,
-    "minified": true,
-    "uglifyFileName": false,
     "enhance": true,
-    "packNpmRelationList": [],
+    "postcss": true,
+    "preloadBackgroundData": false,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "uglifyFileName": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "useMultiFrameRuntime": true,
+    "useApiHook": false,
+    "disableUseStrict": false,
     "babelSetting": {
-      "ignore": [],
+      "ignore": ["webgl.wasm.framework.unityweb.js"],
       "disablePlugins": [],
       "outputPath": ""
     },
-    "useCompilerPlugins": false
+    "useIsolateContext": true,
+    "useCompilerModule": true,
+    "userConfirmedUseCompilerModuleSwitch": false,
+    "packNpmManually": false,
+    "packNpmRelationList": []
   },
   "compileType": "game",
+  "libVersion": "latest",
+  "appid": "wx5ebd051fa1107dc6",
+  "projectname": "webgl",
+  "simulatorType": "wechat",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
-    "include": []
+    "ignore": [
+      {
+        "type": "folder",
+        "value": ".plugincache"
+      },
+      {
+        "type": "suffix",
+        "value": ".symbols.unityweb"
+      },
+      {
+        "type": "suffix",
+        "value": ".symbols.unityweb.br"
+      }
+    ]
   },
-  "isGameTourist": false,
-  "appid": "wx5ebd051fa1107dc6",
-  "editorSetting": {}
+  "condition": {
+    "search": {
+      "current": -1,
+      "list": []
+    },
+    "conversation": {
+      "current": -1,
+      "list": []
+    },
+    "game": {
+      "currentL": -1,
+      "list": []
+    },
+    "miniprogram": {
+      "current": -1,
+      "list": []
+    }
+  }
 }
