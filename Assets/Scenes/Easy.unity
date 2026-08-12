@@ -1462,7 +1462,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 56.6, y: 11.973, z: 10.6}
+  m_LocalPosition: {x: 51.22, y: 11.973, z: 11.799999}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -8648,7 +8648,7 @@ Transform:
   m_GameObject: {fileID: 1615214138}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 26.3, y: 1, z: 7}
+  m_LocalPosition: {x: 29.8, y: 1, z: 11.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -12175,7 +12175,7 @@ Transform:
   m_GameObject: {fileID: 4990160210373830056}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 30.6, y: 1, z: -34}
+  m_LocalPosition: {x: 30.6, y: 1, z: -29.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -12344,12 +12344,12 @@ PrefabInstance:
     - target: {fileID: 2322417277056863129, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 57.037308
+      value: 57.037354
       objectReference: {fileID: 0}
     - target: {fileID: 3178689033468923292, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3281026911917978556, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
@@ -12394,7 +12394,7 @@ PrefabInstance:
     - target: {fileID: 3281026911917978556, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 57.037308
+      value: 57.037354
       objectReference: {fileID: 0}
     - target: {fileID: 3360664246285579863, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
@@ -12626,6 +12626,11 @@ PrefabInstance:
       propertyPath: m_LocalScale.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7600866444950583027, guid: df1b8993df715424faf8912ca9f10098,
+        type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 57.037354
+      objectReference: {fileID: 0}
     - target: {fileID: 7778899315952415191, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
@@ -12699,7 +12704,7 @@ PrefabInstance:
     - target: {fileID: 8344131997185983632, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 57.037308
+      value: 57.037354
       objectReference: {fileID: 0}
     - target: {fileID: 8690450996152774102, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
@@ -13836,8 +13841,8 @@ MonoBehaviour:
   playerTarget: {fileID: 8186556143949961242}
   spawnPoints:
   - point: {fileID: 2938861529605595943}
-    activationRadius: 10
-    deactivationRadius: 20
+    activationRadius: 15
+    deactivationRadius: 25
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -13847,8 +13852,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 904935638984381595}
-    activationRadius: 10
-    deactivationRadius: 20
+    activationRadius: 15
+    deactivationRadius: 25
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -13858,8 +13863,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 1129743577525669736}
-    activationRadius: 10
-    deactivationRadius: 20
+    activationRadius: 15
+    deactivationRadius: 25
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -13869,8 +13874,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 767763347265115328}
-    activationRadius: 10
-    deactivationRadius: 20
+    activationRadius: 15
+    deactivationRadius: 25
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -13880,8 +13885,8 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 1615214139}
-    activationRadius: 10
-    deactivationRadius: 20
+    activationRadius: 15
+    deactivationRadius: 25
     spawnRadius: 0
     isActive: 0
     spawnTimer: 0
@@ -13891,7 +13896,7 @@ MonoBehaviour:
     hasSpawnedOnce: 0
     tileType: 0
   - point: {fileID: 167274949}
-    activationRadius: 10
+    activationRadius: 15
     deactivationRadius: 20
     spawnRadius: 0
     isActive: 0
@@ -14144,7 +14149,7 @@ Transform:
   m_GameObject: {fileID: 2088829779648433623}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 56.6, y: 11.973, z: 10.6}
+  m_LocalPosition: {x: 51.22, y: 11.973, z: 11.799999}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -14487,7 +14492,7 @@ PrefabInstance:
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: 56.6
+      value: 51.22
       objectReference: {fileID: 0}
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
@@ -14497,7 +14502,7 @@ PrefabInstance:
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 22.6
+      value: 23.8
       objectReference: {fileID: 0}
     - target: {fileID: 6886525407313111305, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
