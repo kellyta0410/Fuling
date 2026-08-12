@@ -142,9 +142,7 @@ public class SnakeBodyAnimation : MonoBehaviour
         maxU = b.max[longAxis];
         // 蛇头相对根的世界偏移 = 网格长轴半长换算到世界（带子物体缩放）
         HeadForwardOffset = Mathf.Abs(transform.TransformVector(b.size)[longAxis]) * 0.5f;
-        Debug.Log("[SnakeBodyAnimation] 蛇身初始化: 长轴=" + longAxis + " 侧轴=" + sideAxis
-            + " 身长=" + bodyLen.ToString("F2") + " 顶点数=" + baseVertices.Length
-            + " 包围盒size=" + b.size, this);
+        
 
         // 蛇身很长，把分离半径按世界尺寸调到身长一半，避免互相穿插推挤
         if (enemyAI != null)

@@ -167,6 +167,12 @@ public abstract class EnemyAI : MonoBehaviour
 
         SetupNonBlockingPhysics();
 
+        // 自动挂载碰撞解决器：检测敌人↔玩家/敌人↔敌人重叠，只移动敌人、不推玩家
+        if (GetComponent<EnemyCollisionBlocker>() == null)
+        {
+            gameObject.AddComponent<EnemyCollisionBlocker>();
+        }
+
         if (enemyData != null)
         {
             baseSpeed = enemyData.speed;

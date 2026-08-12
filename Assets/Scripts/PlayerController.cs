@@ -36,6 +36,14 @@ public class PlayerController : MonoBehaviour
     public GameObject attackVFXPrefab;
     [Tooltip("武器挂点（留空则运行时按名字 coin sword 2 自动查找）")]
     public Transform weaponPivot;
+    [Tooltip("挥砍特效：前段从微缩撑到全尺寸所占动画时长的比例(0~1)。越小挥得越快")]
+    public float slashGrowAmount = 0.45f;
+    [Tooltip("挥出缓动指数：越大越接近\"命中瞬间才拉满\"，越小越线性")]
+    public float slashGrowExponent = 1.5f;
+
+    [Header("穿墙兜底")]
+    [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
+    public bool wallResolveEnabled = true;
 
     [Header("地面检测")]
     public LayerMask groundLayer;
@@ -551,6 +559,17 @@ public class PlayerController : MonoBehaviour
         UpdateAnimations();
     }
 
+    // 穿墙兜底：普通移动/闪避/击退/复活等无论怎么动，
+    // 只要 CharacterController 与任何竖直墙(实墙或 X-Ray 半透明墙)重叠就把玩家水平推出墙外。
+    // X-Ray 只是把墙渲染半透明，碰撞体一直都在，所以实墙/XRay 一视同仁。
+    void LateUpdate()
+    {
+        if (!wallResolveEnabled) return;
+        if (isDead || isDying || controller == null || !controller.enabled) return;
+
+        WallPenetrationResolve.Resolve(controller, transform);
+    }
+
     public void SetJoystickEnabled(bool enabled)
     {
 #if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
@@ -616,19 +635,45 @@ public class PlayerController : MonoBehaviour
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
         vfx.transform.SetParent(weaponPivot, true);
 
-        StartCoroutine(DestroyVfxAfterAnimation(vfx, stateName));
+        // 挥砍渐进：特效不是"一整个从头出现"，而是从微缩(浅)沿挥砍方向逐渐撑到全尺寸(深)，
+        // 命中段保持全挥，收尾轻微回缩后与挥砍动画等长销毁。
+        Vector3 fullScale = vfx.transform.localScale;
+        vfx.transform.localScale = Vector3.zero;      // 同帧先藏起，避免爆出一帧完整弧光
+        StartCoroutine(SweepAttackVFX(vfx, fullScale, stateName));
     }
 
-    // 让 slash 特效与当前攻击动画等长，挥砍多久特效持续多久
-    IEnumerator DestroyVfxAfterAnimation(GameObject vfx, string stateName)
+    // 让 slash 特效"像挥砍出来从浅到深"：挥出阶段从 0 缓动撑到全尺寸，
+    // 末期轻微回缩模拟"砍完收刀"，总时长与当前攻击动画等长。
+    IEnumerator SweepAttackVFX(GameObject vfx, Vector3 fullScale, string stateName)
     {
         yield return null; // 等一帧让 Animator 切换到新状态
         AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
-        float length = info.shortNameHash == Animator.StringToHash(stateName)
+        float total = info.shortNameHash == Animator.StringToHash(stateName)
             ? info.length
             : attackDuration;
-        if (length <= 0.01f) length = attackDuration;
-        yield return new WaitForSeconds(length);
+        if (total <= 0.01f) total = attackDuration;
+        total = Mathf.Max(total, 0.05f);
+
+        float growRatio = Mathf.Clamp01(slashGrowAmount);
+        float t = 0f;
+        while (t < total)
+        {
+            t += Time.deltaTime;
+            float p = Mathf.Clamp01(t / total);
+
+            // 0 → growRatio 内从小撑到满（浅→深）；之后保持全挥
+            float reveal = Mathf.Clamp01(p / Mathf.Max(growRatio, 0.01f));
+            reveal = Mathf.Pow(reveal, Mathf.Max(slashGrowExponent, 0.1f));
+
+            // 收尾 15% 轻微回缩，视觉上"砍完收刀"
+            if (p > 0.85f)
+                reveal *= Mathf.Lerp(1f, 0.3f, (p - 0.85f) / 0.15f);
+
+            if (vfx != null)
+                vfx.transform.localScale = fullScale * Mathf.Max(reveal, 0.0001f);
+
+            yield return null;
+        }
         if (vfx != null) Destroy(vfx);
     }
 
