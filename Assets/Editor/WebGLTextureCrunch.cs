@@ -33,12 +33,11 @@ public static class WebGLTextureCrunch
                 settings.textureCompression = TextureImporterCompression.Compressed;
                 settings.crunchedCompression = true;
                 importer.SetPlatformTextureSettings(settings);
-                EditorUtility.SetDirty(importer);
+                importer.SaveAndReimport();
                 processed.Add(path);
             }
         }
 
-        AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log($"WebGL Crunch enabled on {processed.Count} textures.\n" + string.Join("\n", processed));
     }
