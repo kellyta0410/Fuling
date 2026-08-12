@@ -15,7 +15,7 @@ const managerConfig = {
     APPID: 'wx5ebd051fa1107dc6',
     DATA_FILE_SIZE: '40938259',
     OPT_DATA_FILE_SIZE: '$OPT_DATA_FILE_SIZE',
-    DATA_CDN: 'https://kellyta0410.github.io/Fuling/Minigame',
+    DATA_CDN: 'https://kellyta0410.github.io/Fuling/Minigame/webgl/',
     // 资源包是否作为小游戏分包加载
     loadDataPackageFromSubpackage: false,
     // 资源包放小游戏分包加载时，是否br压缩
