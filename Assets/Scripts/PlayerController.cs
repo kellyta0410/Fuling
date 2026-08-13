@@ -691,10 +691,6 @@ public class PlayerController : MonoBehaviour
     {
         if (attackVFXPrefab == null || weaponPivot == null) return;
 
-        Vector3 spawnPos = GetWeaponTipPosition();
-        // 让剑光落在玩家前方攻击范围内（而非贴角色），偏移量可调
-        spawnPos += transform.forward * slashForwardOffset;
-
         // 剑光角度跟随连招挥砍方向：第一刀左上→右下，第二刀右下→左上，第三刀居中。
         // 剑光一出现就是完整、固定斜角的一条弧，而不是从零放大绕竖直轴甩出。
         float yaw;
@@ -707,6 +703,12 @@ public class PlayerController : MonoBehaviour
         if (slashSwingDirection != 0) yaw = slashSwingDirection * 45f; // 手动覆盖方向
 
         Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
+
+        // 从玩家模型正前方出去（而非剑尾/剑尖），并让偏移方向也带上挥砍角度：
+        // 沿 spawnRot 的前方向推出，剑光落在对应斜角的攻击范围内而不是直直横向出去。
+        // 高度取剑所在高度，保证剑光出现在角色持剑的位置。
+        Vector3 spawnPos = transform.position + Vector3.up * (weaponPivot.position.y - transform.position.y);
+        spawnPos += spawnRot * Vector3.forward * slashForwardOffset;
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
 

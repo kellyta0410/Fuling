@@ -40,10 +40,15 @@ public class JiangshiEnemy : EnemyAI
     private GameObject endMarker;
     private MeshRenderer endMarkerRenderer;
 
+    // 动画 root motion 的 Y（跳跃离地）会作用在子模型上；根节点 XZ 由 NavMeshAgent 驱动。
+    private Transform visualModel;
+
     protected override void OnStart()
     {
         base.OnStart();
         blinkState = BlinkState.Chasing;
+        if (transform.childCount > 0)
+            visualModel = transform.GetChild(0);
 
         // 僵尸碰撞体 1.6×1.4 + 玩家 CC 半径 0.8 → 至少需 1.6m 才不重叠。
         // 通用 stoppingDistance(攻击范围×0.5) 只有 1.1m，会挤进玩家体积顶动玩家(CC depenetrate)，
@@ -353,6 +358,35 @@ public class JiangshiEnemy : EnemyAI
         dir.y = 0;
         if (dir != Vector3.zero)
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 10f * Time.deltaTime);
+    }
+
+    // 开启 ApplyRootMotion 后由动画回调：把动画 root 的 Y（跳跃离地）体现到子模型上，
+    // 根节点位置/朝向仍由 NavMeshAgent 控制，避免跳跃同时被 agent 拉回地面、也不干扰寻路。
+    // 用"覆盖式"而非累积（+=）：跳跃动画循环接缝的 root Y 不严格归位，累积几圈会持续下沉。
+    private int lastAnimStateHash = 0;
+    private float jumpBaseRootY = 0f;
+    private bool jumpBaseValid = false;
+
+    private void OnAnimatorMove()
+    {
+        if (visualModel == null || animator == null) return;
+
+        // 进入新动画状态时重置基线（动画 root 位置从新 clip 起点重新累计）
+        AnimatorStateInfo si = animator.GetCurrentAnimatorStateInfo(0);
+        if (si.fullPathHash != lastAnimStateHash)
+        {
+            lastAnimStateHash = si.fullPathHash;
+            jumpBaseValid = false;
+        }
+        if (!jumpBaseValid)
+        {
+            jumpBaseRootY = animator.rootPosition.y;
+            jumpBaseValid = true;
+        }
+
+        Vector3 lp = visualModel.localPosition;
+        lp.y = animator.rootPosition.y - jumpBaseRootY;
+        visualModel.localPosition = lp;
     }
 
     protected override void OnDrawGizmosSelected()
