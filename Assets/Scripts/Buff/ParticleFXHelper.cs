@@ -51,7 +51,11 @@ public static class ParticleFXHelper
             shader = Shader.Find("Legacy Shaders/Particles/Additive");
 
         var mat = new Material(shader != null ? shader : Shader.Find("Sprites/Default"));
-        mat.SetTexture("_BaseMap", CreateSoftDotTexture());
+        var softDot = CreateSoftDotTexture();
+        // URP 用 _BaseMap，legacy/Sprites/Default 用 _MainTex：两边都绑，保证任何 fallback 都贴上圆点，
+        // 否则 APK 上 Shader.Find 落空回退到 Sprites/Default 时贴图是空的 → 粒子渲染成白色方块。
+        mat.SetTexture("_BaseMap", softDot);
+        mat.SetTexture("_MainTex", softDot);
         mat.SetColor("_BaseColor", tint * brightness);
         mat.SetColor("_Color", tint * brightness);
         mat.SetFloat("_Surface", 1f); // transparent

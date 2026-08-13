@@ -9,15 +9,15 @@ import checkVersion from './check-version';
 import { launchEventType, scaleMode } from './plugin-config';
 import { preloadWxCommonFont } from './unity-sdk/font/index';
 const managerConfig = {
-    DATA_FILE_MD5: 'b62b450838ff8fbd',
-    CODE_FILE_MD5: '1d01ed2986f43b90',
+    DATA_FILE_MD5: '7e4fcb74730ae5ed',
+    CODE_FILE_MD5: '7f0beb3145eb531e',
     GAME_NAME: 'webgl',
     APPID: 'wx5ebd051fa1107dc6',
-    DATA_FILE_SIZE: '26575317',
+    DATA_FILE_SIZE: '35604658',
     OPT_DATA_FILE_SIZE: '$OPT_DATA_FILE_SIZE',
     DATA_CDN: 'https://kellyta0410.github.io/Fuling/Minigame/webgl/ ',
     // 资源包是否作为小游戏分包加载
-    loadDataPackageFromSubpackage: true,
+    loadDataPackageFromSubpackage: false,
     // 资源包放小游戏分包加载时，是否br压缩
     compressDataPackage: true,
     // 需要在网络空闲时预加载的资源，支持如下形式的路径

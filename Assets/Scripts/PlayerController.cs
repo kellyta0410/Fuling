@@ -817,10 +817,47 @@ public class PlayerController : MonoBehaviour
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
+                // 不穿墙：玩家与敌人之间被竖直墙体(实墙/X-Ray半透明墙)挡住就伤害不到
+                if (IsBlockedByWall(transform.position, enemy.transform.position))
+                    continue;
+
                 enemy.TakeDamageImmediate(attackDamage);
                 enemy.AddKnockback(transform.forward, enemyKnockbackDistance);
             }
         }
+    }
+
+    // 视线检测：从 from 到 to 之间是否有竖直环境墙挡住。
+    // 复用 WallPenetrationResolve 的墙体判定标准（Box/Sphere/Capsule/凸网格，排除触发体/玩家/敌人），
+    // 在攻击命中判定时为每个目标做一次碰撞推核，杜绝"隔墙打人"。
+    private static bool IsBlockedByWall(Vector3 from, Vector3 to)
+    {
+        Vector3 dir = to - from;
+        float dist = dir.magnitude;
+        if (dist <= 0.01f) return false;
+        dir /= dist;
+
+        RaycastHit[] hits = Physics.RaycastAll(from, dir, dist);
+        foreach (RaycastHit hit in hits)
+        {
+            if (!IsWallBlocking(hit.collider)) continue;
+            // 顶点正好贴着墙/敌人时允许（距离趋近0）
+            if (hit.distance >= dist - 0.05f) continue;
+            return true;
+        }
+        return false;
+    }
+
+    // 判定该碰撞体是否算"阻挡攻击的竖直墙"：与 WallPenetrationResolve.IsWall 同口径
+    private static bool IsWallBlocking(Collider c)
+    {
+        if (c == null) return false;
+        if (c.isTrigger) return false;
+        if (c.GetComponentInParent<PlayerController>() != null) return false;
+        if (c.GetComponentInParent<EnemyAI>() != null) return false;
+
+        bool convexMesh = (c is MeshCollider) && (c as MeshCollider).convex;
+        return (c is BoxCollider) || (c is SphereCollider) || (c is CapsuleCollider) || convexMesh;
     }
 
     // ==================== 技能攻击 ====================
@@ -907,6 +944,10 @@ public class PlayerController : MonoBehaviour
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
+                // 不穿墙：技能伤害同样受墙体视线遮挡
+                if (IsBlockedByWall(transform.position, enemy.transform.position))
+                    continue;
+
                 enemy.TakeDamageImmediate(damage);
                 enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 1.5f);
                 Debug.Log($"技能攻击 {enemy.name}，造成 {damage} 伤害");
@@ -937,7 +978,8 @@ public class PlayerController : MonoBehaviour
 
     void PerformDodge()
     {
-        if (!canDodge || isDead || isDying || isDodging) return;
+        // 攻击/技能期间禁止闪避：闪避会覆盖 currentSpeed 造成位移，绕过攻击锁定
+        if (!canDodge || isDead || isDying || isDodging || isAttacking || isUsingSkill) return;
 
         Vector3 dir = GetMoveDirection(inputVector);
         if (dir.magnitude < 0.1f) dir = transform.forward;
