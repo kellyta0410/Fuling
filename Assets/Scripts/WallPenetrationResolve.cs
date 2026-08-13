@@ -74,6 +74,34 @@ public static class WallPenetrationResolve
         return moved;
     }
 
+    /// <summary>
+    /// 视线检测：from 到 to 之间是否被竖直环境墙挡住（命中判定用，敌我通用）。
+    /// 与 IsWall 同口径：排除触发器/玩家/敌人，只认 Box/Sphere/Capsule/凸网格。
+    /// </summary>
+    public static bool IsBlockedBetween(Vector3 from, Vector3 to)
+    {
+        Vector3 dir = to - from;
+        float dist = dir.magnitude;
+        if (dist <= 0.01f) return false;
+        dir /= dist;
+
+        RaycastHit[] hits = Physics.RaycastAll(from, dir, dist);
+        foreach (RaycastHit hit in hits)
+        {
+            Collider c = hit.collider;
+            if (c == null || c.isTrigger) continue;
+            if (c.GetComponentInParent<PlayerController>() != null) continue;
+            if (c.GetComponentInParent<EnemyAI>() != null) continue;
+
+            bool convexMesh = (c is MeshCollider) && (c as MeshCollider).convex;
+            if (!(c is BoxCollider) && !(c is SphereCollider) && !(c is CapsuleCollider) && !convexMesh)
+                continue;
+            if (hit.distance >= dist - 0.05f) continue;
+            return true;
+        }
+        return false;
+    }
+
     // 判定是不是"环境阻挡墙"：触发体/自身子物体/玩家/敌人/不可解析的墙体都排除
     private static bool IsWall(Collider mover, Collider c, Transform selfRoot)
     {

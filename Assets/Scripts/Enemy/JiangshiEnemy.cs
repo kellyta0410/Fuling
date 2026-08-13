@@ -9,6 +9,7 @@ public class JiangshiEnemy : EnemyAI
     private float stateTimer = 0f;
     private bool hasPrepared = false;
     private bool hasAttacked = false;
+    private Vector3 lockedFacingDir = Vector3.zero;  // 蓄力开始时锁定朝向（身体 + 指示线共用）
 
     [Header("瞬移参数")]
     [Tooltip("大于此距离才会瞬移（远距离用瞬移接近）")]
@@ -29,16 +30,13 @@ public class JiangshiEnemy : EnemyAI
     [Header("地面指示特效")]
     [Tooltip("是否显示地面指示")]
     public bool showGroundIndicator = true;
-    [Tooltip("指示线开始颜色（蓄力开始时）")]
-    public Color startColor = Color.green;
-    [Tooltip("指示线结束颜色（蓄力完成时）")]
+    [Tooltip("指示方块颜色（全红）")]
     public Color endColor = Color.red;
-    [Tooltip("指示线宽度")]
-    public float indicatorWidth = 0.2f;
-    [Tooltip("指示线高度（贴地）")]
+    [Tooltip("指示方块的边长(米)")]
+    public float indicatorSize = 1.0f;
+    [Tooltip("指示方块高度（贴地）")]
     public float indicatorHeight = 0.05f;
 
-    private LineRenderer lineRenderer;
     private GameObject endMarker;
     private MeshRenderer endMarkerRenderer;
 
@@ -69,29 +67,17 @@ public class JiangshiEnemy : EnemyAI
 
     private void CreateGroundIndicator()
     {
-        GameObject lineObj = new GameObject("BlinkIndicator_Line");
-        lineObj.transform.SetParent(transform);
-        lineObj.transform.localPosition = Vector3.zero;
-
-        lineRenderer = lineObj.AddComponent<LineRenderer>();
-        lineRenderer.positionCount = 2;
-        lineRenderer.startWidth = indicatorWidth;
-        lineRenderer.endWidth = indicatorWidth;
-        lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        lineRenderer.startColor = startColor;
-        lineRenderer.endColor = startColor;
-        lineRenderer.sortingOrder = 10;
-        lineRenderer.enabled = false;
-
-        endMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        endMarker.name = "BlinkIndicator_End";
+        // 正方块指示器：平铺在地面上，表示瞬移落点区域，随蓄力进度在锁定方向上推进变大
+        endMarker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        endMarker.name = "BlinkIndicator_Square";
         endMarker.transform.SetParent(transform);
-        endMarker.transform.localScale = new Vector3(0.3f, 0.05f, 0.3f);
+        endMarker.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // 平铺贴地
+        endMarker.transform.localScale = new Vector3(indicatorSize, indicatorHeight, indicatorSize);
         Destroy(endMarker.GetComponent<Collider>());
 
         endMarkerRenderer = endMarker.GetComponent<MeshRenderer>();
         endMarkerRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        endMarkerRenderer.material.color = startColor;
+        endMarkerRenderer.material.color = endColor; // 全红
         endMarker.SetActive(false);
     }
 
@@ -151,6 +137,7 @@ public class JiangshiEnemy : EnemyAI
                     stateTimer = 0f;
                     hasPrepared = false;
                     hasAttacked = false;
+                    lockedFacingDir = GetLockedFacingDir();
                     StopAgent();
 
                     if (showGroundIndicator)
@@ -163,11 +150,11 @@ public class JiangshiEnemy : EnemyAI
 
             case BlinkState.Preparing:
                 StopAgent();
-                RotateTowardPlayer();
+                RotateToLockedFacing();
 
                 stateTimer += Time.deltaTime;
 
-                if (showGroundIndicator && lineRenderer != null)
+                if (showGroundIndicator && endMarker != null)
                 {
                     UpdateGroundIndicator();
                 }
@@ -272,20 +259,12 @@ public class JiangshiEnemy : EnemyAI
 
     private void ShowGroundIndicator()
     {
-        if (lineRenderer != null)
-        {
-            lineRenderer.enabled = true;
-            lineRenderer.SetPosition(0, GetGroundPosition(transform.position));
-            lineRenderer.SetPosition(1, GetGroundPosition(transform.position));
-            lineRenderer.startColor = startColor;
-            lineRenderer.endColor = startColor;
-        }
-
         if (endMarker != null)
         {
             endMarker.SetActive(true);
             endMarker.transform.position = GetGroundPosition(transform.position);
-            endMarkerRenderer.material.color = startColor;
+            endMarkerRenderer.material.color = endColor; // 全红
+            endMarker.transform.localScale = new Vector3(0.001f, indicatorHeight, 0.001f); // 从没有开始
         }
     }
 
@@ -293,40 +272,28 @@ public class JiangshiEnemy : EnemyAI
     {
         float progress = Mathf.Clamp01(stateTimer / prepareDuration);
 
-        Vector3 startPos = GetGroundPosition(transform.position);
-
-        // ⭐ 计算瞬移目标方向（朝向玩家）
-        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+        // ⭐ 计算瞬移目标方向：使用蓄力开始锁定的方向，蓄力全程不随玩家移动改变
+        Vector3 directionToPlayer = lockedFacingDir != Vector3.zero
+            ? lockedFacingDir
+            : (player.transform.position - transform.position).normalized;
         float currentDistance = Vector3.Distance(transform.position, player.transform.position);
         float blinkDistance = currentDistance - distanceToPlayerAfterBlink;
         blinkDistance = Mathf.Max(blinkDistance, 0);
 
+        // 方块在锁定方向上从脚下推进到瞬移落点
         Vector3 endPos = GetGroundPosition(transform.position + directionToPlayer * blinkDistance * progress);
-
-        lineRenderer.SetPosition(0, startPos);
-        lineRenderer.SetPosition(1, endPos);
-
-        Color currentColor = Color.Lerp(startColor, endColor, progress);
-        lineRenderer.startColor = currentColor;
-        lineRenderer.endColor = currentColor;
-
-        float currentWidth = indicatorWidth * (0.5f + 0.5f * progress);
-        lineRenderer.startWidth = currentWidth;
-        lineRenderer.endWidth = currentWidth;
 
         if (endMarker != null)
         {
             endMarker.transform.position = endPos;
-            endMarkerRenderer.material.color = currentColor;
-            float scale = 0.2f + 0.4f * progress;
-            endMarker.transform.localScale = new Vector3(scale, 0.05f, scale);
+            // 全红，尺寸随进度从无(几乎0)填满到 indicatorSize
+            float scale = Mathf.Lerp(0.001f, indicatorSize, progress);
+            endMarker.transform.localScale = new Vector3(scale, indicatorHeight, scale);
         }
     }
 
     private void HideGroundIndicator()
     {
-        if (lineRenderer != null)
-            lineRenderer.enabled = false;
         if (endMarker != null)
             endMarker.SetActive(false);
     }
@@ -406,6 +373,22 @@ public class JiangshiEnemy : EnemyAI
         dir.y = 0;
         if (dir != Vector3.zero)
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 10f * Time.deltaTime);
+    }
+
+    // 蓄力开始时锁定朝向：面对蓄力瞬间玩家的方向，后续蓄力全程不跟随玩家转动
+    private Vector3 GetLockedFacingDir()
+    {
+        if (player == null) return transform.forward;
+        Vector3 dir = (player.transform.position - transform.position).normalized;
+        dir.y = 0;
+        return dir != Vector3.zero ? dir : transform.forward;
+    }
+
+    // 蓄力期间朝锁定方向转向（一次到位，不随玩家变）
+    private void RotateToLockedFacing()
+    {
+        if (lockedFacingDir == Vector3.zero) lockedFacingDir = GetLockedFacingDir();
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lockedFacingDir), 10f * Time.deltaTime);
     }
 
     // 开启 ApplyRootMotion 后由动画回调：把动画 root 的 Y（跳跃离地）体现到子模型上，

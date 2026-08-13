@@ -828,7 +828,9 @@ Vector3 center = player.transform.position;
         {
             float dist = Vector3.Distance(transform.position, player.transform.position);
             float attackRangeValue = GetAttackActivationRange();
-            if (dist <= attackRangeValue && IsFacingPlayer())
+            // 不穿墙：敌人到玩家之间被竖直墙体(实墙/X-Ray半透明墙)挡就伤害不到
+            if (dist <= attackRangeValue && IsFacingPlayer() &&
+                !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));
