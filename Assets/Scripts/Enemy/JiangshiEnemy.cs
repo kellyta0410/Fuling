@@ -11,18 +11,20 @@ public class JiangshiEnemy : EnemyAI
     private bool hasAttacked = false;
 
     [Header("瞬移参数")]
-    [Tooltip("进入此距离时开始蓄力停顿")]
+    [Tooltip("大于此距离才会瞬移（远距离用瞬移接近）")]
     public float prepareDistance = 6f;
     [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 1.0f;
     [Tooltip("瞬移后距离玩家多远（数值越小越贴脸）")]
     public float distanceToPlayerAfterBlink = 1.5f;
-    [Tooltip("小于此距离时直接攻击（不瞬移）")]
+    [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
     [Tooltip("指示线满后到瞬移前的停顿时间（秒）")]
     public float postBlinkDelay = 0.2f;
     [Tooltip("瞬移冷却时间（秒）")]
     public float blinkCooldown = 2.5f;
+    [Tooltip("瞬移会被哪些层挡住（默认 Wall 层）。有墙挡着就不会瞬移，改为绕墙走过去")]
+    public LayerMask blinkObstacleMask = 1 << 6;
 
     [Header("地面指示特效")]
     [Tooltip("是否显示地面指示")]
@@ -108,32 +110,43 @@ public class JiangshiEnemy : EnemyAI
         switch (blinkState)
         {
             case BlinkState.Chasing:
-                // ⭐ 如果距离很近（贴脸），直接攻击，不瞬移
-                if (distance <= directAttackDistance && canAttack && !isAttacking)
+                // ⭐ 近距离：直接走过去打，不瞬移
+                if (distance <= prepareDistance)
                 {
-                    StopAgent();
-                    RotateTowardPlayer();
-                    if (IsFacingPlayer())
+                    if (distance > enemyData.attackRange)
                     {
-                        PerformAttack();
+                        if (isAgentValid)
+                        {
+                            agent.isStopped = false;
+                            agent.SetDestination(player.transform.position);
+                        }
+                    }
+                    else
+                    {
+                        StopAgent();
+                        RotateTowardPlayer();
+                        if (canAttack && !isAttacking && IsFacingPlayer())
+                        {
+                            PerformAttack();
+                        }
                     }
                     return;
                 }
 
-                // ⭐ 正常追击
-                if (distance > prepareDistance + 0.5f)
+                // ⭐ 远距离：只在无墙遮挡时瞬移接近（蓄力 → 指示 → 瞬移到玩家面前 → 攻击）。
+                // 有墙挡着就继续绕墙追击，等玩家出墙再瞬移。
+                if (distance > prepareDistance && !isAttacking && blinkState == BlinkState.Chasing)
                 {
-                    if (isAgentValid)
+                    if (!HasClearLineToPlayer())
                     {
-                        agent.isStopped = false;
-                        agent.SetDestination(player.transform.position);
+                        if (isAgentValid)
+                        {
+                            agent.isStopped = false;
+                            agent.SetDestination(player.transform.position);
+                        }
+                        return;
                     }
-                }
 
-                // ⭐ 进入蓄力（距离在 prepareDistance 和 directAttackDistance 之间）
-                if (distance <= prepareDistance && distance > directAttackDistance &&
-                    !isAttacking && blinkState == BlinkState.Chasing)
-                {
                     blinkState = BlinkState.Preparing;
                     stateTimer = 0f;
                     hasPrepared = false;
@@ -144,6 +157,7 @@ public class JiangshiEnemy : EnemyAI
                     {
                         ShowGroundIndicator();
                     }
+                    return;
                 }
                 break;
 
@@ -156,6 +170,15 @@ public class JiangshiEnemy : EnemyAI
                 if (showGroundIndicator && lineRenderer != null)
                 {
                     UpdateGroundIndicator();
+                }
+
+                // ⭐ 蓄力过程中玩家躲到墙后：取消蓄力，回到追击
+                if (!HasClearLineToPlayer())
+                {
+                    HideGroundIndicator();
+                    blinkState = BlinkState.Chasing;
+                    stateTimer = 0f;
+                    return;
                 }
 
                 // ⭐ 蓄力过程中如果玩家靠近到直接攻击距离，取消蓄力直接攻击
@@ -192,6 +215,14 @@ public class JiangshiEnemy : EnemyAI
                 stateTimer += Time.deltaTime;
                 if (stateTimer >= postBlinkDelay)
                 {
+                    // 瞬移前最后校验：玩家已躲到墙后或瞬移路径被墙挡，就放弃瞬移
+                    if (!HasClearLineToPlayer())
+                    {
+                        HideGroundIndicator();
+                        blinkState = BlinkState.Chasing;
+                        stateTimer = 0f;
+                        return;
+                    }
                     PerformBlinkToPlayer();
                     blinkState = BlinkState.PostBlink;
                     stateTimer = 0f;
@@ -308,6 +339,23 @@ public class JiangshiEnemy : EnemyAI
             return new Vector3(position.x, hit.point.y + indicatorHeight, position.z);
         }
         return new Vector3(position.x, indicatorHeight, position.z);
+    }
+
+    /// <summary>
+    /// 视线检测：敌人到玩家之间是否有墙（blinkObstacleMask）阻挡。
+    /// 从敌人胸口高度向玩家胸口发射射线，命中障碍即返回 false（不能瞬移/取消瞬移）。
+    /// </summary>
+    private bool HasClearLineToPlayer()
+    {
+        if (player == null) return false;
+
+        Vector3 from = transform.position + Vector3.up * 1.4f;
+        Vector3 to = player.transform.position + Vector3.up * 1.4f;
+        Vector3 dir = to - from;
+        float dist = dir.magnitude;
+        if (dist <= 0.01f) return true;
+
+        return !Physics.Raycast(from, dir / dist, dist, blinkObstacleMask);
     }
 
     /// <summary>

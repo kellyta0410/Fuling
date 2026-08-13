@@ -34,6 +34,8 @@ public class PlayerController : MonoBehaviour
     [Header("攻击特效")]
     [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
     public GameObject attackVFXPrefab;
+    [Tooltip("技能攻击时生成的特效预制体（如 SlashVFX 横劈版）")]
+    public GameObject skillVFXPrefab;
     [Tooltip("武器挂点（留空则运行时按名字 coin sword 2 自动查找）")]
     public Transform weaponPivot;
     [Tooltip("挥砍特效：前段从微缩撑到全尺寸所占动画时长的比例(0~1)。越小挥得越快")]
@@ -691,8 +693,7 @@ public class PlayerController : MonoBehaviour
     {
         if (attackVFXPrefab == null || weaponPivot == null) return;
 
-        // 剑光角度跟随连招挥砍方向：第一刀左上→右下，第二刀右下→左上，第三刀居中。
-        // 剑光一出现就是完整、固定斜角的一条弧，而不是从零放大绕竖直轴甩出。
+        // 剑光角度在发起攻击时确定（协程延迟后 comboIndex 可能已切到下一招）
         float yaw;
         switch (comboIndex)
         {
@@ -702,13 +703,32 @@ public class PlayerController : MonoBehaviour
         }
         if (slashSwingDirection != 0) yaw = slashSwingDirection * 45f; // 手动覆盖方向
 
+        // 剑光出现在动画中段（命中帧附近），位置在玩家正前方中间、对齐剑尖朝向。
+        StartCoroutine(SpawnAttackVFXDelayed(stateName, yaw));
+    }
+
+    IEnumerator SpawnAttackVFXDelayed(string stateName, float yaw)
+    {
+        // 等一帧让 Animator 切到新攻击状态，再取动画总时长计算"中段"延迟
+        yield return null;
+        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+        float total = info.shortNameHash == Animator.StringToHash(stateName)
+            ? info.length
+            : attackDuration;
+        if (total <= 0.01f) total = attackDuration;
+
+        // 动画中段出现（可让命中帧与剑光同步；如果动画还没切到该状态就按固定比例兜底）
+        yield return new WaitForSeconds(Mathf.Max(total * 0.5f, attackDamageDelay));
+
+        // 若攻击已经结束（例如连击被更快输入打断），就不再生成
+        if (!isAttacking) yield break;
+
         Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
 
-        // 从玩家模型正前方出去（而非剑尾/剑尖），并让偏移方向也带上挥砍角度：
-        // 沿 spawnRot 的前方向推出，剑光落在对应斜角的攻击范围内而不是直直横向出去。
-        // 高度取剑所在高度，保证剑光出现在角色持剑的位置。
-        Vector3 spawnPos = transform.position + Vector3.up * (weaponPivot.position.y - transform.position.y);
-        spawnPos += spawnRot * Vector3.forward * slashForwardOffset;
+        // 位置：玩家正前方中间，对齐剑尖（刀尖）的高度与朝向。
+        Vector3 tip = GetWeaponTipPosition();
+        Vector3 spawnPos = transform.position + Vector3.up * (tip.y - transform.position.y);
+        spawnPos += transform.forward * slashForwardOffset;
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
 
@@ -826,6 +846,41 @@ public class PlayerController : MonoBehaviour
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         StartCoroutine(DelayedSkillDamage(finalDamage));
+        SpawnSkillVFX();
+    }
+
+    // 技能横劈特效：出现在玩家正前方中间，剑光横着（绕竖直轴 90°）劈向正前方。
+    void SpawnSkillVFX()
+    {
+        if (skillVFXPrefab == null) return;
+
+        // 延迟到技能动画中段出现（和命中帧对齐）
+        StartCoroutine(SpawnSkillVFXDelayed());
+    }
+
+    IEnumerator SpawnSkillVFXDelayed()
+    {
+        yield return null;
+        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+        float total = info.IsName("Skill Attack") ? info.length : skillDuration;
+        if (total <= 0.01f) total = skillDuration;
+        yield return new WaitForSeconds(Mathf.Max(total * 0.5f, skillDamageDelay));
+
+        if (!isUsingSkill) yield break;
+
+        // 横劈：剑光平面绕竖直轴转 90°，从横向前方横向劈出
+        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, 90f, 0f);
+
+        Vector3 tip = weaponPivot != null ? GetWeaponTipPosition() : transform.position + Vector3.up;
+        Vector3 spawnPos = transform.position + Vector3.up * (tip.y - transform.position.y);
+        spawnPos += transform.forward * slashForwardOffset;
+
+        GameObject vfx = Instantiate(skillVFXPrefab, spawnPos, spawnRot);
+        vfx.transform.SetParent(transform, true);
+
+        // 技能播完销毁
+        yield return new WaitForSeconds(Mathf.Max(total, 0.1f));
+        if (vfx != null) Destroy(vfx);
     }
 
     // 接管 root motion：按当前动画状态决定是否应用动画自带的旋转。
