@@ -53,7 +53,7 @@ MonoBehaviour:
     type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
-  healthBarOffset: {x: 0, y: 1.5, z: 0}
+  healthBarOffset: {x: 0, y: 3.5, z: 0}
   fullHealthColor: {r: 0, g: 1, b: 0, a: 1}
   midHealthColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   lowHealthColor: {r: 1, g: 0, b: 0, a: 1}
@@ -66,9 +66,9 @@ MonoBehaviour:
   enableApproachBrake: 1
   approachBrakeRange: 1.5
   approachStopSpeed: 0
-  facingAngleThreshold: 45
+  facingAngleThreshold: 60
   turnSpeed: 240
-  detectionRange: 18
+  detectionRange: 20
   loseTargetRange: 25
   infiniteDetectionRange: 30
   infiniteLoseTargetRange: 40
@@ -106,7 +106,7 @@ Animator:
   m_Controller: {fileID: 9100000, guid: b4a3196b700d42cfaecfe2e9c8a0c980, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
-  m_ApplyRootMotion: 0
+  m_ApplyRootMotion: 1
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_WarningMessage: 
@@ -155,8 +155,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2.2683449, y: 3.7663794, z: 2.5419083}
-  m_Center: {x: -0.012434006, y: 1.8888698, z: 0.447649}
+  m_Size: {x: 1.6, y: 3.2, z: 1.4}
+  m_Center: {x: 0, y: 1.8, z: 0}
 --- !u!1001 &7177204590032231517
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -245,7 +245,8 @@ PrefabInstance:
       propertyPath: m_Name
       value: JiangShi jumping
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 5866666021909216657, guid: e300e50dbb9140a41be13169a5314569, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents: []

@@ -132,10 +132,24 @@ public abstract class EnemyAI : MonoBehaviour
     [Header("所属Tile")]
     public Tile ownerTile;
 
+    // Animator 是否有 IsChasing 参数（仅 JiangShiMovement.controller 有，蛇等 controller 无此参数）
+    private bool hasIsChasingParam = false;
+
     // ---------- 生命周期 ----------
     protected virtual void Start()
     {
         animator = GetComponent<Animator>();
+        if (animator != null)
+        {
+            foreach (AnimatorControllerParameter p in animator.parameters)
+            {
+                if (p.name == "IsChasing")
+                {
+                    hasIsChasingParam = true;
+                    break;
+                }
+            }
+        }
         player = FindObjectOfType<PlayerController>();
         agent = GetComponent<NavMeshAgent>();
         myCollider = GetComponent<Collider>();
@@ -292,6 +306,7 @@ public abstract class EnemyAI : MonoBehaviour
 
         if (player == null || player.IsDead())
         {
+            isChasing = false;
             StopAgent();
             UpdateAnimations(0f, false);
             return;
@@ -1103,6 +1118,7 @@ Vector3 center = player.transform.position;
 
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsMoving", isMoving);
+        if (hasIsChasingParam) animator.SetBool("IsChasing", isChasing);
     }
 
     protected void IdleRotation()
