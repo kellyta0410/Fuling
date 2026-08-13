@@ -489,16 +489,11 @@ public class PlayerController : MonoBehaviour
             else if (next.IsName("Skill Attack") && next.length > 0.01f)
                 safetyCap = next.length + 0.5f;
 
-            // 技能是 360° 全方位攻击：按动画进度平滑自转一周，播完正好回到起手朝向。
-            float spinDuration = Mathf.Max(safetyCap, 0.01f);
-            float t = Mathf.Clamp01(skillTimer / spinDuration);
-            float angle = Mathf.Lerp(0f, 360f, t);
-            transform.rotation = skillStartRotation * Quaternion.Euler(0f, angle, 0f);
-
             if (!skillActive || skillTimer >= safetyCap)
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
+                animator.applyRootMotion = false;
                 // 技能播放完，恢复起始朝向
                 transform.rotation = skillStartRotation;
             }
@@ -817,6 +812,9 @@ public class PlayerController : MonoBehaviour
         isUsingSkill = true;
         skillTimer = 0f;
         skillStartRotation = transform.rotation;
+        // 技能期间打开 root motion：让 Animator 计算动画自带旋转（deltaRotation），
+        // OnAnimatorMove 里只对技能状态应用旋转；结束后关回。
+        animator.applyRootMotion = true;
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -828,11 +826,16 @@ public class PlayerController : MonoBehaviour
         StartCoroutine(DelayedSkillDamage(finalDamage));
     }
 
-    // 接管 root motion：完全丢弃位置与旋转（技能 360° 自转由代码平滑驱动，不依赖 root motion）。
-    // 定义此回调后 Animator 不再自动应用 root motion，动画只提供动作不影响移动。
+    // 接管 root motion：按当前动画状态决定是否应用动画自带的旋转。
+    // - 技能（Skill Attack，360° 转圈）：应用动画旋转，丢弃位移
+    // - 普通攻击/移动：位置、旋转全部丢弃（固定朝向）
+    // 前提：需要动画旋转的状态必须临时把 applyRootMotion 置 true，否则 deltaRotation 恒为 0。
     private void OnAnimatorMove()
     {
-        // 空实现：位置、旋转全部丢弃
+        AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+        if (state.IsName("Skill Attack"))
+            transform.rotation *= animator.deltaRotation;
+        // 其他状态：丢弃位置和旋转
     }
 
     IEnumerator DelayedSkillDamage(int damage)

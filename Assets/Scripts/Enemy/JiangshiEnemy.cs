@@ -45,6 +45,15 @@ public class JiangshiEnemy : EnemyAI
         base.OnStart();
         blinkState = BlinkState.Chasing;
 
+        // 僵尸碰撞体 1.6×1.4 + 玩家 CC 半径 0.8 → 至少需 1.6m 才不重叠。
+        // 通用 stoppingDistance(攻击范围×0.5) 只有 1.1m，会挤进玩家体积顶动玩家(CC depenetrate)，
+        // 这里覆盖为 ≥ 碰撞不重叠距离，保证追击全程不把碰撞体扫进玩家。
+        if (isAgentValid && agent != null)
+        {
+            agent.stoppingDistance = Mathf.Max(agent.stoppingDistance, 1.7f);
+            agent.autoBraking = true;
+        }
+
         if (showGroundIndicator)
         {
             CreateGroundIndicator();
