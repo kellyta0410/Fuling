@@ -496,8 +496,9 @@ public class PlayerController : MonoBehaviour
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        // 攻击/技能/闪避期间锁死朝向与位移（原地挥击），避免跑动中攻击滑步
-        if (moveDir.magnitude > 0.1f && !isDodging && !isAttacking && !isUsingSkill)
+        // 攻击/普通移动时都朝输入方向转向（跟手）；技能期间方向键不介入（Skill Attack 是 360° 全方位动画，由动画自带旋转主导）。
+        // 只有闪避锁死朝向（闪避有固定方向）。
+        if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -799,36 +800,31 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
-        animator.SetTrigger("SkillAction");
-        // 技能开启 root motion 让动画的 360° 旋转可传入 OnAnimatorMove，
-        // 由 OnAnimatorMove 只取旋转、丢弃位移（防滑步）。
-        animator.applyRootMotion = true;
+        // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
+        // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
+        // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
+        animator.ResetTrigger("SkillAction");
+        animator.CrossFade("Skill Attack", 0.08f, 0);
+        Debug.Log($"[技能] PerfmSkillAttack 触发");
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         StartCoroutine(DelayedSkillDamage(finalDamage));
     }
 
-    // 接管 root motion：使用 OnAnimatorMove 后 Unity 不会自动应用动画位移/旋转。
-    // 技能期间只应用 deltaRotation（360° 转圈），丢弃 deltaPosition 避免滑步；
-    // 普通移动/攻击完全不用 root motion（位移全由 CharacterController 驱动）。
+    // 接管 root motion：只应用动画自带的旋转（360° 技能转圈），不应用位移（位置锁死、转向由输入控制）。
+    // 定义此回调后 Animator 不再自动应用 root motion，动画只提供动作不影响移动。
     private void OnAnimatorMove()
     {
-        if (animator == null) return;
-
-        if (isUsingSkill)
-        {
-            transform.rotation *= animator.deltaRotation;
-        }
+        // 只保留旋转，丢弃位移 root motion
+        transform.rotation *= animator.deltaRotation;
     }
 
     IEnumerator DelayedSkillDamage(int damage)
     {
         yield return new WaitForSeconds(skillDamageDelay);
 
-        Collider[] hitColliders = Physics.OverlapSphere(
-            transform.position + transform.forward * skillRange * 0.5f,
-            skillRange
-        );
+        // 以角色为中心的全方位球形判定（360° 旋转技能，前后左右对称）
+        Collider[] hitColliders = Physics.OverlapSphere(transform.position, skillRange);
 
         foreach (Collider hit in hitColliders)
         {

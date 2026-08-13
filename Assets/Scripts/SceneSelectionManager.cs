@@ -110,6 +110,7 @@ public class SceneSelectionManager : MonoBehaviour
         if (gameDataManager != null)
         {
             RefreshAllUI();
+            SetupNormalModeButton(); // 游戏结束返回时刷新普通按钮解锁状态
         }
     }
 
@@ -366,7 +367,15 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void SelectNormal()
     {
-        ShowHint("普通模式正在开发中");
+        if (gameDataManager == null) return;
+
+        if (!gameDataManager.IsNormalUnlocked)
+        {
+            ShowHint("先完成一局【简单】模式即可解锁！");
+            return;
+        }
+
+        SelectDifficulty(normalConfig, "普通");
     }
 
     public void SelectHard()
@@ -565,19 +574,22 @@ public class SceneSelectionManager : MonoBehaviour
         return gameDataManager;
     }
 
-    // ==================== 普通模式按钮（未开放） ====================
+    // ==================== 普通模式按钮（玩过一局简单才解锁） ====================
 
     void SetupNormalModeButton()
     {
         if (normalModeButton == null) return;
 
-        // 保持可点击（用于弹提示），但外观置灰，看起来像禁用
         normalModeButton.onClick.RemoveListener(SelectNormal);
         normalModeButton.onClick.AddListener(SelectNormal);
 
+        bool unlocked = gameDataManager != null && gameDataManager.IsNormalUnlocked;
+
         normalModeButton.interactable = true;
         if (normalModeButton.targetGraphic != null)
-            normalModeButton.targetGraphic.color = new Color(0.55f, 0.55f, 0.55f, 0.7f);
+            normalModeButton.targetGraphic.color = unlocked
+                ? new Color(1f, 1f, 1f, 1f)
+                : new Color(0.55f, 0.55f, 0.55f, 0.7f);
     }
 
     // ==================== 提示气泡 ====================

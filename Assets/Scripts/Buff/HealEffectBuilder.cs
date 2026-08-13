@@ -4,8 +4,8 @@ using UnityEngine;
 // 不使用 VFX Graph，纯 ParticleSystem 运行时构建，避免依赖出问题的 .vfx 资产。
 public class HealEffectBuilder : MonoBehaviour
 {
-    public float effectDuration = 1.1f;
-    public float columnHeight = 3.4f;      // 光柱往上冲到的高度
+    public float effectDuration = 1.2f;
+    public float columnHeight = 4.4f;      // 光柱往上冲到的高度
     public Color glowColor = new Color(0.2f, 0.9f, 0.45f, 1f); // 默认绿（Heal）
 
     // 由外部按 buff 类型设置颜色后调用；Awake 不自动构建，避免用默认色
@@ -26,7 +26,7 @@ public class HealEffectBuilder : MonoBehaviour
         main.loop = false;
         main.startLifetime = 0.55f;
         main.startSpeed = 0f;
-        main.startSize = 0.08f;
+        main.startSize = 0.11f;
         main.startColor = glowColor;
         main.simulationSpace = ParticleSystemSimulationSpace.Local;
         main.playOnAwake = false;
@@ -36,13 +36,13 @@ public class HealEffectBuilder : MonoBehaviour
         emission.rateOverTimeMultiplier = 0f;
         emission.SetBursts(new ParticleSystem.Burst[]
         {
-            new ParticleSystem.Burst(0f, 70)
+            new ParticleSystem.Burst(0f, 100)
         });
 
         var shape = ps.shape;
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Donut;
-        shape.radius = 0.55f;
+        shape.radius = 0.75f;
         shape.radiusThickness = 0.7f;
         shape.arc = 360f;
 
@@ -53,8 +53,8 @@ public class HealEffectBuilder : MonoBehaviour
         sizeOverLifetime.enabled = true;
         AnimationCurve grow = new AnimationCurve();
         grow.AddKey(0f, 0.5f);
-        grow.AddKey(0.3f, 1.9f);   // 快速外扩
-        grow.AddKey(1f, 5f);       // 扩大后淡出
+        grow.AddKey(0.3f, 2.3f);   // 快速外扩
+        grow.AddKey(1f, 6.5f);     // 扩大后淡出
         sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, grow);
 
         var colorOverLifetime = ps.colorOverLifetime;
@@ -75,7 +75,7 @@ public class HealEffectBuilder : MonoBehaviour
         main.loop = false;
         main.startLifetime = 0.7f;
         main.startSpeed = 0f;   // 速度交给 velocityOverLifetime 严格控制方向
-        main.startSize = 0.42f;
+        main.startSize = 0.6f;
         main.startColor = glowColor;
         main.simulationSpace = ParticleSystemSimulationSpace.Local;
         main.gravityModifier = 0f;
@@ -86,13 +86,13 @@ public class HealEffectBuilder : MonoBehaviour
         emission.rateOverTimeMultiplier = 0f;
         emission.SetBursts(new ParticleSystem.Burst[]
         {
-            new ParticleSystem.Burst(0f, 180)
+            new ParticleSystem.Burst(0f, 260)
         });
 
         var shape = ps.shape;
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = 0.14f;   // 集中在原地的小半径，成一条线
+        shape.radius = 0.18f;   // 集中在原地的小半径，成一条线
 
         // 严格竖直向上：x/z 为随机双常量(同模式)，y 高速上升
         var velocityOverLifetime = ps.velocityOverLifetime;

@@ -9787,7 +9787,7 @@ ParticleSystem:
     startLifetime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 1
+      scalar: 0.3
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -14550,8 +14550,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 412bd4cf103325d40b51c38ea97d41aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  healEffectPrefab: {fileID: 4524238513981455217, guid: 6335667092bb70f4f99da27bdf7adbd9, type: 3}
-  healEffectLifetime: 2 
+  healEffectPrefab: {fileID: 4524238513981455217, guid: 6335667092bb70f4f99da27bdf7adbd9,
+    type: 3}
+  healEffectLifetime: 2
 --- !u!143 &7594280383301513217
 CharacterController:
   m_ObjectHideFlags: 0
@@ -14598,11 +14599,17 @@ MonoBehaviour:
   gravity: 3.5
   smoothRotation: 10
   attackDuration: 0.5
-  attackDamageDelay: 0.3
+  attackDamageDelay: 0.25
   skillDamageDelay: 0.5
   attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
     type: 3}
   weaponPivot: {fileID: 8674598679725498658}
+  slashGrowAmount: 0.45
+  slashGrowExponent: 1.5
+  slashSwingAngle: 70
+  slashSwingDirection: 0
+  slashForwardOffset: 0.9
+  wallResolveEnabled: 1
   groundLayer:
     serializedVersion: 2
     m_Bits: 8

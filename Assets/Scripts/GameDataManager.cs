@@ -202,6 +202,12 @@ public class GameDataManager : MonoBehaviour
         return record;
     }
 
+    // 普通模式解锁条件：玩过一局"简单"（简单难度有任意记录）
+    public bool IsNormalUnlocked
+    {
+        get => GetRecord("简单").HasRecord;
+    }
+
     public void UpdateRecord(string difficultyName, int coins, int kills, float time)
     {
         GameRecord currentBest = GetRecord(difficultyName);
