@@ -1,6 +1,9 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 
+// Buff 掉落管理器：不再按定时在场景里刷新 Buff，
+// 改为由怪物死亡时随机掉落（EnemyAI.Die() → RandomBuffSpawner.Instance.TryDropBuff）。
+// 掉落物仍是 Buff prefab，拾取方式不变（BuffPickupItem.OnTriggerEnter）。
 public class RandomBuffSpawner : MonoBehaviour
 {
     [System.Serializable]
@@ -11,50 +14,41 @@ public class RandomBuffSpawner : MonoBehaviour
         public int weight = 1;
     }
 
-    [Header("生成配置")]
+    // 供 EnemyAI 静态调用（场景里有且只有一个 Buff Manager）
+    public static RandomBuffSpawner Instance { get; private set; }
+
+    [Header("掉落配置")]
     public BuffEntry[] buffPool;
-    public float spawnRadius = 12f;
-    public float spawnInterval = 6f;
-    public int maxBuffCount = 5;
-    [Tooltip("开局立刻生成的 Buff 数量")]
-    public int initialBuffCount = 2;
-
-    [Header("玩家引用")]
-    public Transform player;
-
-    [Header("碰撞检测优化")]
-    public LayerMask obstacleMask;
-    public LayerMask groundMask;
-    public float checkRadius = 0.8f;
-    public int maxRetries = 10;
+    [Tooltip("怪物死亡时掉落 Buff 的概率（0~1）")]
+    [Range(0f, 1f)]
+    public float buffDropChance = 0.25f;
 
     [Header("自动销毁配置")]
+    public Transform player;
     public float despawnDistance = 30f;
     public float buffLifeTime = 30f;
     public float cleanupInterval = 2f;
 
-    private float timer;
     private float cleanupTimer;
+
+    void Awake()
+    {
+        Instance = this;
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
 
     void Start()
     {
         if (player == null)
             player = GameObject.FindGameObjectWithTag("Player")?.transform;
-
-        for (int i = 0; i < Mathf.Max(0, initialBuffCount); i++) SpawnBuff();
     }
 
     void Update()
     {
-        if (player == null) return;
-
-        timer += Time.deltaTime;
-        if (timer >= spawnInterval)
-        {
-            timer = 0f;
-            SpawnBuff();
-        }
-
         cleanupTimer += Time.deltaTime;
         if (cleanupTimer >= cleanupInterval)
         {
@@ -63,11 +57,41 @@ public class RandomBuffSpawner : MonoBehaviour
         }
     }
 
-    void SpawnBuff()
+    // ⭐ 按概率从 buffPool 中加权随机抽一个 Buff，在死亡位置掉落（像金币一样弹出）
+    // 返回是否真的掉了。表示要不要给 Buff 掉落概率基础上再加一次随机（否）。
+    // 拾取仍然靠 BuffPickupItem：掉落物带 Rigidbody+重力，落地后玩家碰到即拾取。
+    public bool TryDropBuff(Vector3 dropPos)
     {
-        BuffPickupItem[] existing = FindObjectsOfType<BuffPickupItem>();
-        if (existing.Length >= maxBuffCount) return;
+        if (!enabled) return false;
+        if (buffPool == null || buffPool.Length == 0) return false;
+        if (Random.value > buffDropChance) return false;
 
+        BuffDataSO selected = PickRandomBuff();
+        if (selected == null || selected.pickupPrefab == null) return false;
+
+        Vector3 offset = new Vector3(Random.Range(-0.3f, 0.3f), 0.5f, Random.Range(-0.3f, 0.3f));
+        GameObject newBuff = Instantiate(selected.pickupPrefab, dropPos + offset, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
+
+        BuffPickupItem pickup = newBuff.GetComponent<BuffPickupItem>();
+        if (pickup == null) pickup = newBuff.AddComponent<BuffPickupItem>();
+        pickup.buffData = selected;
+
+        AutoDestroyBuff autoDestroy = newBuff.GetComponent<AutoDestroyBuff>();
+        if (autoDestroy == null) autoDestroy = newBuff.AddComponent<AutoDestroyBuff>();
+        autoDestroy.Initialize(buffLifeTime);
+
+        Rigidbody rb = newBuff.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            Vector3 randomDir = new Vector3(Random.Range(-0.5f, 0.5f), 1, Random.Range(-0.5f, 0.5f)).normalized;
+            rb.AddForce(randomDir * 1.5f, ForceMode.Impulse);
+        }
+
+        return true;
+    }
+
+    private BuffDataSO PickRandomBuff()
+    {
         List<BuffEntry> candidates = new List<BuffEntry>();
         int totalWeight = 0;
         foreach (var entry in buffPool)
@@ -78,86 +102,16 @@ public class RandomBuffSpawner : MonoBehaviour
                 totalWeight += entry.weight;
             }
         }
-        if (candidates.Count == 0 || totalWeight == 0) return;
+        if (candidates.Count == 0 || totalWeight == 0) return null;
 
         int randomValue = Random.Range(0, totalWeight);
         int accumulated = 0;
-        BuffDataSO selected = null;
         foreach (var entry in candidates)
         {
             accumulated += entry.weight;
-            if (randomValue < accumulated)
-            {
-                selected = entry.buffData;
-                break;
-            }
+            if (randomValue < accumulated) return entry.buffData;
         }
-        if (selected == null) selected = candidates[0].buffData;
-
-        if (selected.pickupPrefab == null)
-        {
-            Debug.LogWarning($"Buff {selected.buffName} 没有指定 pickupPrefab！");
-            return;
-        }
-
-        Vector3 finalSpawnPos = Vector3.zero;
-        bool foundValidSpot = false;
-
-        for (int i = 0; i < maxRetries; i++)
-        {
-            Vector2 randomCircle = Random.insideUnitCircle * spawnRadius;
-            Vector3 candidatePos = new Vector3(
-                player.position.x + randomCircle.x,
-                player.position.y + 5f,
-                player.position.z + randomCircle.y
-            );
-
-            if (Physics.Raycast(candidatePos, Vector3.down, out RaycastHit hit, 20f, groundMask))
-            {
-                candidatePos.y = hit.point.y + 0.6f;
-            }
-            else
-            {
-                continue;
-            }
-
-            if (!Physics.CheckSphere(candidatePos, checkRadius, obstacleMask))
-            {
-                Vector3 dirToPlayer = (player.position - candidatePos).normalized;
-                float distToPlayer = Vector3.Distance(player.position, candidatePos);
-                if (!Physics.Raycast(candidatePos, dirToPlayer, distToPlayer, obstacleMask))
-                {
-                    finalSpawnPos = candidatePos;
-                    foundValidSpot = true;
-                    break;
-                }
-            }
-        }
-
-        if (!foundValidSpot)
-        {
-            Debug.LogWarning("未找到安全的生成位置，本次跳过生成");
-            return;
-        }
-
-        GameObject newBuff = Instantiate(selected.pickupPrefab, finalSpawnPos, Quaternion.identity);
-        BuffPickupItem pickup = newBuff.GetComponent<BuffPickupItem>();
-        if (pickup == null) pickup = newBuff.AddComponent<BuffPickupItem>();
-        pickup.buffData = selected;
-
-        // 【新增】添加AutoDestroyBuff组件
-        AutoDestroyBuff autoDestroy = newBuff.GetComponent<AutoDestroyBuff>();
-        if (autoDestroy == null) autoDestroy = newBuff.AddComponent<AutoDestroyBuff>();
-        autoDestroy.Initialize(buffLifeTime);
-
-        newBuff.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
-
-        Rigidbody rb = newBuff.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            Vector3 randomDir = new Vector3(Random.Range(-0.5f, 0.5f), 1, Random.Range(-0.5f, 0.5f)).normalized;
-            rb.AddForce(randomDir * 1.5f, ForceMode.Impulse);
-        }
+        return candidates[0].buffData;
     }
 
     void CleanupBuffs()
@@ -165,69 +119,33 @@ public class RandomBuffSpawner : MonoBehaviour
         if (player == null) return;
 
         BuffPickupItem[] buffs = FindObjectsOfType<BuffPickupItem>();
-        List<GameObject> toDestroy = new List<GameObject>();
-
         foreach (var buff in buffs)
         {
             if (buff == null) continue;
 
             float distance = Vector3.Distance(player.position, buff.transform.position);
-
             if (distance > despawnDistance)
             {
-                toDestroy.Add(buff.gameObject);
-                Debug.Log($"销毁远处Buff: {buff.buffData?.buffName ?? "Unknown"} (距离: {distance:F1})");
-            }
-        }
-
-        foreach (var obj in toDestroy)
-        {
-            Destroy(obj);
-        }
-
-        if (toDestroy.Count > 0)
-        {
-            BuffPickupItem[] remaining = FindObjectsOfType<BuffPickupItem>();
-            if (remaining.Length < maxBuffCount)
-            {
-                SpawnBuff();
+                Destroy(buff.gameObject);
             }
         }
     }
 
-    // 由 GameManager 开局调用：按当前难度的设置覆盖 Buff 生产数量与时间。
-    // 场景里的值只是兜底，难度数据优先。
+    // 由 GameManager 开局调用：控制本局是否掉 Buff、掉落物的存活时间。
     public void ApplyDifficultySettings(DifficultySettings settings)
     {
         if (settings == null) return;
 
-        spawnInterval = settings.buffSpawnInterval;
-        maxBuffCount = settings.buffMaxCount;
         buffLifeTime = settings.buffLifeTime;
-        initialBuffCount = settings.buffInitialCount;
-
         enabled = settings.enableBuffSpawning;
         if (!settings.enableBuffSpawning)
         {
-            // 本难度不产 Buff：清理场上已有的并停止生成
             BuffPickupItem[] buffs = FindObjectsOfType<BuffPickupItem>();
             foreach (BuffPickupItem buff in buffs)
             {
                 if (buff != null) Destroy(buff.gameObject);
             }
-            Debug.Log("🎁 当前难度关闭了 Buff 生成");
-        }
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        if (player != null)
-        {
-            Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(player.position, spawnRadius);
-
-            Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(player.position, despawnDistance);
+            Debug.Log("🎁 当前难度关闭了 Buff 掉落");
         }
     }
 }

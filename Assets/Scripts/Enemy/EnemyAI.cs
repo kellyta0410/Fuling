@@ -1096,6 +1096,12 @@ Vector3 center = player.transform.position;
 
         int baseCoin = enemyData != null ? enemyData.coinReward : 10;
         SpawnCoin(baseCoin);
+
+        // ⭐ 死亡时按概率随机掉落 Buff（像金币一样弹出，拾取方式不变）
+        if (RandomBuffSpawner.Instance != null)
+        {
+            RandomBuffSpawner.Instance.TryDropBuff(transform.position);
+        }
         if (player != null) player.AddKill();
 
         float delay = enemyData != null ? enemyData.deathAnimationDelay : 2f;

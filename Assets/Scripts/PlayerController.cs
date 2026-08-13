@@ -29,6 +29,8 @@ public class PlayerController : MonoBehaviour
     public float attackDuration = 0.5f;
     [Tooltip("普通攻击造成伤害的延迟（秒），对齐普通攻击动画命中那一刻")]
     public float attackDamageDelay = 0.35f;
+    [Tooltip("普通攻击判定方位角(度)：只有玩家正前方 ±该角度 内的敌人才会收到伤害，背后/侧面打不到；技能不受此限制(全方位)")]
+    public float attackFacingAngle = 75f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
     public float skillDamageDelay = 0.5f;
     [Header("攻击特效")]
@@ -52,6 +54,10 @@ public class PlayerController : MonoBehaviour
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
     public bool wallResolveEnabled = true;
+
+    [Header("调试")]
+    [Tooltip("场景中选择玩家时是否显示攻击/技能范围 Gizmos")]
+    public bool showGizmos = true;
 
     [Header("地面检测")]
     public LayerMask groundLayer;
@@ -135,7 +141,6 @@ public class PlayerController : MonoBehaviour
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
     private int comboIndex = 0;
-    private int currentAttackStateHash = 0;
 
     // ==================== 技能相关 ====================
     private int skillDamage = 0;
@@ -309,7 +314,7 @@ public class PlayerController : MonoBehaviour
         attackDamage = currentCharacterData.baseAttack;
         attackRange = currentCharacterData.baseRange;
         attackCooldown = currentCharacterData.baseCooldown;
-        skillRange = currentCharacterData.baseRange * 1.5f;   // 初始技能范围 = 3（普攻2 × 1.5）
+        skillRange = currentCharacterData.baseRange * 2f;   // 初始技能范围 = 4（普攻2 × 2）
 
         baseSpeed = speed;
         baseAttack = attackDamage;
@@ -458,8 +463,22 @@ public class PlayerController : MonoBehaviour
         {
             attackTimer += Time.deltaTime;
             AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
-            bool animFinished = stateInfo.shortNameHash != currentAttackStateHash || stateInfo.normalizedTime >= 1f;
-            if (animFinished || attackTimer >= attackDuration)
+
+            // ⭐ 以"攻击动画是否真的播完"为准解锁：
+            // 还在攻击状态且 normalizedTime<1（动画未播完）时一直锁定位移/方向输入，
+            // 不再被固定 attackDuration 过早解锁（动画 1.5x 播放时 0.5s 兜底会早于动画结束）。
+            bool stillInAttack = false;
+            for (int i = 0; i < attackStateNames.Length; i++)
+            {
+                if (stateInfo.shortNameHash == Animator.StringToHash(attackStateNames[i]))
+                {
+                    stillInAttack = true;
+                    break;
+                }
+            }
+            bool animFinished = !stillInAttack || stateInfo.normalizedTime >= 1f;
+            float safeCap = stateInfo.length > 0.01f ? Mathf.Max(stateInfo.length, attackDuration) : attackDuration;
+            if (animFinished || attackTimer >= safeCap)
             {
                 isAttacking = false;
                 attackTimer = 0f;
@@ -682,7 +701,6 @@ public class PlayerController : MonoBehaviour
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
         animator.Play(stateName, 0, 0f);
-        currentAttackStateHash = Animator.StringToHash(stateName);
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
         SpawnAttackVFX(stateName);
@@ -817,6 +835,13 @@ public class PlayerController : MonoBehaviour
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
+                // ⭐ 普通攻击只打正前方扇形：判定命中点在玩家前方，背后的敌人即使进了球形范围也不掉血。
+                // 技能(isUsingSkill 走 DelayedSkillDamage)始终保持全方位，不受此限制。
+                Vector3 toEnemy = enemy.transform.position - transform.position;
+                toEnemy.y = 0f;
+                if (Vector3.Angle(transform.forward, toEnemy) > attackFacingAngle)
+                    continue;
+
                 // 不穿墙：玩家与敌人之间被竖直墙体(实墙/X-Ray半透明墙)挡住就伤害不到
                 if (WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
                     continue;
@@ -1660,17 +1685,48 @@ public class PlayerController : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
+        if (!showGizmos) return;
+
         Gizmos.color = Color.yellow;
         float radius = 0.3f;
         if (controller != null) radius = controller.radius * 0.9f;
         Vector3 sphereOrigin = transform.position + Vector3.up * (radius + 0.05f);
         Gizmos.DrawWireSphere(sphereOrigin - Vector3.up * (groundCheckDistance + 0.1f), radius);
 
+        // ⭐ 普通攻击：正前方扇形（含方位角限制，与伤害判定一致）
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange);
+        DrawHorizontalArc(transform.position, attackRange, attackFacingAngle, 32);
+
+        // 技能：全方位球形（不受 attackFacingAngle 限制）
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(transform.position, skillRange);
 
         Gizmos.color = Color.blue;
         Gizmos.DrawRay(transform.position + Vector3.up * 0.5f, Vector3.down * 10f);
+    }
+
+    // 在水平面画一个以 transform 为中心、半径为 arcRadius、张开角 ±arcAngle 度的扇形（线段拼合）。
+    void DrawHorizontalArc(Vector3 center, float arcRadius, float arcAngle, int segments)
+    {
+        Quaternion facing = Quaternion.LookRotation(transform.forward, Vector3.up);
+        Vector3 left = facing * Quaternion.Euler(0f, -arcAngle, 0f) * Vector3.forward;
+        Vector3 right = facing * Quaternion.Euler(0f, arcAngle, 0f) * Vector3.forward;
+
+        // 两条边
+        Gizmos.DrawLine(center, center + left * arcRadius);
+        Gizmos.DrawLine(center, center + right * arcRadius);
+
+        // 弧线（分段直线）
+        Vector3 prev = center + left * arcRadius;
+        for (int i = 1; i <= segments; i++)
+        {
+            float t = (float)i / segments;
+            float angle = Mathf.Lerp(-arcAngle, arcAngle, t);
+            Vector3 dir = facing * Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+            Vector3 cur = center + dir * arcRadius;
+            Gizmos.DrawLine(prev, cur);
+            prev = cur;
+        }
     }
 
     Transform FindDeepChild(Transform parent, string childName)

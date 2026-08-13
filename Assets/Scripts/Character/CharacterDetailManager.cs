@@ -241,7 +241,7 @@ public class CharacterDetailManager : MonoBehaviour
 
         // 技能攻击区域：显示当前实际数值（基础攻击×3 + 技能伤害成长；冷却基准 15 秒）
         int skillAttack = character.baseAttack * 3 + skillTotal.skillDamageBonus;
-        float skillRange = character.baseRange * 1.5f + skillTotal.attackRangeBonus;
+        float skillRange = character.baseRange * 2f + skillTotal.attackRangeBonus;
         float skillCd = Mathf.Max(0f, 15f - skillTotal.cooldownReductionBonus);
         if (skillAttackStatText != null)
             skillAttackStatText.text = $"伤害：{skillAttack}  范围：{skillRange:F1}  冷却：{skillCd:F0}秒";
@@ -264,7 +264,6 @@ public class CharacterDetailManager : MonoBehaviour
         int normalLevel = GetNormalLevel(name);
         bool normalMaxed = normalLevel >= normalMaxLevel;
         var nextNormal = normalConfig?.GetLevelData(normalLevel + 1);
-        var currentNormal = normalConfig?.GetLevelData(normalLevel);
 
         // 等级显示（当前等级 > 下一等级，满级显示 MAX）
         if (normalAttackLevelText != null)
@@ -286,20 +285,16 @@ public class CharacterDetailManager : MonoBehaviour
                 normalAttackCoinText.text = $"{normalConfig.GetLevelCost(normalLevel + 1)}";
         }
 
-        // 简介显示当前等级这一级提升的内容（升级后更新）
+        // 简介显示即将升到下一级获得的提升（每级描述往前调一级，不再出现"初始属性"占位）
         if (normalAttackDescriptionText != null)
         {
             if (!unlocked)
             {
                 normalAttackDescriptionText.text = "解锁角色以查看技能";
             }
-            else if (currentNormal == null)
-            {
-                normalAttackDescriptionText.text = normalConfig?.GetLevelData(1)?.description ?? "无描述";
-            }
             else
             {
-                normalAttackDescriptionText.text = currentNormal?.description ?? "无描述";
+                normalAttackDescriptionText.text = GetNextLevelDescription(normalConfig, normalLevel) ?? "无描述";
             }
         }
 
@@ -330,7 +325,6 @@ public class CharacterDetailManager : MonoBehaviour
         int skillLevel = GetSkillLevel(name);
         bool skillMaxed = skillLevel >= skillMaxLevel;
         var nextSkill = skillConfig?.GetLevelData(skillLevel + 1);
-        var currentSkill = skillConfig?.GetLevelData(skillLevel);
 
         // 等级显示（当前等级 > 下一等级，满级显示 MAX）
         if (skillAttackLevelText != null)
@@ -352,20 +346,16 @@ public class CharacterDetailManager : MonoBehaviour
                 skillAttackCoinText.text = $"{skillConfig.GetLevelCost(skillLevel + 1)}";
         }
 
-        // 简介显示当前等级这一级提升的内容（升级后更新）
+        // 简介显示即将升到下一级获得的提升（每级描述往前调一级，不再出现"初始属性"占位）
         if (skillAttackDescriptionText != null)
         {
             if (!unlocked)
             {
                 skillAttackDescriptionText.text = "解锁角色以查看技能";
             }
-            else if (currentSkill == null)
-            {
-                skillAttackDescriptionText.text = skillConfig?.GetLevelData(1)?.description ?? "无描述";
-            }
             else
             {
-                skillAttackDescriptionText.text = currentSkill?.description ?? "无描述";
+                skillAttackDescriptionText.text = GetNextLevelDescription(skillConfig, skillLevel) ?? "无描述";
             }
         }
 
@@ -394,6 +384,26 @@ public class CharacterDetailManager : MonoBehaviour
     }
 
     // ==================== ?? ====================
+
+    // ⭐ 描述显示"升到下一级将获得"的提升：每级往前调一级。
+    // manualLevels 的 level 1 是"初始属性"占位（无加成），跳过它直接显示第一个真实加成；
+    // 满级（MAX）时返回空串，不显示任何描述。
+    string GetNextLevelDescription(UpgradeConfigSO config, int currentLevel)
+    {
+        if (config == null) return null;
+
+        // 下一级的下标（GetLevelData 是 1-based）
+        int nextLevel = currentLevel + 1;
+
+        // 跳过硬编码的"初始属性"占位级：等级 0/1 时都显示第一个真实升级的描述
+        if (currentLevel <= 1) nextLevel = 2;
+
+        var data = config.GetLevelData(nextLevel);
+        if (data != null) return data.description;
+
+        // 满级（下一级不存在）：不显示描述
+        return "";
+    }
 
     public void UpgradeNormalAttack()
     {
