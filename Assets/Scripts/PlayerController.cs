@@ -40,6 +40,10 @@ public class PlayerController : MonoBehaviour
     public float slashGrowAmount = 0.45f;
     [Tooltip("挥出缓动指数：越大越接近\"命中瞬间才拉满\"，越小越线性")]
     public float slashGrowExponent = 1.5f;
+    [Tooltip("挥砍甩出总角度(度)：弧光在挥出阶段绕竖直轴从 -角度/2 甩到 +角度/2，像被剑砍出来划开空气而不是贴在剑上")]
+    public float slashSwingAngle = 70f;
+    [Tooltip("挥砍甩出方向：0 = 随连招交替左右挥，1 = 固定从左到右，-1 = 从右到左")]
+    public int slashSwingDirection = 0;
 
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
@@ -633,18 +637,26 @@ public class PlayerController : MonoBehaviour
         Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up);
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
-        vfx.transform.SetParent(weaponPivot, true);
 
-        // 挥砍渐进：特效不是"一整个从头出现"，而是从微缩(浅)沿挥砍方向逐渐撑到全尺寸(深)，
-        // 命中段保持全挥，收尾轻微回缩后与挥砍动画等长销毁。
+        // 关键：挂到角色根而不是剑(weaponPivot)。挂在剑上会随剑的挥砍抖动旋转，
+        // 读起来像"贴死在剑上"；挂到角色根后特效保持一次稳定挥砍轨迹。
+        vfx.transform.SetParent(transform, true);
+
+        // 挥砍渐进 + 甩出：特效不是"一整个从头出现"，而是从微缩(浅)沿挥砍方向逐渐撑到全
+        // 尺寸(深)，同时绕竖直轴甩出一个角度，像挥剑把弧光甩出去划开空气。
         Vector3 fullScale = vfx.transform.localScale;
         vfx.transform.localScale = Vector3.zero;      // 同帧先藏起，避免爆出一帧完整弧光
-        StartCoroutine(SweepAttackVFX(vfx, fullScale, stateName));
+
+        // 甩刀方向：0 跟随连招交替左右挥（有节奏感），也可固定
+        int direction = slashSwingDirection;
+        if (direction == 0) direction = (comboIndex % 2 == 0) ? 1 : -1;
+
+        StartCoroutine(SweepAttackVFX(vfx, fullScale, stateName, direction));
     }
 
-    // 让 slash 特效"像挥砍出来从浅到深"：挥出阶段从 0 缓动撑到全尺寸，
-    // 末期轻微回缩模拟"砍完收刀"，总时长与当前攻击动画等长。
-    IEnumerator SweepAttackVFX(GameObject vfx, Vector3 fullScale, string stateName)
+    // 让 slash 特效"像挥砍甩出从浅到深"：挥出阶段从 0 缓动撑到全尺寸并绕竖直轴甩出
+    // 一道弧，末期轻微回缩模拟"砍完收刀"，总时长与当前攻击动画等长。
+    IEnumerator SweepAttackVFX(GameObject vfx, Vector3 fullScale, string stateName, int direction)
     {
         yield return null; // 等一帧让 Animator 切换到新状态
         AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
@@ -655,6 +667,9 @@ public class PlayerController : MonoBehaviour
         total = Mathf.Max(total, 0.05f);
 
         float growRatio = Mathf.Clamp01(slashGrowAmount);
+        Quaternion baseRot = vfx != null ? vfx.transform.rotation : transform.rotation;
+        float halfSwing = Mathf.Max(0f, slashSwingAngle) * 0.5f;
+        int swingDir = direction >= 0 ? 1 : -1;
         float t = 0f;
         while (t < total)
         {
@@ -665,12 +680,21 @@ public class PlayerController : MonoBehaviour
             float reveal = Mathf.Clamp01(p / Mathf.Max(growRatio, 0.01f));
             reveal = Mathf.Pow(reveal, Mathf.Max(slashGrowExponent, 0.1f));
 
+            // 甩出：同一段挥出窗口内，弧光从 -halfSwing 缓缓转到 +halfSwing，
+            // 曲线比缩放略平缓，形成"剑甩出弧光"的轨迹而非原地贴剑。
+            float swingP = Mathf.Clamp01(p / Mathf.Max(growRatio, 0.01f));
+            swingP = Mathf.Pow(swingP, Mathf.Max(slashGrowExponent * 0.6f, 0.1f));
+            float sweep = Mathf.Lerp(-halfSwing, halfSwing, swingP);
+
             // 收尾 15% 轻微回缩，视觉上"砍完收刀"
             if (p > 0.85f)
                 reveal *= Mathf.Lerp(1f, 0.3f, (p - 0.85f) / 0.15f);
 
             if (vfx != null)
+            {
+                vfx.transform.rotation = baseRot * Quaternion.Euler(0f, swingDir * sweep, 0f);
                 vfx.transform.localScale = fullScale * Mathf.Max(reveal, 0.0001f);
+            }
 
             yield return null;
         }

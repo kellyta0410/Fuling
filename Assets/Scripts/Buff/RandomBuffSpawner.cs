@@ -16,6 +16,8 @@ public class RandomBuffSpawner : MonoBehaviour
     public float spawnRadius = 12f;
     public float spawnInterval = 6f;
     public int maxBuffCount = 5;
+    [Tooltip("开局立刻生成的 Buff 数量")]
+    public int initialBuffCount = 2;
 
     [Header("玩家引用")]
     public Transform player;
@@ -39,7 +41,7 @@ public class RandomBuffSpawner : MonoBehaviour
         if (player == null)
             player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
-        for (int i = 0; i < 2; i++) SpawnBuff();
+        for (int i = 0; i < Mathf.Max(0, initialBuffCount); i++) SpawnBuff();
     }
 
     void Update()
@@ -190,6 +192,30 @@ public class RandomBuffSpawner : MonoBehaviour
             {
                 SpawnBuff();
             }
+        }
+    }
+
+    // 由 GameManager 开局调用：按当前难度的设置覆盖 Buff 生产数量与时间。
+    // 场景里的值只是兜底，难度数据优先。
+    public void ApplyDifficultySettings(DifficultySettings settings)
+    {
+        if (settings == null) return;
+
+        spawnInterval = settings.buffSpawnInterval;
+        maxBuffCount = settings.buffMaxCount;
+        buffLifeTime = settings.buffLifeTime;
+        initialBuffCount = settings.buffInitialCount;
+
+        enabled = settings.enableBuffSpawning;
+        if (!settings.enableBuffSpawning)
+        {
+            // 本难度不产 Buff：清理场上已有的并停止生成
+            BuffPickupItem[] buffs = FindObjectsOfType<BuffPickupItem>();
+            foreach (BuffPickupItem buff in buffs)
+            {
+                if (buff != null) Destroy(buff.gameObject);
+            }
+            Debug.Log("🎁 当前难度关闭了 Buff 生成");
         }
     }
 

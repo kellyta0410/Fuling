@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-public class BlinkerEnemy : EnemyAI
+public class JiangshiEnemy : EnemyAI
 {
     private enum BlinkState { Chasing, Preparing, Blinking, PostBlink, Cooldown }
     private BlinkState blinkState = BlinkState.Chasing;
@@ -219,7 +219,7 @@ public class BlinkerEnemy : EnemyAI
                 if (stateTimer >= blinkCooldown)
                 {
                     blinkState = BlinkState.Chasing;
-                    Debug.Log("[Blinker] 冷却结束");
+                    Debug.Log("[Jiangshi] 冷却结束");
                 }
                 break;
         }
