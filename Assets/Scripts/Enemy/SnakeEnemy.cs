@@ -171,6 +171,9 @@ public class SnakeEnemy : EnemyAI
     {
         if (isDead || target == null || target.IsDead() || attackHitDealt) return false;
         if (!CanHeadReach(target)) return false;
+        // 不穿墙：蛇头与玩家之间被竖直墙体挡就咬不到
+        Vector3 headPos = snakeBody != null ? snakeBody.HeadWorldPosition : transform.position;
+        if (WallPenetrationResolve.IsBlockedBetween(headPos, target.transform.position)) return false;
 
         float finalDamage = baseAttackDamage * currentDamageMultiplier;
         target.TakeDamage(Mathf.RoundToInt(finalDamage));

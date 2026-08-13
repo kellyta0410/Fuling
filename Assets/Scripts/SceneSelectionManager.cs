@@ -429,7 +429,8 @@ public class SceneSelectionManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(difficulty.sceneName))
         {
-            SceneManager.LoadScene(difficulty.sceneName);
+            // 先进 Loading 场景，把目标关卡场景异步加载完再切换（避免切场景卡顿/白屏）
+            SceneManager.LoadScene("Loading");
         }
         else
         {

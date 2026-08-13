@@ -23,6 +23,21 @@ public class CinemachineWallXRay : MonoBehaviour
     // 当前所有已切换到 X-Ray 的墙（支持多面墙同时半透明，且都能恢复）
     private Dictionary<Transform, WallData> activeWalls = new Dictionary<Transform, WallData>();
 
+    // 方案B注册表：被大 collider 盖住、但自身没有 collider 的纯网格墙，
+    // 物理 Overlap 找不到它们，由 WallXRayTarget 主动注册供范围收集。
+    private static readonly List<WallXRayTarget> staticWallTargets = new List<WallXRayTarget>();
+
+    public static void RegisterWall(WallXRayTarget t)
+    {
+        if (t == null || staticWallTargets.Contains(t)) return;
+        staticWallTargets.Add(t);
+    }
+
+    public static void UnregisterWall(WallXRayTarget t)
+    {
+        if (t != null) staticWallTargets.Remove(t);
+    }
+
     private class WallData
     {
         public Renderer renderer;
@@ -62,6 +77,10 @@ public class CinemachineWallXRay : MonoBehaviour
                 if (!hitCounts.ContainsKey(wall))
                     hitCounts[wall] = 0;
                 hitCounts[wall]++;
+
+                // 方案B：这个 collider 可能是一个"大碰撞体"盖住了若干独立的小墙 mesh。
+                // 把被它覆盖的其它 Wall 也一起计入命中（一起淡入/恢复）。
+                CollectCoveredWalls(hit.collider, hitCounts);
             }
         }
 
@@ -108,6 +127,48 @@ public class CinemachineWallXRay : MonoBehaviour
     {
         Vector3 closest = collider.ClosestPoint(point);
         return (closest - point).sqrMagnitude < 0.0001f;
+    }
+
+    // 方案B：收集被"大碰撞体"覆盖的所有墙体。两个渠道：
+    //  1) 物理 OverlapSphere：能扫到带 collider 的墙（即便不是子物体）。
+    //  2) 注册表（WallXRayTarget）：纯网格、无 collider 的墙，物理找不到，靠注册表按包围盒收集。
+    void CollectCoveredWalls(Collider container, Dictionary<Transform, int> hitCounts)
+    {
+        if (container == null || hitCounts == null) return;
+
+        // 渠道1：物理范围查询。以容器包围盒中心/半尺寸做球扫，收集 Wall tag 的物体。
+        Bounds b = container.bounds;
+        float radius = Mathf.Max(b.extents.magnitude, 0.01f);
+        Collider[] overlaps = Physics.OverlapSphere(b.center, radius, wallLayer, QueryTriggerInteraction.Collide);
+        foreach (Collider c in overlaps)
+        {
+            if (c == container) continue;
+            if (ReferenceEquals(c.transform, container.transform)) continue;
+            if (!c.CompareTag("Wall")) continue;
+            if (c.GetComponentInParent<EnemyAI>() != null) continue;
+            if (IsPointInsideCollider(container, c.transform.position)) continue; // 相机的墙不算
+            Transform t = c.transform;
+            if (!hitCounts.ContainsKey(t))
+                hitCounts[t] = 0;
+            hitCounts[t]++;
+        }
+
+        // 渠道2：注册表（无 collider 的纯网格墙），按包围盒相交收集。
+        for (int i = staticWallTargets.Count - 1; i >= 0; i--)
+        {
+            WallXRayTarget target = staticWallTargets[i];
+            if (target == null) { staticWallTargets.RemoveAt(i); continue; }
+            Transform t = target.transform;
+            if (ReferenceEquals(t, container.transform)) continue;
+            if (!t.gameObject.CompareTag("Wall")) continue;
+            Renderer r = target.Renderer;
+            if (r == null) continue;
+            if (IsPointInsideCollider(container, t.position)) continue;
+            if (!b.Intersects(r.bounds)) continue;
+            if (!hitCounts.ContainsKey(t))
+                hitCounts[t] = 0;
+            hitCounts[t]++;
+        }
     }
 
     WallData TryInitWall(Transform wall)
