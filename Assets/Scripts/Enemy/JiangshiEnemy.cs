@@ -154,6 +154,10 @@ public class JiangshiEnemy : EnemyAI
                     hasPrepared = false;
                     hasAttacked = false;
                     lockedFacingDir = GetLockedFacingDir();
+                    // ⭐ 锁定瞬移落点基准：蓄力开始时玩家的位置（地面），之后不跟随玩家
+                    lockedIndicatorTarget = player != null
+                        ? GetGroundPosition(player.transform.position)
+                        : GetGroundPosition(transform.position);
                     StopAgent();
 
                     if (showGroundIndicator)
@@ -263,11 +267,6 @@ public class JiangshiEnemy : EnemyAI
 
     private void ShowGroundIndicator()
     {
-        // 蓄力开始时锁定玩家位置（地面），指示条从僵尸拉向该位置
-        lockedIndicatorTarget = player != null
-            ? GetGroundPosition(player.transform.position)
-            : GetGroundPosition(transform.position);
-
         if (endMarker != null)
         {
             endMarker.SetActive(true);
