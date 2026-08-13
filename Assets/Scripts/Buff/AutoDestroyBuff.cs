@@ -16,11 +16,12 @@ public class AutoDestroyBuff : MonoBehaviour
     [Header("旋转")]
     public float rotateSpeed = 60f;
 
-    [Header("闪烁效果")]
+    [Header("消失前闪烁")]
     public float flashStartTime = 5f;
     public float flashInterval = 0.3f;
     private float flashTimer;
     private bool isVisible = true;
+    // 只收集普通渲染器（模型本体），排除粒子系统渲染器，保证特效不跟着闪
     private Renderer[] renderers;
 
     [Header("消失特效")]
@@ -28,9 +29,18 @@ public class AutoDestroyBuff : MonoBehaviour
 
     void Start()
     {
-        renderers = GetComponentsInChildren<Renderer>();
         startPosition = transform.position;
         randomOffset = Random.Range(0f, Mathf.PI * 2f);
+
+        var all = GetComponentsInChildren<Renderer>(true);
+        var list = new System.Collections.Generic.List<Renderer>();
+        foreach (var r in all)
+        {
+            if (r is ParticleSystemRenderer) continue;
+            if (r is TrailRenderer) continue;
+            list.Add(r);
+        }
+        renderers = list.ToArray();
 
         if (!isInitialized)
         {
@@ -57,10 +67,10 @@ public class AutoDestroyBuff : MonoBehaviour
         newPos.y += floatOffset;
         transform.position = newPos;
 
-        // 自转
+        // 自转（转圈）
         transform.Rotate(Vector3.up, rotateSpeed * Time.deltaTime);
 
-        // 闪烁
+        // 消失前闪烁：只闪 buff 本体渲染器，粒子特效不受影响
         if (remainingTime <= flashStartTime)
         {
             flashTimer += Time.deltaTime;

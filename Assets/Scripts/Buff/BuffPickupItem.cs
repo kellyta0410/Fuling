@@ -14,6 +14,12 @@ public class BuffPickupItem : MonoBehaviour
             col.isTrigger = true;
             col.radius = 0.8f;
         }
+
+        // 自动挂载地面光圈（漂浮时的指示物，颜色随 buff 类型）
+        if (GetComponent<BuffGroundRing>() == null)
+        {
+            gameObject.AddComponent<BuffGroundRing>();
+        }
     }
 
     void OnTriggerEnter(Collider other)

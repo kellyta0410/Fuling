@@ -3,10 +3,10 @@ using UnityEngine;
 
 public class BuffHandler : MonoBehaviour
 {
-    [Header("回血特效")]
-    [Tooltip("拾取回血buff时，在玩家身上生成的治疗特效预制体（如 HealEffect）")]
+    [Header("buff 特效")]
+    [Tooltip("拾取任意 buff 时，在玩家脚下生成的一次性光柱特效预制体（如 HealEffect，颜色按 buff 类型在运行时设置）")]
     public GameObject healEffectPrefab;
-    [Tooltip("治疗特效存在时间（秒），结束后自动销毁")]
+    [Tooltip("特效存在时间（秒），结束后自动销毁")]
     public float healEffectLifetime = 2f;
 
     private Dictionary<BuffType, Buff> activeBuffs = new Dictionary<BuffType, Buff>();
@@ -89,7 +89,7 @@ public class BuffHandler : MonoBehaviour
                     player.Heal(data.effectValue);
                     Debug.Log($"恢复了 {data.effectValue} 点生命值");
                 }
-                SpawnHealEffect();
+                SpawnBuffEffect(data.buffType);
                 break;
 
             default:
@@ -98,15 +98,23 @@ public class BuffHandler : MonoBehaviour
         }
     }
 
-    // ---------- 回血时在玩家身上生成治疗特效 ----------
-    private void SpawnHealEffect()
+    // ---------- 任意 buff 生效时在玩家脚下生成一次光柱（颜色按 buff 类型） ----------
+    public void SpawnBuffEffect(BuffType type)
     {
         if (healEffectPrefab == null || player == null) return;
 
         Transform parent = player.transform;
         GameObject effect = Instantiate(healEffectPrefab, parent.position, Quaternion.identity, parent);
 
-        // 特效自带 y=0.44 偏移（指向角色胸口），挂在角色根上跟随移动
+        // 特效本体放到玩家脚下（地板位置），光柱从地面往上冲
+        effect.transform.localPosition = Vector3.zero;
+
+        HealEffectBuilder builder = effect.GetComponent<HealEffectBuilder>();
+        if (builder != null)
+        {
+            builder.Init(ParticleFXHelper.GetBuffColor(type));
+        }
+
         if (healEffectLifetime > 0f)
             Destroy(effect, healEffectLifetime);
     }
@@ -192,6 +200,7 @@ public class Buff
                 Debug.LogWarning($"未知持续Buff类型：{Data.buffType}");
                 break;
         }
+        handler.SpawnBuffEffect(Data.buffType); // 持续buff也播对应颜色的光柱
     }
 
     public void OnRemove()
