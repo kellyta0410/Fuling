@@ -142,6 +142,8 @@ public class PlayerController : MonoBehaviour
     private bool canUseSkill = true;
     private bool isUsingSkill = false;
     private float skillTimer = 0f;
+    private Quaternion skillStartRotation = Quaternion.identity;
+    private Quaternion attackStartRotation = Quaternion.identity;
     public float skillDuration = 0.8f;
     private Image[] cooldownMasks = new Image[3];
 
@@ -460,6 +462,8 @@ public class PlayerController : MonoBehaviour
                 isAttacking = false;
                 attackTimer = 0f;
                 animator.SetBool("IsAttacking", false);
+                // 单段攻击播放完回到起手朝向（动画自带的旋转只影响播放期间）
+                transform.rotation = attackStartRotation;
             }
 
             // 攻击点排队：上一个播完，接着播下一个连击
@@ -485,20 +489,27 @@ public class PlayerController : MonoBehaviour
             else if (next.IsName("Skill Attack") && next.length > 0.01f)
                 safetyCap = next.length + 0.5f;
 
+            // 技能是 360° 全方位攻击：按动画进度平滑自转一周，播完正好回到起手朝向。
+            float spinDuration = Mathf.Max(safetyCap, 0.01f);
+            float t = Mathf.Clamp01(skillTimer / spinDuration);
+            float angle = Mathf.Lerp(0f, 360f, t);
+            transform.rotation = skillStartRotation * Quaternion.Euler(0f, angle, 0f);
+
             if (!skillActive || skillTimer >= safetyCap)
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
-                animator.applyRootMotion = false;
+                // 技能播放完，恢复起始朝向
+                transform.rotation = skillStartRotation;
             }
         }
 
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        // 攻击/普通移动时都朝输入方向转向（跟手）；技能期间方向键不介入（Skill Attack 是 360° 全方位动画，由动画自带旋转主导）。
-        // 只有闪避锁死朝向（闪避有固定方向）。
-        if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
+        // 普通移动时朝输入方向转向（跟手）。
+        // 攻击固定朝向（播完还原 attackStartRotation）；技能由动画自带旋转主导（播完还原 skillStartRotation）；闪避锁死朝向。
+        if (moveDir.magnitude > 0.1f && !isDodging && !isAttacking && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -656,6 +667,11 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
+        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击全程固定。
+        Vector3 inputDir = GetMoveDirection(inputVector);
+        if (inputDir.magnitude > 0.1f)
+            transform.rotation = Quaternion.LookRotation(inputDir);
+        attackStartRotation = transform.rotation;
 
         // 攻击期间彻底锁死位移：关掉 root motion（否则 Animator 勾了 Apply Root Motion 时
         // 攻击动画自带的位移会把角色拖走造成滑步），并清零残余移动速度。
@@ -800,6 +816,7 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
+        skillStartRotation = transform.rotation;
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -811,12 +828,11 @@ public class PlayerController : MonoBehaviour
         StartCoroutine(DelayedSkillDamage(finalDamage));
     }
 
-    // 接管 root motion：只应用动画自带的旋转（360° 技能转圈），不应用位移（位置锁死、转向由输入控制）。
+    // 接管 root motion：完全丢弃位置与旋转（技能 360° 自转由代码平滑驱动，不依赖 root motion）。
     // 定义此回调后 Animator 不再自动应用 root motion，动画只提供动作不影响移动。
     private void OnAnimatorMove()
     {
-        // 只保留旋转，丢弃位移 root motion
-        transform.rotation *= animator.deltaRotation;
+        // 空实现：位置、旋转全部丢弃
     }
 
     IEnumerator DelayedSkillDamage(int damage)

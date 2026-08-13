@@ -213,9 +213,14 @@ public class InfiniteEnemySpawner : MonoBehaviour
 
     GameObject GetWeightedRandomEnemy()
     {
-        if (enemyWeights == null || enemyWeights.Count == 0 || enemyWeights.Count != enemyPrefabs.Count)
+        bool weightsReady = enemyWeights != null && enemyWeights.Count > 0;
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0)
+            return null;
+
+        // 权重未就绪时兜底：从 enemyPrefabs 平权随机
+        if (!weightsReady)
         {
-            return enemyPrefabs.Count > 0 ? enemyPrefabs[Random.Range(0, enemyPrefabs.Count)] : null;
+            return enemyPrefabs[Random.Range(0, enemyPrefabs.Count)];
         }
 
         float totalWeight = 0f;
