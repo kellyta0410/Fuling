@@ -41,6 +41,17 @@ public class DifficultySettings : ScriptableObject
     public int spawnPerInterval = 1;
     public float enemySpeedMultiplier = 1f;
 
+    [Header("敌人数值基础倍率（按难度整体调节敌人硬度，叠加在阶层/成长的倍率之上）")]
+    public float enemyHealthMultiplier = 1f;
+    public float enemyDamageMultiplier = 1f;
+
+    [Header("Buff 生成（生产数量与时间；GameManager 开局会下发到场景中的 Buff Manager）")]
+    public bool enableBuffSpawning = true;
+    public float buffSpawnInterval = 15f;
+    public int buffMaxCount = 5;
+    public float buffLifeTime = 30f;
+    public int buffInitialCount = 2;
+
     [Header("容量限制")]
     public bool enableMaxLimit = true;
     public int maxEnemyCount = 30;

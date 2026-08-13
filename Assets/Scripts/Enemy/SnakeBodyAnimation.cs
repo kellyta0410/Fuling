@@ -109,7 +109,7 @@ public class SnakeBodyAnimation : MonoBehaviour
     /// <summary>变形后蛇头的世界坐标（供头部攻击判定使用）。每帧在 UpdateBody 末尾更新</summary>
     public Vector3 HeadWorldPosition { get; private set; }
 
-    /// <summary>蛇头相对根(agent)在身体前进方向上的世界偏移量（约身长一半）。供 ChaserEnemy 以蛇头为基准折算攻击距离</summary>
+    /// <summary>蛇头相对根(agent)在身体前进方向上的世界偏移量（约身长一半）。供 SnakeEnemy 以蛇头为基准折算攻击距离</summary>
     public float HeadForwardOffset { get; private set; }
 
     void Awake()

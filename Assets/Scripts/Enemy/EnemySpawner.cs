@@ -457,12 +457,16 @@ public class EnemySpawner : MonoBehaviour
             OnTierUpgrade(currentTier, newTierIndex);
         }
 
-        // 应用当前阶层参数
+        // 应用当前阶层参数（最终倍率 = 阶层倍率 × 难度基础倍率，让不同难度整体变强/变弱）
+        float difficultySpeedBase = currentDifficulty != null ? currentDifficulty.enemySpeedMultiplier : 1f;
+        float difficultyHealthBase = currentDifficulty != null ? currentDifficulty.enemyHealthMultiplier : 1f;
+        float difficultyDamageBase = currentDifficulty != null ? currentDifficulty.enemyDamageMultiplier : 1f;
+
         currentSpawnInterval = currentTier.spawnInterval;
         currentSpawnPerInterval = currentTier.spawnCount;
-        currentSpeedMultiplier = currentTier.speedMultiplier;
-        currentHealthMultiplier = currentTier.healthMultiplier;
-        currentDamageMultiplier = currentTier.damageMultiplier;
+        currentSpeedMultiplier = currentTier.speedMultiplier * difficultySpeedBase;
+        currentHealthMultiplier = currentTier.healthMultiplier * difficultyHealthBase;
+        currentDamageMultiplier = currentTier.damageMultiplier * difficultyDamageBase;
         enableCooldown = currentTier.enableCooldown;
 
         // 更新现有敌人属性
@@ -805,13 +809,15 @@ public class EnemySpawner : MonoBehaviour
 
         // 普通模式：生成节奏与属性倍率统一由 difficultyTiers 管理，不读取 SO 的生成参数
         // （避免多源冲突）。初始值取第一阶，之后 UpdateTier 每帧刷新。
+        // 敌人硬度的"难度基础倍率"从 DifficultySettings 读取并叠加到阶层倍率上：
+        //   最终倍率 = 阶层倍率 × 难度基础倍率（如困难血条 = 阶层 × 1.25）。
         if (enableTieredDifficulty && difficultyTiers != null && difficultyTiers.Length > 0)
         {
             currentSpawnInterval = difficultyTiers[0].spawnInterval;
             currentSpawnPerInterval = difficultyTiers[0].spawnCount;
-            currentSpeedMultiplier = difficultyTiers[0].speedMultiplier;
-            currentHealthMultiplier = difficultyTiers[0].healthMultiplier;
-            currentDamageMultiplier = difficultyTiers[0].damageMultiplier;
+            currentSpeedMultiplier = difficultyTiers[0].speedMultiplier * settings.enemySpeedMultiplier;
+            currentHealthMultiplier = difficultyTiers[0].healthMultiplier * settings.enemyHealthMultiplier;
+            currentDamageMultiplier = difficultyTiers[0].damageMultiplier * settings.enemyDamageMultiplier;
             enableCooldown = difficultyTiers[0].enableCooldown;
         }
         else

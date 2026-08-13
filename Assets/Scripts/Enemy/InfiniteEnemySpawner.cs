@@ -480,8 +480,8 @@ public class InfiniteEnemySpawner : MonoBehaviour
         enableCooldown = settings.enableCooldown;
         cooldownTime = settings.cooldownTime;
         currentSpeedMultiplier = settings.enemySpeedMultiplier;
-        currentHealthMultiplier = 1f;
-        currentDamageMultiplier = 1f;
+        currentHealthMultiplier = settings.enemyHealthMultiplier;
+        currentDamageMultiplier = settings.enemyDamageMultiplier;
 
         if (settings.allowedEnemyPrefabs != null && settings.allowedEnemyPrefabs.Count > 0)
         {

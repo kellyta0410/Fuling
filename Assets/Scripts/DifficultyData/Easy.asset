@@ -31,6 +31,13 @@ MonoBehaviour:
   spawnInterval: 3
   spawnPerInterval: 3
   enemySpeedMultiplier: 1
+  enemyHealthMultiplier: 0.85
+  enemyDamageMultiplier: 0.85
+  enableBuffSpawning: 1
+  buffSpawnInterval: 30
+  buffMaxCount: 3
+  buffLifeTime: 30
+  buffInitialCount: 2
   enableMaxLimit: 1
   maxEnemyCount: 30
   enableMaxLimitScaling: 1

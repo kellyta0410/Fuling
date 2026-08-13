@@ -3,6 +3,12 @@ using UnityEngine;
 
 public class BuffHandler : MonoBehaviour
 {
+    [Header("回血特效")]
+    [Tooltip("拾取回血buff时，在玩家身上生成的治疗特效预制体（如 HealEffect）")]
+    public GameObject healEffectPrefab;
+    [Tooltip("治疗特效存在时间（秒），结束后自动销毁")]
+    public float healEffectLifetime = 2f;
+
     private Dictionary<BuffType, Buff> activeBuffs = new Dictionary<BuffType, Buff>();
     private PlayerController player;
     private UIManager cachedUI;
@@ -83,12 +89,26 @@ public class BuffHandler : MonoBehaviour
                     player.Heal(data.effectValue);
                     Debug.Log($"恢复了 {data.effectValue} 点生命值");
                 }
+                SpawnHealEffect();
                 break;
 
             default:
                 Debug.LogWarning($"未处理的即时效果类型：{data.buffType}");
                 break;
         }
+    }
+
+    // ---------- 回血时在玩家身上生成治疗特效 ----------
+    private void SpawnHealEffect()
+    {
+        if (healEffectPrefab == null || player == null) return;
+
+        Transform parent = player.transform;
+        GameObject effect = Instantiate(healEffectPrefab, parent.position, Quaternion.identity, parent);
+
+        // 特效自带 y=0.44 偏移（指向角色胸口），挂在角色根上跟随移动
+        if (healEffectLifetime > 0f)
+            Destroy(effect, healEffectLifetime);
     }
 
     // ---------- 移除Buff ----------

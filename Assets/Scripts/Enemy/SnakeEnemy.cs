@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-public class ChaserEnemy : EnemyAI
+public class SnakeEnemy : EnemyAI
 {
     [Header("蛇形移动（头先转，身体后段跟随）")]
     [Tooltip("关闭 NavMeshAgent 的自动旋转（否则整个身体瞬转抽搐），由蛇自己平滑转动头部引导方向。仅挂有 SnakeBodyAnimation 的蛇类生效")]
@@ -16,7 +16,7 @@ public class ChaserEnemy : EnemyAI
     [Tooltip("蛇头判定球只在攻击动画期间启用（true），结束后关闭避免身体误伤")]
     public bool enableHeadHitbox = true;
 
-    // 蛇形移动只在有蛇身分段动画时生效（避免影响同样挂 ChaserEnemy 的 Basic / Bumper 等普通敌人。
+    // 蛇形移动只在有蛇身分段动画时生效（避免影响同样挂 SnakeEnemy 的 Basic 等普通敌人。
     // 蛇身动画挂在子物体上，用 GetComponentInChildren 查找）
     private bool IsSerpentine => serpentineMove && GetComponentInChildren<SnakeBodyAnimation>(true) != null;
 

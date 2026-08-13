@@ -133,9 +133,9 @@ public class GameManager : MonoBehaviour
 
             currentSpawnInterval = currentDifficulty.spawnInterval;
             currentSpawnPerInterval = currentDifficulty.spawnPerInterval;
-            currentSpeedMultiplier = 1f;
-            currentHealthMultiplier = 1f;
-            currentDamageMultiplier = 1f;
+            currentSpeedMultiplier = currentDifficulty.enemySpeedMultiplier;
+            currentHealthMultiplier = currentDifficulty.enemyHealthMultiplier;
+            currentDamageMultiplier = currentDifficulty.enemyDamageMultiplier;
             currentMaxEnemyCount = currentDifficulty.maxEnemyCount;
 
             if (isInfinite)
@@ -183,6 +183,7 @@ public class GameManager : MonoBehaviour
             }
 
             ApplyCurrentDifficultyToSpawner();
+            ApplyBuffDifficultySettings();
             NotifyTimerVisibility();
 
             string timeDisplay = isInfinite ? "无限" : timeLimit + "秒";
@@ -247,17 +248,17 @@ public class GameManager : MonoBehaviour
                 currentDifficulty.spawnPerIntervalMax
             );
 
-            currentSpeedMultiplier = Mathf.Min(
+            currentSpeedMultiplier = currentDifficulty.enemySpeedMultiplier * Mathf.Min(
                 1f + (scalingLevel * currentDifficulty.speedMultiplierStep),
                 currentDifficulty.speedMultiplierMax
             );
 
-            currentHealthMultiplier = Mathf.Min(
+            currentHealthMultiplier = currentDifficulty.enemyHealthMultiplier * Mathf.Min(
                 1f + (scalingLevel * currentDifficulty.healthMultiplierStep),
                 currentDifficulty.healthMultiplierMax
             );
 
-            currentDamageMultiplier = Mathf.Min(
+            currentDamageMultiplier = currentDifficulty.enemyDamageMultiplier * Mathf.Min(
                 1f + (scalingLevel * currentDifficulty.damageMultiplierStep),
                 currentDifficulty.damageMultiplierMax
             );
@@ -311,6 +312,25 @@ public class GameManager : MonoBehaviour
             // 普通模式：生成节奏与属性倍率由 EnemySpawner.difficultyTiers 统一管理，
             // 参数已在 InitializeSpawner→ApplyDifficultySettings 设置，此处无需下发。
         }
+    }
+
+    // 按当前难度把 Buff 生产数量与时间下发到场景中的 Buff Manager。
+    // 场景里的 Buff Manager 只用兜底值，真正生效的以难度数据为准。
+    void ApplyBuffDifficultySettings()
+    {
+        if (currentDifficulty == null) return;
+
+        RandomBuffSpawner buffSpawner = FindObjectOfType<RandomBuffSpawner>();
+        if (buffSpawner == null)
+        {
+            Debug.LogWarning("⚠️ 场景中未找到 RandomBuffSpawner（Buff Manager），本局不会产出 Buff");
+            return;
+        }
+
+        buffSpawner.ApplyDifficultySettings(currentDifficulty);
+        Debug.Log($"🎁 Buff 参数已按难度 [{currentDifficulty.difficultyName}] 下发: " +
+                  $"间隔={currentDifficulty.buffSpawnInterval}s, 上限={currentDifficulty.buffMaxCount}, " +
+                  $"存活={currentDifficulty.buffLifeTime}s, 开局={currentDifficulty.buffInitialCount}个");
     }
 
     void NotifyTimerVisibility()
