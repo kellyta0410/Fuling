@@ -83,8 +83,8 @@ MonoBehaviour:
   formationRingPadding: 0.5
   ownerTile: {fileID: 0}
   prepareDistance: 6
-  prepareDuration: 1
-  distanceToPlayerAfterBlink: 2.1
+  prepareDuration: 3
+  distanceToPlayerAfterBlink: 1.7
   directAttackDistance: 2
   postBlinkDelay: 0.2
   blinkCooldown: 2.5
@@ -123,7 +123,7 @@ NavMeshAgent:
   m_GameObject: {fileID: 4828800342966192151}
   m_Enabled: 1
   m_AgentTypeID: 0
-  m_Radius: 1
+  m_Radius: 0.5
   m_Speed: 3.5
   m_Acceleration: 8
   avoidancePriority: 50

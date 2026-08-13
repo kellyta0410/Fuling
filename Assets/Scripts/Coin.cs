@@ -7,6 +7,9 @@ public class Coin : MonoBehaviour
     public float autoCollectRadius = 3f;
     public float autoCollectSpeed = 10f;
     public float lifeTime = 10f; // 自动吸附延迟
+    [Header("音效")]
+    [Tooltip("拾取音效（Clip 放这里，音量读 SettingsManager）")]
+    public AudioClip collectSFX;
 
     private PlayerController player;
     private bool isCollecting = false;
@@ -57,6 +60,11 @@ public class Coin : MonoBehaviour
         if (player != null)
         {
             player.AddCoin(coinValue);
+        }
+        // 用 PlayClipAtPoint：物体随即销毁，声音不会被带走（自带临时 AudioSource，播完自删）
+        if (collectSFX != null)
+        {
+            AudioSource.PlayClipAtPoint(collectSFX, transform.position, AudioManager.GetSFXVolume());
         }
         Destroy(gameObject);
     }

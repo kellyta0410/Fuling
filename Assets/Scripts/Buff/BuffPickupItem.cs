@@ -4,6 +4,9 @@ public class BuffPickupItem : MonoBehaviour
 {
     [Header("绑定数据")]
     public BuffDataSO buffData;
+    [Header("音效")]
+    [Tooltip("拾取音效（Clip 放这里，音量读 SettingsManager）")]
+    public AudioClip collectSFX;
 
     void Start()
     {
@@ -31,6 +34,10 @@ public class BuffPickupItem : MonoBehaviour
             {
                 handler.ApplyBuff(buffData);
                 Debug.Log($"拾取了 {buffData.buffName}！");
+                if (collectSFX != null)
+                {
+                    AudioSource.PlayClipAtPoint(collectSFX, transform.position, AudioManager.GetSFXVolume());
+                }
                 Destroy(gameObject);
             }
         }

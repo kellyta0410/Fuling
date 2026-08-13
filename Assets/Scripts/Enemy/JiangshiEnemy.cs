@@ -12,12 +12,12 @@ public class JiangshiEnemy : EnemyAI
     private Vector3 lockedFacingDir = Vector3.zero;  // 蓄力开始时锁定朝向（身体 + 指示线共用）
 
     [Header("瞬移参数")]
-    [Tooltip("大于此距离才会瞬移（远距离用瞬移接近）")]
+    [Tooltip("大于此距离才会瞬移（远距离用瞬移接近；近距离直接走过去打）")]
     public float prepareDistance = 6f;
     [Tooltip("蓄力停顿时间（秒）")]
-    public float prepareDuration = 1.0f;
+    public float prepareDuration = 3.0f;
     [Tooltip("瞬移后距离玩家多远（数值越小越贴脸）")]
-    public float distanceToPlayerAfterBlink = 1.5f;
+    public float distanceToPlayerAfterBlink = 1.7f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
     [Tooltip("瞬移冷却时间（秒）")]
@@ -59,6 +59,10 @@ public class JiangshiEnemy : EnemyAI
         {
             agent.stoppingDistance = Mathf.Max(agent.stoppingDistance, 1.7f);
             agent.autoBraking = true;
+            // ⭐ 缩小寻路半径：预制体默认 radius=1 比碰撞体(1.6×1.4 半宽约0.8)还宽，
+            // 转角/窄通道里 NavMeshAgent 判定绕不过去导致卡墙角。降到 0.5 与碰撞体匹配，
+            // 配合 WallPenetrationResolve/EnemyCollisionBlocker 兜底仍不穿墙。
+            agent.radius = 0.5f;
         }
 
         if (showGroundIndicator)
@@ -170,6 +174,7 @@ public class JiangshiEnemy : EnemyAI
 
             case BlinkState.Preparing:
                 StopAgent();
+                // ⭐ 蓄力期间朝锁定方向转向（身体不跟随玩家，落点/朝向都锁定在蓄力开始瞬间）
                 RotateToLockedFacing();
 
                 stateTimer += Time.deltaTime;
@@ -218,9 +223,17 @@ public class JiangshiEnemy : EnemyAI
                         stateTimer = 0f;
                         return;
                     }
-                    PerformBlinkToPlayer();
-                    blinkState = BlinkState.PostBlink;
-                    stateTimer = 0f;
+                    if (PerformBlinkToPlayer())
+                    {
+                        blinkState = BlinkState.PostBlink;
+                        stateTimer = 0f;
+                    }
+                    else
+                    {
+                        // ⭐ 落点路径被墙挡：放弃瞬移，回到追击
+                        blinkState = BlinkState.Chasing;
+                        stateTimer = 0f;
+                    }
                 }
                 break;
 
@@ -349,23 +362,30 @@ public class JiangshiEnemy : EnemyAI
     }
 
     /// <summary>
-    /// ⭐ 瞬移到距离玩家固定距离的位置
+    /// ⭐ 瞬移到"蓄力开始时锁定的玩家位置"前固定距离处（与指示条终点一致，不实时跟随玩家）。
+    /// 成功瞬移返回 true；落点路径被墙挡则返回 false（不瞬移，由调用方回到追击）。
     /// </summary>
-    private void PerformBlinkToPlayer()
+    private bool PerformBlinkToPlayer()
     {
-        if (player == null) return;
+        if (player == null) return false;
 
-        // ⭐ 瞬移到"蓄力开始时锁定的玩家位置"（与指示条终点一致），而不是实时跟随玩家
+        // ⭐ 落点基准：蓄力开始时锁定的玩家位置（地面），之后不跟随玩家
         Vector3 lockedPlayerPos = lockedIndicatorTarget;
         if (lockedPlayerPos.sqrMagnitude < 0.001f)
             lockedPlayerPos = GetGroundPosition(player.transform.position);
 
-        // 从僵尸指向锁定玩家位置的方向
-        Vector3 directionToPlayer = (lockedPlayerPos - transform.position).normalized;
+        // 从僵尸指向锁定玩家位置的水平方向
+        Vector3 toTarget = lockedPlayerPos - transform.position;
+        toTarget.y = 0;
+        Vector3 directionToTarget = toTarget.sqrMagnitude > 0.01f ? toTarget.normalized : -transform.forward;
 
-        // 目标点 = 锁定玩家位置 - 方向 × 距离（出现在玩家面前）
-        Vector3 targetPos = lockedPlayerPos - directionToPlayer * distanceToPlayerAfterBlink;
+        // ⭐ 目标点 = 锁定玩家位置 - 方向 × 固定距离（落在玩家来向的后方，始终保持固定间隔）
+        Vector3 targetPos = lockedPlayerPos - directionToTarget * distanceToPlayerAfterBlink;
         targetPos.y = transform.position.y;
+
+        // ⭐ 瞬移落点校验：从僵尸到落点的路径被墙挡（会穿墙瞬移、玩家看不到瞬移）就放弃瞬移
+        if (IsBlinkTargetBlocked(targetPos))
+            return false;
 
         // 确保目标点在地面上
         if (isAgentValid && agent.isOnNavMesh)
@@ -392,6 +412,21 @@ public class JiangshiEnemy : EnemyAI
         faceDir.y = 0;
         if (faceDir != Vector3.zero)
             transform.rotation = Quaternion.LookRotation(faceDir);;
+        return true;
+    }
+
+    /// <summary>
+    /// 从僵尸胸口高度到落点胸口高度发射射线，命中障碍即返回 true（落点路径穿墙）。
+    /// </summary>
+    private bool IsBlinkTargetBlocked(Vector3 targetPos)
+    {
+        Vector3 from = transform.position + Vector3.up * 1.4f;
+        Vector3 to = targetPos + Vector3.up * 1.4f;
+        Vector3 dir = to - from;
+        float dist = dir.magnitude;
+        if (dist <= 0.01f) return false;
+
+        return Physics.Raycast(from, dir / dist, dist, blinkObstacleMask);
     }
 
     private void RotateTowardPlayer()

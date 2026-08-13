@@ -30,9 +30,16 @@ public class PlayerController : MonoBehaviour
     [Tooltip("普通攻击造成伤害的延迟（秒），对齐普通攻击动画命中那一刻")]
     public float attackDamageDelay = 0.35f;
     [Tooltip("普通攻击判定方位角(度)：只有玩家正前方 ±该角度 内的敌人才会收到伤害，背后/侧面打不到；技能不受此限制(全方位)")]
-    public float attackFacingAngle = 75f;
+    public float attackFacingAngle = 90f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
     public float skillDamageDelay = 0.5f;
+    [Header("攻击音效（Clip 放这里，音量读 SettingsManager）")]
+    [Tooltip("普通攻击音效，每次攻击随机取一个播放")]
+    public AudioClip[] attackSFX;
+    [Tooltip("技能攻击音效（单独一条）")]
+    public AudioClip skillSFX;
+    private AudioSource sfxSource;
+
     [Header("攻击特效")]
     [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
     public GameObject attackVFXPrefab;
@@ -149,8 +156,6 @@ public class PlayerController : MonoBehaviour
     private bool canUseSkill = true;
     private bool isUsingSkill = false;
     private float skillTimer = 0f;
-    private Quaternion skillStartRotation = Quaternion.identity;
-    private Quaternion attackStartRotation = Quaternion.identity;
     public float skillDuration = 0.8f;
     private Image[] cooldownMasks = new Image[3];
 
@@ -483,8 +488,7 @@ public class PlayerController : MonoBehaviour
                 isAttacking = false;
                 attackTimer = 0f;
                 animator.SetBool("IsAttacking", false);
-                // 单段攻击播放完回到起手朝向（动画自带的旋转只影响播放期间）
-                transform.rotation = attackStartRotation;
+                // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
             // 攻击点排队：上一个播完，接着播下一个连击
@@ -514,18 +518,16 @@ public class PlayerController : MonoBehaviour
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
-                animator.applyRootMotion = false;
-                // 技能播放完，恢复起始朝向
-                transform.rotation = skillStartRotation;
+                // ⭐ 技能中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
         }
 
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        // 普通移动时朝输入方向转向（跟手）。
-        // 攻击固定朝向（播完还原 attackStartRotation）；技能由动画自带旋转主导（播完还原 skillStartRotation）；闪避锁死朝向。
-        if (moveDir.magnitude > 0.1f && !isDodging && !isAttacking && !isUsingSkill)
+        // 普通移动/攻击/技能时都朝输入方向转向（跟手）。
+        // 攻击/技能中可转向但位移仍锁死；闪避锁死朝向。
+        if (moveDir.magnitude > 0.1f && !isDodging)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -664,6 +666,9 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || isDying) return;
 
+        // ⭐ 技能播放期间忽略普通攻击：防止 animator.Play 打断技能动画导致技能中途被切
+        if (isUsingSkill) return;
+
         // 正在攻击：这次点击缓存起来，当前攻击播完后再自动播下一段（不打断、不吞掉输入）
         if (isAttacking)
         {
@@ -683,11 +688,10 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击全程固定。
+        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向，位置锁死不位移。
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
-        attackStartRotation = transform.rotation;
 
         // 攻击期间彻底锁死位移：关掉 root motion（否则 Animator 勾了 Apply Root Motion 时
         // 攻击动画自带的位移会把角色拖走造成滑步），并清零残余移动速度。
@@ -703,6 +707,7 @@ public class PlayerController : MonoBehaviour
         animator.Play(stateName, 0, 0f);
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
+        PlayRandomAttackSFX();
         SpawnAttackVFX(stateName);
         StartCoroutine(DelayedDamage());
     }
@@ -862,10 +867,6 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
-        skillStartRotation = transform.rotation;
-        // 技能期间打开 root motion：让 Animator 计算动画自带旋转（deltaRotation），
-        // OnAnimatorMove 里只对技能状态应用旋转；结束后关回。
-        animator.applyRootMotion = true;
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -874,6 +875,7 @@ public class PlayerController : MonoBehaviour
         Debug.Log($"[技能] PerfmSkillAttack 触发");
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
+        PlaySkillSFX();
         StartCoroutine(DelayedSkillDamage(finalDamage));
         SpawnSkillVFX();
     }
@@ -912,16 +914,10 @@ public class PlayerController : MonoBehaviour
         if (vfx != null) Destroy(vfx);
     }
 
-    // 接管 root motion：按当前动画状态决定是否应用动画自带的旋转。
-    // - 技能（Skill Attack，360° 转圈）：应用动画旋转，丢弃位移
-    // - 普通攻击/移动：位置、旋转全部丢弃（固定朝向）
-    // 前提：需要动画旋转的状态必须临时把 applyRootMotion 置 true，否则 deltaRotation 恒为 0。
+    // 接管 root motion：位置、旋转全部丢弃（朝向由代码跟随输入控制，位移由 CharacterController 驱动）
     private void OnAnimatorMove()
     {
-        AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
-        if (state.IsName("Skill Attack"))
-            transform.rotation *= animator.deltaRotation;
-        // 其他状态：丢弃位置和旋转
+        // 所有状态都丢弃动画自带的位移与旋转，避免动画 root motion 干扰代码控制的移动/转向
     }
 
     IEnumerator DelayedSkillDamage(int damage)
@@ -1442,6 +1438,32 @@ public class PlayerController : MonoBehaviour
     {
         coins += amount;
         if (uiManager != null) uiManager.OnPlayerCoinChanged();
+    }
+
+    // ==================== 玩家音效（Clip 在 Inspector 上配，音量读 SettingsManager） ====================
+
+    AudioSource GetSFXSource()
+    {
+        if (sfxSource == null)
+        {
+            sfxSource = GetComponent<AudioSource>();
+            if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
+            sfxSource.playOnAwake = false;
+        }
+        return sfxSource;
+    }
+
+    void PlayRandomAttackSFX()
+    {
+        if (attackSFX == null || attackSFX.Length == 0) return;
+        AudioClip clip = attackSFX[Random.Range(0, attackSFX.Length)];
+        GetSFXSource().PlayOneShot(clip, AudioManager.GetSFXVolume());
+    }
+
+    void PlaySkillSFX()
+    {
+        if (skillSFX == null) return;
+        GetSFXSource().PlayOneShot(skillSFX, AudioManager.GetSFXVolume());
     }
 
     public void AddKill()
