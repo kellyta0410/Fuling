@@ -4,7 +4,7 @@ using UnityEngine.AI;
 
 public class JiangshiEnemy : EnemyAI
 {
-    private enum BlinkState { Chasing, Preparing, Blinking, PostBlink, Cooldown }
+    private enum BlinkState { Chasing, Preparing, PostBlink, Cooldown }
     private BlinkState blinkState = BlinkState.Chasing;
     private float stateTimer = 0f;
     private bool hasPrepared = false;
@@ -20,8 +20,6 @@ public class JiangshiEnemy : EnemyAI
     public float distanceToPlayerAfterBlink = 1.5f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
-    [Tooltip("指示线满后到瞬移前的停顿时间（秒）")]
-    public float postBlinkDelay = 0.2f;
     [Tooltip("瞬移冷却时间（秒）")]
     public float blinkCooldown = 2.5f;
     [Tooltip("瞬移会被哪些层挡住（默认 Wall 层）。有墙挡着就不会瞬移，改为绕墙走过去")]
@@ -30,15 +28,19 @@ public class JiangshiEnemy : EnemyAI
     [Header("地面指示特效")]
     [Tooltip("是否显示地面指示")]
     public bool showGroundIndicator = true;
-    [Tooltip("指示方块颜色（全红）")]
+    [Tooltip("指示条填充颜色（红色慢慢填充）")]
     public Color endColor = Color.red;
-    [Tooltip("指示方块的边长(米)")]
+    [Tooltip("指示条的宽度(米)——长条方向从僵尸指向锁定玩家位置")]
     public float indicatorSize = 1.0f;
-    [Tooltip("指示方块高度（贴地）")]
+    [Tooltip("指示条高度（贴地）")]
     public float indicatorHeight = 0.05f;
+    [Tooltip("外框线宽（米）")]
+    public float frameLineWidth = 0.06f;
 
     private GameObject endMarker;
     private MeshRenderer endMarkerRenderer;
+    private LineRenderer endFrame;
+    private Vector3 lockedIndicatorTarget = Vector3.zero; // 蓄力开始时锁定的玩家位置（地面）
 
     // 动画 root motion 的 Y（跳跃离地）会作用在子模型上；根节点 XZ 由 NavMeshAgent 驱动。
     private Transform visualModel;
@@ -67,11 +69,11 @@ public class JiangshiEnemy : EnemyAI
 
     private void CreateGroundIndicator()
     {
-        // 正方块指示器：平铺在地面上，表示瞬移落点区域，随蓄力进度在锁定方向上推进变大
+        // 填充方块：从僵尸脚下开始，沿锁定方向朝玩家推进填充
         endMarker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        endMarker.name = "BlinkIndicator_Square";
+        endMarker.name = "BlinkIndicator_Fill";
         endMarker.transform.SetParent(transform);
-        endMarker.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // 平铺贴地
+        // 每帧用 LookRotation 对齐方向，不再用固定 90° 旋转（避免长度轴向错位）
         endMarker.transform.localScale = new Vector3(indicatorSize, indicatorHeight, indicatorSize);
         Destroy(endMarker.GetComponent<Collider>());
 
@@ -79,6 +81,20 @@ public class JiangshiEnemy : EnemyAI
         endMarkerRenderer.material = new Material(Shader.Find("Sprites/Default"));
         endMarkerRenderer.material.color = endColor; // 全红
         endMarker.SetActive(false);
+
+        // 方形外框：LineRenderer 画长方形边框，包住从僵尸到锁定玩家的整条路径
+        GameObject frameGO = new GameObject("BlinkIndicator_Frame");
+        frameGO.transform.SetParent(transform);
+        endFrame = frameGO.AddComponent<LineRenderer>();
+        endFrame.useWorldSpace = true;
+        endFrame.positionCount = 4; // 长方形四角
+        endFrame.loop = true;
+        endFrame.startWidth = frameLineWidth;
+        endFrame.endWidth = frameLineWidth;
+        endFrame.material = new Material(Shader.Find("Sprites/Default"));
+        endFrame.startColor = Color.white;
+        endFrame.endColor = Color.white;
+        frameGO.SetActive(false);
     }
 
     protected override void HandleMovement()
@@ -185,27 +201,15 @@ public class JiangshiEnemy : EnemyAI
                     return;
                 }
 
-                // ⭐ 蓄力完成，进入"瞬移前等待"状态
+                // ⭐ 蓄力填满的当下立刻瞬移
                 if (stateTimer >= prepareDuration && !hasPrepared)
                 {
                     hasPrepared = true;
                     HideGroundIndicator();
 
-                    // 进入瞬移前等待
-                    blinkState = BlinkState.Blinking;
-                    stateTimer = 0f;
-                }
-                break;
-
-            case BlinkState.Blinking:
-                // ⭐ 瞬移前等待（指示线满后等 postBlinkDelay 秒再瞬移）
-                stateTimer += Time.deltaTime;
-                if (stateTimer >= postBlinkDelay)
-                {
                     // 瞬移前最后校验：玩家已躲到墙后或瞬移路径被墙挡，就放弃瞬移
                     if (!HasClearLineToPlayer())
                     {
-                        HideGroundIndicator();
                         blinkState = BlinkState.Chasing;
                         stateTimer = 0f;
                         return;
@@ -259,36 +263,54 @@ public class JiangshiEnemy : EnemyAI
 
     private void ShowGroundIndicator()
     {
+        // 蓄力开始时锁定玩家位置（地面），指示条从僵尸拉向该位置
+        lockedIndicatorTarget = player != null
+            ? GetGroundPosition(player.transform.position)
+            : GetGroundPosition(transform.position);
+
         if (endMarker != null)
         {
             endMarker.SetActive(true);
-            endMarker.transform.position = GetGroundPosition(transform.position);
             endMarkerRenderer.material.color = endColor; // 全红
-            endMarker.transform.localScale = new Vector3(0.001f, indicatorHeight, 0.001f); // 从没有开始
+            // 填充从僵尸脚下开始，长度几乎为 0
+            endMarker.transform.position = GetGroundPosition(transform.position);
+            endMarker.transform.localScale = new Vector3(0.001f, indicatorHeight, 0.001f);
         }
+        if (endFrame != null) endFrame.gameObject.SetActive(true);
     }
 
     private void UpdateGroundIndicator()
     {
         float progress = Mathf.Clamp01(stateTimer / prepareDuration);
 
-        // ⭐ 计算瞬移目标方向：使用蓄力开始锁定的方向，蓄力全程不随玩家移动改变
-        Vector3 directionToPlayer = lockedFacingDir != Vector3.zero
-            ? lockedFacingDir
-            : (player.transform.position - transform.position).normalized;
-        float currentDistance = Vector3.Distance(transform.position, player.transform.position);
-        float blinkDistance = currentDistance - distanceToPlayerAfterBlink;
-        blinkDistance = Mathf.Max(blinkDistance, 0);
+        Vector3 startPos = GetGroundPosition(transform.position);
+        Vector3 dirToTarget = lockedIndicatorTarget - startPos;
+        float totalDist = dirToTarget.magnitude;
+        Vector3 dir = totalDist > 0.01f ? dirToTarget / totalDist : transform.forward;
 
-        // 方块在锁定方向上从脚下推进到瞬移落点
-        Vector3 endPos = GetGroundPosition(transform.position + directionToPlayer * blinkDistance * progress);
+        // ⭐ 红色填充：从僵尸脚下沿锁定方向填充到 进度×全程
+        float fillLength = Mathf.Lerp(0.0f, totalDist, progress);
+        Vector3 fillCenter = startPos + dir * (fillLength * 0.5f);
+        fillCenter.y = startPos.y;
 
         if (endMarker != null)
         {
-            endMarker.transform.position = endPos;
-            // 全红，尺寸随进度从无(几乎0)填满到 indicatorSize
-            float scale = Mathf.Lerp(0.001f, indicatorSize, progress);
-            endMarker.transform.localScale = new Vector3(scale, indicatorHeight, scale);
+            endMarker.transform.position = fillCenter;
+            // 让立方体长度轴(z) 沿锁定方向：宽度=X，长度=Z，高度=贴地厚度
+            endMarker.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+            endMarker.transform.localScale = new Vector3(indicatorSize, indicatorHeight, Mathf.Max(fillLength, 0.001f));
+        }
+
+        // ⭐ 外框：始终完整大小，包住从僵尸到锁定玩家的整条路径
+        if (endFrame != null)
+        {
+            float half = indicatorSize * 0.5f;
+            float y = startPos.y;
+            Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
+            endFrame.SetPosition(0, startPos + (-right * half));
+            endFrame.SetPosition(1, startPos + (right * half));
+            endFrame.SetPosition(2, lockedIndicatorTarget + (right * half));
+            endFrame.SetPosition(3, lockedIndicatorTarget + (-right * half));
         }
     }
 
@@ -296,6 +318,8 @@ public class JiangshiEnemy : EnemyAI
     {
         if (endMarker != null)
             endMarker.SetActive(false);
+        if (endFrame != null)
+            endFrame.gameObject.SetActive(false);
     }
 
     private Vector3 GetGroundPosition(Vector3 position)
@@ -332,11 +356,16 @@ public class JiangshiEnemy : EnemyAI
     {
         if (player == null) return;
 
-        // 计算从敌人指向玩家的方向
-        Vector3 directionToPlayer = (player.transform.position - transform.position).normalized;
+        // ⭐ 瞬移到"蓄力开始时锁定的玩家位置"（与指示条终点一致），而不是实时跟随玩家
+        Vector3 lockedPlayerPos = lockedIndicatorTarget;
+        if (lockedPlayerPos.sqrMagnitude < 0.001f)
+            lockedPlayerPos = GetGroundPosition(player.transform.position);
 
-        // 目标点 = 玩家位置 - 方向 × 距离（出现在玩家面前）
-        Vector3 targetPos = player.transform.position - directionToPlayer * distanceToPlayerAfterBlink;
+        // 从僵尸指向锁定玩家位置的方向
+        Vector3 directionToPlayer = (lockedPlayerPos - transform.position).normalized;
+
+        // 目标点 = 锁定玩家位置 - 方向 × 距离（出现在玩家面前）
+        Vector3 targetPos = lockedPlayerPos - directionToPlayer * distanceToPlayerAfterBlink;
         targetPos.y = transform.position.y;
 
         // 确保目标点在地面上
@@ -446,7 +475,7 @@ public class JiangshiEnemy : EnemyAI
 
 #if UNITY_EDITOR
         UnityEditor.Handles.Label(transform.position + Vector3.up * 3.5f,
-            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移后距离: {distanceToPlayerAfterBlink:F1}m\n瞬移前停顿: {postBlinkDelay:F1}s");
+            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移后距离: {distanceToPlayerAfterBlink:F1}m");
 #endif
     }
 }
