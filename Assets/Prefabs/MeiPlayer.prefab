@@ -14600,7 +14600,13 @@ MonoBehaviour:
   smoothRotation: 10
   attackDuration: 0.5
   attackDamageDelay: 0.25
+  attackFacingAngle: 90
   skillDamageDelay: 0.5
+  attackSFX:
+  - {fileID: 8300000, guid: 963d51260917c8f4cb2ff53c41c07635, type: 3}
+  - {fileID: 8300000, guid: 3af6e7f13f77c6146b775e35ca283912, type: 3}
+  - {fileID: 8300000, guid: b2215bb7fba93ea48b0cf8d809ef6952, type: 3}
+  skillSFX: {fileID: 8300000, guid: adc9435643ec51e43888c49a8f2e15a3, type: 3}
   attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
     type: 3}
   skillVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
@@ -14612,6 +14618,7 @@ MonoBehaviour:
   slashSwingDirection: 0
   slashForwardOffset: 0.9
   wallResolveEnabled: 1
+  showGizmos: 1
   groundLayer:
     serializedVersion: 2
     m_Bits: 8
