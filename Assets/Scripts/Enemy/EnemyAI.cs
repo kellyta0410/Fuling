@@ -75,12 +75,12 @@ public abstract class EnemyAI : MonoBehaviour
     public float turnSpeed = 240f;
 
     [Header("追击检测（普通模式）")]
-    public float detectionRange = 18f;
-    public float loseTargetRange = 25f;
+    public float detectionRange = 30f;
+    public float loseTargetRange = 45f;
 
     [Header("追击检测（无限模式专用）")]
-    public float infiniteDetectionRange = 30f;
-    public float infiniteLoseTargetRange = 40f;
+    public float infiniteDetectionRange = 60f;
+    public float infiniteLoseTargetRange = 80f;
 
     [Header("群组行为（分离力）")]
     public bool enableSeparation = true;

@@ -44,6 +44,8 @@ public class PlayerController : MonoBehaviour
     public float slashSwingAngle = 70f;
     [Tooltip("挥砍甩出方向：0 = 随连招交替左右挥，1 = 固定从左到右，-1 = 从右到左")]
     public int slashSwingDirection = 0;
+    [Tooltip("剑光出现位置在玩家前方的偏移量(米)：让剑光更靠前、落在攻击范围内而非贴在角色身上")]
+    public float slashForwardOffset = 0.9f;
 
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
@@ -127,6 +129,7 @@ public class PlayerController : MonoBehaviour
     private static readonly string[] attackStateNames = { "Attack", "Attack2", "Attack3" };
     private float attackTimer = 0f;
     private bool isAttacking = false;
+    private bool queuedAttack = false;   // 攻击排队：攻击中点按钮，等上一个播完再播下一个
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
     private int comboIndex = 0;
@@ -197,6 +200,9 @@ public class PlayerController : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
+        // 全程禁用 root motion：本项目位移全部由代码驱动(CharacterController)，开启会叠加动画自带位移造成滑步
+        if (animator != null)
+            animator.applyRootMotion = false;
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
@@ -455,6 +461,15 @@ public class PlayerController : MonoBehaviour
                 attackTimer = 0f;
                 animator.SetBool("IsAttacking", false);
             }
+
+            // 攻击点排队：上一个播完，接着播下一个连击
+            if (!isAttacking && queuedAttack)
+            {
+                queuedAttack = false;
+                canAttack = true;
+                attackCooldownTimer = 0f;
+                BeginAttack();
+            }
         }
 
         if (isUsingSkill)
@@ -481,8 +496,8 @@ public class PlayerController : MonoBehaviour
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        // 攻击时也能转向（跟手），但移动归零（原地挥击）
-        if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
+        // 攻击/技能/闪避期间锁死朝向与位移（原地挥击），避免跑动中攻击滑步
+        if (moveDir.magnitude > 0.1f && !isDodging && !isAttacking && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -506,6 +521,14 @@ public class PlayerController : MonoBehaviour
         wasGrounded = isGrounded;
 
         float currentSpeed = isDodging ? dodgeSpeed : (isAttacking || isUsingSkill ? 0f : speed);
+
+        // 攻击/技能期间彻底锁死水平位移（防 root motion / 动画事件拖动角色滑步）：
+        // 即使 Animator 里动画自带位移、或残留速度，Move 之前一律清零。
+        if (isAttacking || isUsingSkill)
+        {
+            velocity.x = 0f;
+            velocity.z = 0f;
+        }
         if (isGrounded)
         {
             if (inputMagnitude > 0.1f)
@@ -611,13 +634,36 @@ public class PlayerController : MonoBehaviour
 
     void PerformAttack()
     {
-        if (!canAttack || isAttacking || isDead || isDying) return;
+        if (isDead || isDying) return;
 
+        // 正在攻击：这次点击缓存起来，当前攻击播完后再自动播下一段（不打断、不吞掉输入）
+        if (isAttacking)
+        {
+            queuedAttack = true;
+            return;
+        }
+
+        if (!canAttack) return;
+
+        BeginAttack();
+    }
+
+    void BeginAttack()
+    {
         isAttacking = true;
         canAttack = false;
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
+
+        // 攻击期间彻底锁死位移：关掉 root motion（否则 Animator 勾了 Apply Root Motion 时
+        // 攻击动画自带的位移会把角色拖走造成滑步），并清零残余移动速度。
+        animator.applyRootMotion = false;
+        if (!isDodging)
+        {
+            velocity.x = 0f;
+            velocity.z = 0f;
+        }
 
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
@@ -634,7 +680,21 @@ public class PlayerController : MonoBehaviour
         if (attackVFXPrefab == null || weaponPivot == null) return;
 
         Vector3 spawnPos = GetWeaponTipPosition();
-        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up);
+        // 让剑光落在玩家前方攻击范围内（而非贴角色），偏移量可调
+        spawnPos += transform.forward * slashForwardOffset;
+
+        // 剑光角度跟随连招挥砍方向：第一刀左上→右下，第二刀右下→左上，第三刀居中。
+        // 剑光一出现就是完整、固定斜角的一条弧，而不是从零放大绕竖直轴甩出。
+        float yaw;
+        switch (comboIndex)
+        {
+            case 0: yaw = -45f; break;
+            case 1: yaw = 45f; break;
+            default: yaw = 0f; break;
+        }
+        if (slashSwingDirection != 0) yaw = slashSwingDirection * 45f; // 手动覆盖方向
+
+        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
 
@@ -642,21 +702,12 @@ public class PlayerController : MonoBehaviour
         // 读起来像"贴死在剑上"；挂到角色根后特效保持一次稳定挥砍轨迹。
         vfx.transform.SetParent(transform, true);
 
-        // 挥砍渐进 + 甩出：特效不是"一整个从头出现"，而是从微缩(浅)沿挥砍方向逐渐撑到全
-        // 尺寸(深)，同时绕竖直轴甩出一个角度，像挥剑把弧光甩出去划开空气。
-        Vector3 fullScale = vfx.transform.localScale;
-        vfx.transform.localScale = Vector3.zero;      // 同帧先藏起，避免爆出一帧完整弧光
-
-        // 甩刀方向：0 跟随连招交替左右挥（有节奏感），也可固定
-        int direction = slashSwingDirection;
-        if (direction == 0) direction = (comboIndex % 2 == 0) ? 1 : -1;
-
-        StartCoroutine(SweepAttackVFX(vfx, fullScale, stateName, direction));
+        // 完整尺寸直接出现，播放一次后随攻击结束销毁
+        StartCoroutine(DespawnAttackVFX(vfx, stateName));
     }
 
-    // 让 slash 特效"像挥砍甩出从浅到深"：挥出阶段从 0 缓动撑到全尺寸并绕竖直轴甩出
-    // 一道弧，末期轻微回缩模拟"砍完收刀"，总时长与当前攻击动画等长。
-    IEnumerator SweepAttackVFX(GameObject vfx, Vector3 fullScale, string stateName, int direction)
+    // 特效完整出现一次，等攻击动画播放完再销毁。不做"从零放大 + 甩出"动画。
+    IEnumerator DespawnAttackVFX(GameObject vfx, string stateName)
     {
         yield return null; // 等一帧让 Animator 切换到新状态
         AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
@@ -666,38 +717,7 @@ public class PlayerController : MonoBehaviour
         if (total <= 0.01f) total = attackDuration;
         total = Mathf.Max(total, 0.05f);
 
-        float growRatio = Mathf.Clamp01(slashGrowAmount);
-        Quaternion baseRot = vfx != null ? vfx.transform.rotation : transform.rotation;
-        float halfSwing = Mathf.Max(0f, slashSwingAngle) * 0.5f;
-        int swingDir = direction >= 0 ? 1 : -1;
-        float t = 0f;
-        while (t < total)
-        {
-            t += Time.deltaTime;
-            float p = Mathf.Clamp01(t / total);
-
-            // 0 → growRatio 内从小撑到满（浅→深）；之后保持全挥
-            float reveal = Mathf.Clamp01(p / Mathf.Max(growRatio, 0.01f));
-            reveal = Mathf.Pow(reveal, Mathf.Max(slashGrowExponent, 0.1f));
-
-            // 甩出：同一段挥出窗口内，弧光从 -halfSwing 缓缓转到 +halfSwing，
-            // 曲线比缩放略平缓，形成"剑甩出弧光"的轨迹而非原地贴剑。
-            float swingP = Mathf.Clamp01(p / Mathf.Max(growRatio, 0.01f));
-            swingP = Mathf.Pow(swingP, Mathf.Max(slashGrowExponent * 0.6f, 0.1f));
-            float sweep = Mathf.Lerp(-halfSwing, halfSwing, swingP);
-
-            // 收尾 15% 轻微回缩，视觉上"砍完收刀"
-            if (p > 0.85f)
-                reveal *= Mathf.Lerp(1f, 0.3f, (p - 0.85f) / 0.15f);
-
-            if (vfx != null)
-            {
-                vfx.transform.rotation = baseRot * Quaternion.Euler(0f, swingDir * sweep, 0f);
-                vfx.transform.localScale = fullScale * Mathf.Max(reveal, 0.0001f);
-            }
-
-            yield return null;
-        }
+        yield return new WaitForSeconds(total);
         if (vfx != null) Destroy(vfx);
     }
 
@@ -780,10 +800,25 @@ public class PlayerController : MonoBehaviour
         isUsingSkill = true;
         skillTimer = 0f;
         animator.SetTrigger("SkillAction");
+        // 技能开启 root motion 让动画的 360° 旋转可传入 OnAnimatorMove，
+        // 由 OnAnimatorMove 只取旋转、丢弃位移（防滑步）。
         animator.applyRootMotion = true;
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         StartCoroutine(DelayedSkillDamage(finalDamage));
+    }
+
+    // 接管 root motion：使用 OnAnimatorMove 后 Unity 不会自动应用动画位移/旋转。
+    // 技能期间只应用 deltaRotation（360° 转圈），丢弃 deltaPosition 避免滑步；
+    // 普通移动/攻击完全不用 root motion（位移全由 CharacterController 驱动）。
+    private void OnAnimatorMove()
+    {
+        if (animator == null) return;
+
+        if (isUsingSkill)
+        {
+            transform.rotation *= animator.deltaRotation;
+        }
     }
 
     IEnumerator DelayedSkillDamage(int damage)
