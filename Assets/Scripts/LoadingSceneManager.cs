@@ -28,8 +28,36 @@ public class LoadingSceneManager : MonoBehaviour
             targetScene = fallbackScene;
         }
 
-        CreateLoadingUI();
+        // 场景中已预置好 UI（名字匹配）就直接复用，方便在编辑器里拖背景图/改布局；
+        // 否则运行时兜底创建。
+        if (!TryBindSceneUI())
+            CreateLoadingUI();
         StartCoroutine(LoadTargetScene());
+    }
+
+    // 复用场景里预置的 UI（名字找），已配置好背景图、进度条等则直接用
+    bool TryBindSceneUI()
+    {
+        var canvas = GameObject.Find("LoadingCanvas");
+        if (canvas == null) return false;
+        var bgImg = canvas.transform.Find("LoadingBackground");
+
+        var fill = bgImg != null ? bgImg.Find("ProgressBarBG/ProgressFill") : null;
+        var pct = bgImg != null ? bgImg.Find("ProgressText") : null;
+
+        if (fill == null || pct == null) return false;
+
+        progressFill = fill.GetComponent<Image>();
+        progressText = pct.GetComponent<Text>();
+        if (progressFill == null || progressText == null) return false;
+
+        progressFill.type = Image.Type.Filled;
+        progressFill.fillMethod = Image.FillMethod.Horizontal;
+        progressFill.fillAmount = 0f;
+        progressText.text = "0%";
+        if (progressText.font == null)
+            progressText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        return true;
     }
 
     IEnumerator LoadTargetScene()
@@ -101,12 +129,13 @@ public class LoadingSceneManager : MonoBehaviour
         title.color = Color.white;
         title.raycastTarget = false;
 
-        // 进度条底槽
+        // 进度条底槽：stretch 横跨屏幕，贴屏幕底部（上方留给背景图）
         RectTransform barBgRt = NewRect(bgRt, "ProgressBarBG");
-        barBgRt.anchorMin = new Vector2(0.5f, 0.5f);
-        barBgRt.anchorMax = new Vector2(0.5f, 0.5f);
-        barBgRt.pivot = new Vector2(0.5f, 0.5f);
-        barBgRt.sizeDelta = new Vector2(600f, 40f);
+        barBgRt.anchorMin = new Vector2(0f, 0f);
+        barBgRt.anchorMax = new Vector2(1f, 0f);
+        barBgRt.pivot = new Vector2(0.5f, 0f);
+        barBgRt.anchoredPosition = new Vector2(0f, 40f);
+        barBgRt.sizeDelta = new Vector2(0f, 40f);
         Image barBg = barBgRt.gameObject.AddComponent<Image>();
         barBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
         barBg.raycastTarget = false;
@@ -124,11 +153,12 @@ public class LoadingSceneManager : MonoBehaviour
         progressFill.fillMethod = Image.FillMethod.Horizontal;
         progressFill.fillAmount = 0f;
 
-        // 进度文字
+        // 进度文字：贴在进度条上方
         RectTransform pctRt = NewRect(bgRt, "ProgressText");
-        pctRt.anchorMin = new Vector2(0.5f, 0.42f);
-        pctRt.anchorMax = new Vector2(0.5f, 0.42f);
+        pctRt.anchorMin = new Vector2(0.5f, 0f);
+        pctRt.anchorMax = new Vector2(0.5f, 0f);
         pctRt.pivot = new Vector2(0.5f, 0.5f);
+        pctRt.anchoredPosition = new Vector2(0f, 95f);
         pctRt.sizeDelta = new Vector2(300f, 40f);
         progressText = pctRt.gameObject.AddComponent<Text>();
         progressText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");

@@ -23,6 +23,8 @@ public class SceneSelectionManager : MonoBehaviour
     public GameObject characterPanel;
     [Tooltip("新手引导面板：首次进入自动打开，之后仅通过 Tutorial 按钮手动打开")]
     public GameObject tutorialPanel;
+    [Tooltip("引导页容器：每个子物体是一页，翻页时逐个切换显示")]
+    public RectTransform tutorialPagesContainer;
 
     [Header("===== 玩家信息 =====")]
     public TextMeshProUGUI coinText;
@@ -358,6 +360,7 @@ public class SceneSelectionManager : MonoBehaviour
     // ==================== 新手引导面板 ====================
 
     const string TutorialShownKey = "SelectionTutorialShown";
+    private int currentTutorialPage = 0;
 
     void SetupTutorialOnFirstEntry()
     {
@@ -380,11 +383,46 @@ public class SceneSelectionManager : MonoBehaviour
     public void ShowTutorialPanel()
     {
         SetPanelActive(tutorialPanel, true);
+        ShowTutorialPage(0);
     }
 
     public void CloseTutorialPanel()
     {
         SetPanelActive(tutorialPanel, false);
+    }
+
+    // 上一页 / 下一页（箭头按钮绑定）
+    public void TutorialPrevPage()
+    {
+        int total = GetTutorialPageCount();
+        if (total <= 0) return;
+        ShowTutorialPage((currentTutorialPage - 1 + total) % total);
+    }
+
+    public void TutorialNextPage()
+    {
+        int total = GetTutorialPageCount();
+        if (total <= 0) return;
+        ShowTutorialPage((currentTutorialPage + 1) % total);
+    }
+
+    int GetTutorialPageCount()
+    {
+        return tutorialPagesContainer != null ? tutorialPagesContainer.childCount : 0;
+    }
+
+    void ShowTutorialPage(int index)
+    {
+        if (tutorialPagesContainer == null) return;
+
+        int total = tutorialPagesContainer.childCount;
+        if (total <= 0) return;
+
+        currentTutorialPage = index;
+        for (int i = 0; i < total; i++)
+        {
+            tutorialPagesContainer.GetChild(i).gameObject.SetActive(i == currentTutorialPage);
+        }
     }
 
     // ==================== 返回主菜单 ====================
