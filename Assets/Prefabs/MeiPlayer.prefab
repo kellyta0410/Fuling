@@ -14593,6 +14593,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHealth: 100
   speed: 9
+  attackMoveSpeedFactor: 0.5
+  skillMoveSpeedFactor: 0.35
   attackDamage: 5
   attackRange: 4
   attackCooldown: 0
@@ -14607,6 +14609,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 3af6e7f13f77c6146b775e35ca283912, type: 3}
   - {fileID: 8300000, guid: b2215bb7fba93ea48b0cf8d809ef6952, type: 3}
   skillSFX: {fileID: 8300000, guid: adc9435643ec51e43888c49a8f2e15a3, type: 3}
+  hitSFX: {fileID: 0}
   attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
     type: 3}
   skillVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
@@ -14793,17 +14796,17 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: b711846602abfe1429dbebad38650d36,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -1.691
+      value: 0.585
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b711846602abfe1429dbebad38650d36,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.528
+      value: 0.642
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b711846602abfe1429dbebad38650d36,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.241
+      value: 0.414
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b711846602abfe1429dbebad38650d36,
         type: 3}
