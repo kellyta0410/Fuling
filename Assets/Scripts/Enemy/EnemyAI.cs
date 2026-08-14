@@ -16,6 +16,12 @@ public abstract class EnemyAI : MonoBehaviour
     [Header("金币")]
     public GameObject coinPrefab;
 
+    [Header("音效（Clip 放这里，走 AudioManager 播放池）")]
+    [Tooltip("被玩家打中时的受击音效")]
+    public AudioClip hitSFX;
+    [Tooltip("发起攻击时的攻击音效")]
+    public AudioClip attackSFX;
+
     [Header("血条")]
     public GameObject healthBarPrefab;
     public Vector3 healthBarOffset = new Vector3(0, 1.5f, 0);
@@ -909,6 +915,7 @@ Vector3 center = player.transform.position;
             animator.SetBool("IsAttacking", true);
             animator.SetTrigger("Attack");
         }
+        PlayAttackSFX();
         if (attackCoroutine != null) StopCoroutine(attackCoroutine);
         attackCoroutine = StartCoroutine(DelayedDamage());
     }
@@ -1002,6 +1009,7 @@ Vector3 center = player.transform.position;
         {
             animator.SetTrigger("Hit");
         }
+        PlayHitSFX();
 
         StartCoroutine(SmoothDamage(damage));
     }
@@ -1219,6 +1227,20 @@ Vector3 center = player.transform.position;
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsMoving", isMoving);
         if (hasIsChasingParam) animator.SetBool("IsChasing", isChasing);
+    }
+
+    // ---------- 敌人音效（走 AudioManager 播放池） ----------
+
+    protected void PlayHitSFX()
+    {
+        if (hitSFX == null || AudioManager.Instance == null) return;
+        AudioManager.Instance.PlaySFX(hitSFX, transform.position);
+    }
+
+    protected void PlayAttackSFX()
+    {
+        if (attackSFX == null || AudioManager.Instance == null) return;
+        AudioManager.Instance.PlaySFX(attackSFX, transform.position);
     }
 
     protected void IdleRotation()
