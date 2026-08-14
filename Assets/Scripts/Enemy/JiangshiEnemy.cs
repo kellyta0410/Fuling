@@ -16,12 +16,14 @@ public class JiangshiEnemy : EnemyAI
     public float prepareDistance = 6f;
     [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 3.0f;
+    [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移到玩家面前")]
+    public float prepareDurationJitter = 0.8f;
     [Tooltip("瞬移后距离玩家多远（数值越小越贴脸）")]
     public float distanceToPlayerAfterBlink = 1.7f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
     [Tooltip("瞬移冷却时间（秒）")]
-    public float blinkCooldown = 2.5f;
+    public float blinkCooldown = 10f;
     [Tooltip("瞬移会被哪些层挡住（默认 Wall 层）。有墙挡着就不会瞬移，改为绕墙走过去")]
     public LayerMask blinkObstacleMask = 1 << 6;
 
@@ -42,8 +44,18 @@ public class JiangshiEnemy : EnemyAI
     private LineRenderer endFrame;
     private Vector3 lockedIndicatorTarget = Vector3.zero; // 蓄力开始时锁定的玩家位置（地面）
 
+    private EnemyCollisionBlocker blocker; // 蓄力站桩时挂起分离推挤，避免被其他单位挤动导致落点/指示错位
+    private float effectivePrepareDuration; // 每次蓄力时随机化的实际时长（错开多僵尸的瞬移时刻）
+
     // 动画 root motion 的 Y（跳跃离地）会作用在子模型上；根节点 XZ 由 NavMeshAgent 驱动。
     private Transform visualModel;
+
+    [Header("落地音效")]
+    [Tooltip("视觉模型离地超过此高度视为'在空中'(米)")]
+    public float airborneThreshold = 0.08f;
+    [Tooltip("视觉模型降到此高度以下视为'落地'(米)")]
+    public float landThreshold = 0.03f;
+    private bool wasAirborne = false;
 
     protected override void OnStart()
     {
@@ -51,6 +63,8 @@ public class JiangshiEnemy : EnemyAI
         blinkState = BlinkState.Chasing;
         if (transform.childCount > 0)
             visualModel = transform.GetChild(0);
+
+        blocker = GetComponent<EnemyCollisionBlocker>();
 
         // 僵尸碰撞体 1.6×1.4 + 玩家 CC 半径 0.8 → 至少需 1.6m 才不重叠。
         // 通用 stoppingDistance(攻击范围×0.5) 只有 1.1m，会挤进玩家体积顶动玩家(CC depenetrate)，
@@ -69,6 +83,48 @@ public class JiangshiEnemy : EnemyAI
         {
             CreateGroundIndicator();
         }
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+        UpdateLandSFX();
+    }
+
+    // ⭐ 被击退中断蓄力：恢复分离推挤（击退用 agent.Move 推，无需再挂起；蓄力残留落点锁定已失效）
+    protected override void OnKnockback()
+    {
+        base.OnKnockback();
+        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.PostBlink)
+        {
+            SetSeparationSuspended(false);
+            blinkState = BlinkState.Cooldown;
+            stateTimer = 0f;
+        }
+    }
+
+    // 僵尸跳着走：检测视觉模型从"离地"落到"贴地"的下降沿，落地瞬间播放一次 moveSFX。
+    // 动画 root motion 的 Y 作用在子模型 visualModel 上，根节点高度不变，所以看子模型的 localPosition.y。
+    private void UpdateLandSFX()
+    {
+        if (moveSFX == null || visualModel == null) return;
+
+        float modelY = visualModel.localPosition.y;
+        bool airborne = modelY > airborneThreshold;
+        bool landed = !airborne && wasAirborne && modelY <= landThreshold;
+
+        wasAirborne = airborne;
+
+        if (landed && !isDead && isChasing && !isAttacking && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlaySFX(moveSFX, transform.position);
+        }
+    }
+
+    // 蓄力站桩期间挂起/恢复分离推挤（防止其他单位挤动导致落点/指示错位）
+    private void SetSeparationSuspended(bool suspended)
+    {
+        if (blocker != null) blocker.suspendSeparation = suspended;
     }
 
     private void CreateGroundIndicator()
@@ -155,6 +211,8 @@ public class JiangshiEnemy : EnemyAI
 
                     blinkState = BlinkState.Preparing;
                     stateTimer = 0f;
+                    // ⭐ 本次蓄力随机化时长：不同僵尸瞬移时刻错开，避免同时瞬移到玩家面前
+                    effectivePrepareDuration = Mathf.Max(prepareDuration + Random.Range(-prepareDurationJitter, prepareDurationJitter), 0.5f);
                     hasPrepared = false;
                     hasAttacked = false;
                     lockedFacingDir = GetLockedFacingDir();
@@ -174,6 +232,8 @@ public class JiangshiEnemy : EnemyAI
 
             case BlinkState.Preparing:
                 StopAgent();
+                // ⭐ 蓄力站桩锁定站位：挂起分离推挤，避免被其他敌人/玩家挤动导致落点/指示错位
+                SetSeparationSuspended(true);
                 // ⭐ 蓄力期间朝锁定方向转向（身体不跟随玩家，落点/朝向都锁定在蓄力开始瞬间）
                 RotateToLockedFacing();
 
@@ -188,6 +248,7 @@ public class JiangshiEnemy : EnemyAI
                 if (!HasClearLineToPlayer())
                 {
                     HideGroundIndicator();
+                    SetSeparationSuspended(false);
                     blinkState = BlinkState.Chasing;
                     stateTimer = 0f;
                     return;
@@ -198,6 +259,7 @@ public class JiangshiEnemy : EnemyAI
                 if (currentDistance <= directAttackDistance && canAttack && !isAttacking)
                 {
                     HideGroundIndicator();
+                    SetSeparationSuspended(false);
                     StopAgent();
                     RotateTowardPlayer();
                     if (IsFacingPlayer())
@@ -211,10 +273,11 @@ public class JiangshiEnemy : EnemyAI
                 }
 
                 // ⭐ 蓄力填满的当下立刻瞬移
-                if (stateTimer >= prepareDuration && !hasPrepared)
+                if (stateTimer >= effectivePrepareDuration && !hasPrepared)
                 {
                     hasPrepared = true;
                     HideGroundIndicator();
+                    SetSeparationSuspended(false);
 
                     // 瞬移前最后校验：玩家已躲到墙后或瞬移路径被墙挡，就放弃瞬移
                     if (!HasClearLineToPlayer())
@@ -293,7 +356,7 @@ public class JiangshiEnemy : EnemyAI
 
     private void UpdateGroundIndicator()
     {
-        float progress = Mathf.Clamp01(stateTimer / prepareDuration);
+        float progress = Mathf.Clamp01(stateTimer / effectivePrepareDuration);
 
         Vector3 startPos = GetGroundPosition(transform.position);
         Vector3 dirToTarget = lockedIndicatorTarget - startPos;

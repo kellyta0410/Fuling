@@ -51,6 +51,9 @@ MonoBehaviour:
   enemyData: {fileID: 11400000, guid: a6f23f293aec4ff79f6bb5b63c871c30, type: 2}
   coinPrefab: {fileID: 6635696330829912713, guid: 02a014571be355446be50bc4c7158be5,
     type: 3}
+  hitSFX: {fileID: 0}
+  attackSFX: {fileID: 0}
+  moveSFX: {fileID: 8300000, guid: d4c5bad8319f80f4d8efb33195fcb3c4, type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
   healthBarOffset: {x: 0, y: 2, z: 0}
@@ -81,6 +84,9 @@ MonoBehaviour:
   formationSlots: 8
   formationOccupancyRadius: 1.2
   formationRingPadding: 0.5
+  stuckEscapeSpeed: 0.1
+  stuckEscapeDelay: 0.5
+  stuckEscapeCooldown: 1
   ownerTile: {fileID: 0}
   serpentineMove: 1
   headTurnSpeed: 160

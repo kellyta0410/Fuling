@@ -17,6 +17,12 @@ public class PlayerController : MonoBehaviour
     [Header("基础属性（运行时从角色配置加载）")]
     public float maxHealth = 100f;
     public float speed = 4f;
+    [Tooltip("普通攻击期间可移动，但速度降为此倍率×speed（不锁死位移，边打边走）")]
+    [Range(0f, 1f)]
+    public float attackMoveSpeedFactor = 0.5f;
+    [Tooltip("技能期间可移动，但速度降为此倍率×speed（不锁死位移）")]
+    [Range(0f, 1f)]
+    public float skillMoveSpeedFactor = 0.35f;
     public int attackDamage = 20;
     public float attackRange = 2f;
     public float attackCooldown = 1f;
@@ -555,15 +561,14 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking || isUsingSkill ? 0f : speed);
+        // 攻击/技能期间均可移动但减速（不锁死位移，边打边走/边放技能边移动）；
+        // 闪避用专属速度；其余状态全速。
+        float currentSpeed = isDodging ? dodgeSpeed
+            : isUsingSkill ? speed * skillMoveSpeedFactor
+            : isAttacking ? speed * attackMoveSpeedFactor
+            : speed;
 
-        // 攻击/技能期间彻底锁死水平位移（防 root motion / 动画事件拖动角色滑步）：
-        // 即使 Animator 里动画自带位移、或残留速度，Move 之前一律清零。
-        if (isAttacking || isUsingSkill)
-        {
-            velocity.x = 0f;
-            velocity.z = 0f;
-        }
+        // 技能期间不再锁死水平位移（位移由上方 currentSpeed 减速控制）
         if (isGrounded)
         {
             if (inputMagnitude > 0.1f)
@@ -700,12 +705,8 @@ public class PlayerController : MonoBehaviour
 
         // ⭐ 普通攻击时临时关闭 root motion：攻击需精确站位/判定，动画自带位移会拖走角色造成滑步。
         // 其余状态(移动/技能/闪避)保持全局开启，位移由 OnAnimatorMove 转交 CharacterController。
+        // 攻击不锁死位移：保留当前 velocity，后续由 attackMoveSpeedFactor 减速带出移动。
         animator.applyRootMotion = false;
-        if (!isDodging)
-        {
-            velocity.x = 0f;
-            velocity.z = 0f;
-        }
 
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
@@ -852,8 +853,11 @@ public class PlayerController : MonoBehaviour
                 if (Vector3.Angle(transform.forward, toEnemy) > attackFacingAngle)
                     continue;
 
-                // 不穿墙：玩家与敌人之间被竖直墙体(实墙/X-Ray半透明墙)挡住就伤害不到
-                if (WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
+                // ⭐ 近身/贴脸（≤ attackRange*0.5）豁免墙挡判定：肉搏距离内必然命中，
+                // 避免敌人被击退贴墙(碰撞体微嵌墙面)或玩家贴墙时，射线先撞墙误判"隔墙打不到"。
+                float distToEnemy = toEnemy.magnitude;
+                if (distToEnemy > attackRange * 0.5f &&
+                    WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
                     continue;
 
                 enemy.TakeDamageImmediate(attackDamage);
@@ -960,8 +964,12 @@ public class PlayerController : MonoBehaviour
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
-                // 不穿墙：技能伤害同样受墙体视线遮挡
-                if (WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
+                // ⭐ 近身/贴脸（≤ skillRange*0.4）豁免墙挡判定：近身必然命中，
+                // 避免敌人贴墙/玩家贴墙时射线先撞墙误判"隔墙打不到"。
+                Vector3 toEnemy = enemy.transform.position - transform.position;
+                toEnemy.y = 0f;
+                if (toEnemy.magnitude > skillRange * 0.4f &&
+                    WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
                     continue;
 
                 enemy.TakeDamageImmediate(damage);

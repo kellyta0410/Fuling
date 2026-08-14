@@ -36,6 +36,10 @@ public class EnemyCollisionBlocker : MonoBehaviour
     [Tooltip("每次从\"与某敌人重叠\"变\"不重叠\"时触发一次（参数：对方敌人）")]
     public System.Action<EnemyAI> onEnemyContactExit;
 
+    [Header("站桩挂起（蓄力/咏唱等需要锁定站位时由子类临时开启）")]
+    [Tooltip("开启后挂起『玩家/敌人分离推挤』：本体停住期间不被其他单位挤动（位置锁定，供蓄力落点等）")]
+    public bool suspendSeparation = false;
+
     [Header("调试")]
     public bool showPenetrationGizmos = false;
 
@@ -88,14 +92,19 @@ public class EnemyCollisionBlocker : MonoBehaviour
         if (enemyAI != null && enemyAI.isDead) return;
         if (myCollider == null) return;
 
-        if (resolvePlayerOverlap)
+        // 站桩挂起：蓄力/咏唱等需要锁定站位的状态（如僵尸蓄力落点锁定），
+        // 期间不被其他敌人/玩家分离推挤，防止落点/指示错位。穿墙兜底仍保留。
+        if (!suspendSeparation)
         {
-            ResolvePlayerBack();
-        }
+            if (resolvePlayerOverlap)
+            {
+                ResolvePlayerBack();
+            }
 
-        if (resolveEnemyOverlap)
-        {
-            ResolveEnemiesBack();
+            if (resolveEnemyOverlap)
+            {
+                ResolveEnemiesBack();
+            }
         }
 
         // 穿墙兜底：无论敌人怎么被移动(追击/击退/冲锋/瞬移/分离)，

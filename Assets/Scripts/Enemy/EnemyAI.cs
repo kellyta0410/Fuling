@@ -21,6 +21,10 @@ public abstract class EnemyAI : MonoBehaviour
     public AudioClip hitSFX;
     [Tooltip("发起攻击时的攻击音效")]
     public AudioClip attackSFX;
+    [Tooltip("移动时循环播放的音效（如蛇的沙沙爬行声）；移动停下或进入攻击时自动停。非移动类敌人留空")]
+    public AudioClip moveSFX;
+    [Tooltip("死亡音效")]
+    public AudioClip deathSFX;
 
     [Header("血条")]
     public GameObject healthBarPrefab;
@@ -1179,6 +1183,7 @@ Vector3 center = player.transform.position;
         isDead = true;
         if (healthBarInstance != null) healthBarInstance.SetActive(false);
         StopAgent();
+        PlayDeathSFX();
         if (animator != null)
         {
             animator.SetBool("IsMoving", false);
@@ -1241,6 +1246,12 @@ Vector3 center = player.transform.position;
     {
         if (attackSFX == null || AudioManager.Instance == null) return;
         AudioManager.Instance.PlaySFX(attackSFX, transform.position);
+    }
+
+    protected void PlayDeathSFX()
+    {
+        if (deathSFX == null || AudioManager.Instance == null) return;
+        AudioManager.Instance.PlaySFX(deathSFX, transform.position);
     }
 
     protected void IdleRotation()
