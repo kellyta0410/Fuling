@@ -486,6 +486,13 @@ Vector3 center = player.transform.position;
             if (IsSlotOccupied(slot)) continue;
             if (IsForwardBlockedTo(slot)) continue;
 
+            // ⭐ 空位在导航网格上不可达（墙/装饰物(NavMeshObstacle)挖洞把空位或路径挡住）→ 跳过。
+            // 否则会追向墙侧/墙后的空位，agent 绕不过去表现为"面对玩家不绕开"。
+            if (isAgentValid && agent != null && agent.isOnNavMesh)
+            {
+                if (!IsSlotReachable(slot)) continue;
+            }
+
             float d2 = (slot - transform.position).sqrMagnitude;
             if (d2 < bestSq)
             {
@@ -494,6 +501,32 @@ Vector3 center = player.transform.position;
             }
         }
         return best;
+    }
+
+    /// <summary>
+    /// ⭐ 空位可达性校验：空位本身须落在导航网格上，
+    /// 且从敌人当前位置到空位的导航路径不能被 NavMeshObstacle(装饰物)挖洞 / 墙体阻断。
+    /// 被阻断则放弃该空位，避免敌人追向墙侧空位却卡住（表现为面对玩家不绕开）。
+    /// </summary>
+    private bool IsSlotReachable(Vector3 slot)
+    {
+        if (agent == null || !agent.isOnNavMesh) return false;
+
+        // 1) 空位是否落在导航网格上（墙内/浮空等不可行点直接排除）
+        NavMeshHit nearest;
+        if (!NavMesh.SamplePosition(slot, out nearest, 1f, NavMesh.AllAreas))
+            return false;
+
+        // 2) 从敌人到空位的导航直线路径是否被阻断（Deco 挖洞 / 墙体）。阻断 → 空位在这侧不可达
+        Vector3 from = transform.position;
+        Vector3 to = slot;
+        from.y = to.y;
+        if ((from - to).sqrMagnitude < 0.001f) return true;
+        NavMeshHit pathHit;
+        if (NavMesh.Raycast(from, to, out pathHit, NavMesh.AllAreas))
+            return false;
+
+        return true;
     }
 
     // 占位点附近是否已有其他存活敌人

@@ -95,12 +95,18 @@ public class SnakeEnemy : EnemyAI
             agent.isStopped = false;
             agent.SetDestination(target);
 
-            // 蛇式移动：追击时蛇头始终面向玩家（头先转锁玩家，身体后段由 SnakeBodyAnimation 延迟跟随）。
-            // 用"朝向玩家"而非"步进方向"，这样无论绕到哪一侧都保持对玩家的锁定姿态。
+            // 蛇式移动：追击绕行时蛇头跟随"移动方向"（agent 沿 NavMesh 路径绕墙），
+            // 停下/攻击时才面向玩家。若始终朝向玩家，绕墙时蛇身会横着侧移、
+            // 长条碰撞体横着卡墙角（agent.updateRotation=false 不会自己转方向绕开）。
             if (IsSerpentine)
             {
-                Vector3 toPlayer = player.transform.position - transform.position;
-                RotateHeadTowards(toPlayer, Time.deltaTime);
+                Vector3 moveDir = agent.velocity;
+                moveDir.y = 0f;
+                // 有实际移动就朝移动方向转（绕墙时跟随路径转向）；速度≈0（已停到攻击距离）才面向玩家
+                if (moveDir.sqrMagnitude > 0.01f)
+                    RotateHeadTowards(moveDir, Time.deltaTime);
+                else
+                    RotateHeadTowards(player.transform.position - transform.position, Time.deltaTime);
             }
         }
     }

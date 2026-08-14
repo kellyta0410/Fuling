@@ -14,6 +14,8 @@ public class JiangshiEnemy : EnemyAI
     [Header("瞬移参数")]
     [Tooltip("大于此距离才会瞬移（远距离用瞬移接近；近距离直接走过去打）")]
     public float prepareDistance = 6f;
+    [Tooltip("瞬移距离上限：超过此距离（距离太远）不瞬移，改为走过去追击，避免超远瞬移/穿越大片装饰物")]
+    public float maxBlinkDistance = 12f;
     [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 3.0f;
     [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移到玩家面前")]
@@ -197,7 +199,8 @@ public class JiangshiEnemy : EnemyAI
 
                 // ⭐ 远距离：只在无墙遮挡时瞬移接近（蓄力 → 指示 → 瞬移到玩家面前 → 攻击）。
                 // 有墙挡着就继续绕墙追击，等玩家出墙再瞬移。
-                if (distance > prepareDistance && !isAttacking && blinkState == BlinkState.Chasing)
+                // ⭐ 距离超过 maxBlinkDistance（太远）也不瞬移：改为走过去追击，避免超远瞬移/穿越大片装饰物。
+                if (distance > prepareDistance && distance <= maxBlinkDistance && !isAttacking && blinkState == BlinkState.Chasing)
                 {
                     if (!HasClearLineToPlayer())
                     {
@@ -228,7 +231,14 @@ public class JiangshiEnemy : EnemyAI
                     }
                     return;
                 }
-                break;
+
+                // ⭐ 超过瞬移距离上限：走过去追击，不瞬移
+                if (isAgentValid)
+                {
+                    agent.isStopped = false;
+                    agent.SetDestination(player.transform.position);
+                }
+                return;
 
             case BlinkState.Preparing:
                 StopAgent();
@@ -410,6 +420,7 @@ public class JiangshiEnemy : EnemyAI
     /// <summary>
     /// 视线检测：敌人到玩家之间是否有墙（blinkObstacleMask）阻挡。
     /// 从敌人胸口高度向玩家胸口发射射线，命中障碍即返回 false（不能瞬移/取消瞬移）。
+    /// 额外用 NavMesh.Raycast 检测 carv ed 的 NavMeshObstacle（装饰物挖洞也阻断瞬移路径）。
     /// </summary>
     private bool HasClearLineToPlayer()
     {
@@ -421,7 +432,13 @@ public class JiangshiEnemy : EnemyAI
         float dist = dir.magnitude;
         if (dist <= 0.01f) return true;
 
-        return !Physics.Raycast(from, dir / dist, dist, blinkObstacleMask);
+        if (Physics.Raycast(from, dir / dist, dist, blinkObstacleMask))
+            return false;
+
+        if (IsNavMeshPathBlocked())
+            return false;
+
+        return true;
     }
 
     /// <summary>
@@ -480,6 +497,7 @@ public class JiangshiEnemy : EnemyAI
 
     /// <summary>
     /// 从僵尸胸口高度到落点胸口高度发射射线，命中障碍即返回 true（落点路径穿墙）。
+    /// 额外用 NavMesh.Raycast 检测 carve 的 NavMeshObstacle（装饰物挖洞也阻断瞬移路径）。
     /// </summary>
     private bool IsBlinkTargetBlocked(Vector3 targetPos)
     {
@@ -489,7 +507,32 @@ public class JiangshiEnemy : EnemyAI
         float dist = dir.magnitude;
         if (dist <= 0.01f) return false;
 
-        return Physics.Raycast(from, dir / dist, dist, blinkObstacleMask);
+        if (Physics.Raycast(from, dir / dist, dist, blinkObstacleMask))
+            return true;
+
+        if (IsNavMeshPathBlocked())
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// 装饰物(NavMeshObstacle, carve)会在导航网格上挖洞，普通物理射线打不到；
+    /// 用 NavMesh.Raycast 沿导航网格从当前位置朝玩家/落点方向投射，
+    /// 若路径被挖洞处阻断（返回 true 且命中的是 carve 边界）则视为瞬移会穿过装饰物，放弃瞬移。
+    /// </summary>
+    private bool IsNavMeshPathBlocked()
+    {
+        if (!isAgentValid || agent == null || !agent.isOnNavMesh) return false;
+        if (player == null) return false;
+
+        NavMeshHit hit;
+        Vector3 from = transform.position;
+        Vector3 to = player.transform.position;
+        to.y = from.y;
+        if (NavMesh.Raycast(from, to, out hit, NavMesh.AllAreas))
+            return true;
+        return false;
     }
 
     private void RotateTowardPlayer()

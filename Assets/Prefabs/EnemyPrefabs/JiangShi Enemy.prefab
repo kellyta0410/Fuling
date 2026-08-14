@@ -89,14 +89,15 @@ MonoBehaviour:
   stuckEscapeDelay: 0.5
   stuckEscapeCooldown: 1
   ownerTile: {fileID: 0}
-  prepareDistance: 6
+  prepareDistance: 3
+  maxBlinkDistance: 5
   prepareDuration: 3
   distanceToPlayerAfterBlink: 1.7
   directAttackDistance: 2
   blinkCooldown: 10
   blinkObstacleMask:
     serializedVersion: 2
-    m_Bits: 64
+    m_Bits: 1088
   showGroundIndicator: 1
   endColor: {r: 1, g: 0, b: 0, a: 1}
   indicatorSize: 1

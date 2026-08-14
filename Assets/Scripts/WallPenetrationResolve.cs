@@ -77,12 +77,18 @@ public static class WallPenetrationResolve
     /// <summary>
     /// 视线检测：from 到 to 之间是否被竖直环境墙挡住（命中判定用，敌我通用）。
     /// 与 IsWall 同口径：排除触发器/玩家/敌人，只认 Box/Sphere/Capsule/凸网格。
+    /// ⭐ 近身豁免：两点距离 ≤ CloseCombatDistance 时直接放行（不判隔墙）。
+    /// 墙角/贴墙肉搏时双方中心连线会擦到墙角墙体，直线检测会误判"隔墙打不到"，
+    /// 导致玩家挥空、敌人不攻击。近身距离内必然互可接触，跳过墙挡判定。
     /// </summary>
+    private const float CloseCombatDistance = 1.2f;
+
     public static bool IsBlockedBetween(Vector3 from, Vector3 to)
     {
         Vector3 dir = to - from;
         float dist = dir.magnitude;
         if (dist <= 0.01f) return false;
+        if (dist <= CloseCombatDistance) return false; // ⭐ 近身豁免：贴脸/墙角互搏必然命中
         dir /= dist;
 
         RaycastHit[] hits = Physics.RaycastAll(from, dir, dist);

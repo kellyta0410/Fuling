@@ -1002,8 +1002,13 @@ public class PlayerController : MonoBehaviour
 
     void PerformDodge()
     {
-        // 攻击/技能期间禁止闪避：闪避会覆盖 currentSpeed 造成位移，绕过攻击锁定
-        if (!canDodge || isDead || isDying || isDodging || isAttacking || isUsingSkill) return;
+        if (!canDodge || isDead || isDying || isDodging || isUsingSkill) return;
+
+        // ⭐ 攻击中按闪避：先取消当前攻击（清状态/动画/排队），再直接进入闪避 → 攻守一体，可取消攻击硬直后撤。
+        if (isAttacking)
+        {
+            CancelAttack();
+        }
 
         Vector3 dir = GetMoveDirection(inputVector);
         if (dir.magnitude < 0.1f) dir = transform.forward;
@@ -1016,6 +1021,17 @@ public class PlayerController : MonoBehaviour
         isDodging = true;
         canDodge = false;
         dodgeCooldownTimer = 0f;
+    }
+
+    // 取消当前普通攻击：闪避触发时调用，避免攻击状态残留（仍锁位移/方向，闪避会覆盖 currentSpeed）
+    void CancelAttack()
+    {
+        if (!isAttacking) return;
+        isAttacking = false;
+        attackTimer = 0f;
+        queuedAttack = false;
+        animator.SetBool("IsAttacking", false);
+        animator.applyRootMotion = false;
     }
 
     // ⭐ 在普通攻击按钮上方创建技能按钮
