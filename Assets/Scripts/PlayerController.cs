@@ -163,6 +163,7 @@ public class PlayerController : MonoBehaviour
     private bool canUseSkill = true;
     private bool isUsingSkill = false;
     private float skillTimer = 0f;
+    private float skillStartYaw = 0f;   // 技能开始瞬间的朝向，用于代码驱动 360° 转圈对齐动画
     public float skillDuration = 0.8f;
     private Image[] cooldownMasks = new Image[3];
 
@@ -221,11 +222,11 @@ public class PlayerController : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
-        // ⭐ 全局开启 root motion：让各状态动画自带的位移/突进生效
-        //（位移由 OnAnimatorMove 转交 CharacterController，朝向仍由代码跟随输入控制）；
-        // 仅普通攻击动画期间临时关闭——攻击需要精确站位/判定角度，位置锁死由代码全控。
+        // ⭐ root motion 全局关闭：角色位移一律由代码(CharacterController)驱动，动画只负责姿势，
+        // 避免动画自带位移叠加造成滑步/贴墙抖动。技能 360° 转圈由 OnAnimatorMove 代码驱动旋转，
+        // 但 deltaRotation 需要 applyRootMotion=true 才有值，故技能开启、其余关闭。
         if (animator != null)
-            animator.applyRootMotion = true;
+            animator.applyRootMotion = false;
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
@@ -497,8 +498,8 @@ public class PlayerController : MonoBehaviour
                 isAttacking = false;
                 attackTimer = 0f;
                 animator.SetBool("IsAttacking", false);
-                // ⭐ 攻击结束恢复全局开启 root motion（其余状态动画位移继续生效）
-                animator.applyRootMotion = true;
+                // 攻击结束恢复 root motion 关闭（位移由代码驱动；技能/死亡时再按需开启）
+                animator.applyRootMotion = false;
                 // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
@@ -561,14 +562,14 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        // 攻击/技能期间均可移动但减速（不锁死位移，边打边走/边放技能边移动）；
-        // 闪避用专属速度；其余状态全速。
-        float currentSpeed = isDodging ? dodgeSpeed
-            : isUsingSkill ? speed * skillMoveSpeedFactor
-            : isAttacking ? speed * attackMoveSpeedFactor
-            : speed;
+        // 攻击/技能期间都锁死水平位移（定位准确，配合动画判定；不叠加任何 root 位移）
+        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking || isUsingSkill ? 0f : speed);
 
-        // 技能期间不再锁死水平位移（位移由上方 currentSpeed 减速控制）
+        if (isAttacking || isUsingSkill)
+        {
+            velocity.x = 0f;
+            velocity.z = 0f;
+        }
         if (isGrounded)
         {
             if (inputMagnitude > 0.1f)
@@ -876,6 +877,10 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
+        skillStartYaw = transform.eulerAngles.y;   // 记录技能起始朝向，供代码驱动转圈
+        // ⭐ 技能需要动画旋转(360° 转圈)，强制开启 root motion：
+        // 若玩家从普攻中切入技能，普攻已把 applyRootMotion 关掉，必须恢复，否则 deltaRotation 恒为零。
+        animator.applyRootMotion = true;
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -934,22 +939,24 @@ public class PlayerController : MonoBehaviour
         // 其余状态全局开启，水平位移跟动画；垂直由代码重力统一处理，避免动画 Y 干扰落地判定。
         if (isAttacking && !animator.applyRootMotion) return;
 
-        // 技能 360° 转圈：应用动画自带旋转对齐 preview（位移仍锁死，防止滑步）
+        // 技能 360° 转圈：不依赖 deltaRotation(导入烘焙到骨骼时恒为零导致不转)，
+        // 改由代码按动画进度从起始朝向转满一整圈，保证与 preview 一致且位移锁死。
         if (isUsingSkill)
         {
             AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
-            if (state.IsName("Skill Attack"))
-            {
-                transform.rotation *= animator.deltaRotation;
-            }
+            AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(0);
+            float t = state.IsName("Skill Attack") ? state.normalizedTime
+                    : next.IsName("Skill Attack") ? next.normalizedTime
+                    : skillTimer / Mathf.Max(skillDuration, 0.01f);
+            t = Mathf.Clamp01(t);
+            transform.rotation = Quaternion.Euler(0f, skillStartYaw + 360f * t, 0f);
             return;
         }
 
-        Vector3 delta = animator.deltaPosition;
-        if (delta.sqrMagnitude > 1e-6f)
-        {
-            controller.Move(new Vector3(delta.x, 0f, delta.z));
-        }
+        // 其余状态(移动/受击/死亡前等)：丢弃动画位移，位移一律由代码控制（防滑步/贴墙抖动）
+        // 理由：角色移动由 Update 里的 controller.Move(velocity) 全权驱动，
+        // 若把 deltaPosition 也叠进来会双重位移，贴墙时角色被反复顶挤，判定点飘移。
+        // 因此这里不应用任何位移，只让 Animator 正常播放动画姿势。
     }
 
     IEnumerator DelayedSkillDamage(int damage)
