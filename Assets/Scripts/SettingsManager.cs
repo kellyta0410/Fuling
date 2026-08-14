@@ -44,7 +44,6 @@ public class SettingsManager : MonoBehaviour
         cachedMusicVolume = value;
         PlayerPrefs.SetFloat("MusicVolume", value);
         PlayerPrefs.Save();
-        Debug.Log($"🎵 音乐音量: {Mathf.RoundToInt(value * 100)}%");
     }
 
     public void SetSFXVolume(float value)
@@ -52,7 +51,6 @@ public class SettingsManager : MonoBehaviour
         cachedSFXVolume = value;
         PlayerPrefs.SetFloat("SFXVolume", value);
         PlayerPrefs.Save();
-        Debug.Log($"🔊 音效音量: {Mathf.RoundToInt(value * 100)}%");
     }
 
     public void ResetAllData()
