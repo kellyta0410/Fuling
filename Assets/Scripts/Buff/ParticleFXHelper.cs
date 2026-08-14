@@ -58,10 +58,20 @@ public static class ParticleFXHelper
         mat.SetTexture("_MainTex", softDot);
         mat.SetColor("_BaseColor", tint * brightness);
         mat.SetColor("_Color", tint * brightness);
-        mat.SetFloat("_Surface", 1f); // transparent
+
+        // ⭐ 必须完整配置透明表面：URP 粒子 shader 的 SubShader 默认 RenderType=Opaque（队列 2000）。
+        // 只 SetFloat("_Surface", 1f) 不够——运行时 new Material 不会自动启用
+        // _SURFACE_TYPE_TRANSPARENT keyword，也不会把 renderQueue 改成 Transparent。
+        // 缺了这些，粒子按不透明渲染、深度测试异常，APK 上会显示成不透明方块/错乱。
+        if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
+        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", (float)BlendMode.Additive);
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
         if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)BlendMode.One);
+        if (mat.HasProperty("_SrcBlendAlpha")) mat.SetFloat("_SrcBlendAlpha", (float)BlendMode.SrcAlpha);
+        if (mat.HasProperty("_DstBlendAlpha")) mat.SetFloat("_DstBlendAlpha", (float)BlendMode.One);
         if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
         return mat;
     }
 

@@ -51,6 +51,10 @@ MonoBehaviour:
   enemyData: {fileID: 11400000, guid: 7d4d2fbc8c87ea845a63e0849b6c74ca, type: 2}
   coinPrefab: {fileID: 6635696330829912713, guid: 02a014571be355446be50bc4c7158be5,
     type: 3}
+  hitSFX: {fileID: 0}
+  attackSFX: {fileID: 8300000, guid: f9a89cee12f597148ba47268594d9d8d, type: 3}
+  moveSFX: {fileID: 8300000, guid: 3b152308828987740b8225d43e746c4d, type: 3}
+  deathSFX: {fileID: 0}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
   healthBarOffset: {x: 0, y: 3.5, z: 0}
@@ -81,18 +85,25 @@ MonoBehaviour:
   formationSlots: 8
   formationOccupancyRadius: 1.2
   formationRingPadding: 0.5
+  stuckEscapeSpeed: 0.1
+  stuckEscapeDelay: 0.5
+  stuckEscapeCooldown: 1
   ownerTile: {fileID: 0}
   prepareDistance: 6
   prepareDuration: 3
   distanceToPlayerAfterBlink: 1.7
   directAttackDistance: 2
-  postBlinkDelay: 0.2
-  blinkCooldown: 2.5
+  blinkCooldown: 10
+  blinkObstacleMask:
+    serializedVersion: 2
+    m_Bits: 64
   showGroundIndicator: 1
-  startColor: {r: 0, g: 1, b: 0, a: 1}
   endColor: {r: 1, g: 0, b: 0, a: 1}
-  indicatorWidth: 0.2
+  indicatorSize: 1
   indicatorHeight: 0.05
+  frameLineWidth: 0.06
+  airborneThreshold: 0.08
+  landThreshold: 0.03
 --- !u!95 &2289995692221569591
 Animator:
   serializedVersion: 5

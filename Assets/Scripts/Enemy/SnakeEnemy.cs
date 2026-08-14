@@ -26,6 +26,7 @@ public class SnakeEnemy : EnemyAI
     private bool wasAttacking;   // 攻击上升沿检测（启用判定球/重置命中标志）
     private bool attackHitDealt = false;   // 本轮攻击是否已造成伤害（触发球+距离兜底共用）
     private float attackStartTime = -1f;   // 本轮攻击开始时刻（用于延误到突刺时判定命中）
+    private AudioSource moveAudioSource;   // 移动循环音效
 
     protected override void OnStart()
     {
@@ -55,6 +56,7 @@ public class SnakeEnemy : EnemyAI
     {
         base.Update();
         UpdateHeadHitbox();
+        UpdateMoveSFX();
     }
 
     protected override void HandleMovement()
@@ -164,6 +166,40 @@ public class SnakeEnemy : EnemyAI
             headHitbox.SetActive(false);
         }
         wasAttacking = attacking;
+    }
+
+    // 蛇移动循环音效：进入追击至脱离追击/死亡间不间断播放（沙沙爬行感）。
+    // 不依赖 agent 实际速度判定——攻击瞬间、转向、短暂停顿都会让声音忽断忽续，
+    // 改为只要在追击就持续循环发出，保持连续无间断感。
+    // 用一个循环 AudioSource 持续发声，不占 AudioManager 一次性播放池。
+    private void UpdateMoveSFX()
+    {
+        if (moveSFX == null) return;
+
+        if (moveAudioSource == null)
+        {
+            moveAudioSource = GetComponent<AudioSource>();
+            if (moveAudioSource == null) moveAudioSource = gameObject.AddComponent<AudioSource>();
+            moveAudioSource.clip = moveSFX;
+            moveAudioSource.loop = true;
+            moveAudioSource.playOnAwake = false;
+            moveAudioSource.spatialBlend = AudioManager.Instance != null ? AudioManager.Instance.sfxSpatialBlend : 1f;
+        }
+
+        bool moving = isChasing && !isDead;
+
+        if (moving)
+        {
+            if (!moveAudioSource.isPlaying)
+            {
+                moveAudioSource.volume = AudioManager.GetSFXVolume();
+                moveAudioSource.Play();
+            }
+        }
+        else if (moveAudioSource.isPlaying)
+        {
+            moveAudioSource.Stop();
+        }
     }
 
     // 由 SnakeHeadHitbox 回调 / 攻击中距离兜底共用：蛇头够得到才造成伤害，每轮攻击最多一次
