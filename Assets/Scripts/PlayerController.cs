@@ -38,6 +38,8 @@ public class PlayerController : MonoBehaviour
     public AudioClip[] attackSFX;
     [Tooltip("技能攻击音效（单独一条）")]
     public AudioClip skillSFX;
+    [Tooltip("玩家被敌人打中的受击音效")]
+    public AudioClip hitSFX;
 
     [Header("攻击特效")]
     [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
@@ -1151,6 +1153,7 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || isDying || isInvincible) return;
 
+        PlayPlayerHitSFX();
         PlayHitFeedback();
         StartCoroutine(SmoothDamage(damage));
     }
@@ -1479,6 +1482,13 @@ public class PlayerController : MonoBehaviour
         if (skillSFX == null) return;
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlaySFX(skillSFX, transform.position);
+    }
+
+    void PlayPlayerHitSFX()
+    {
+        if (hitSFX == null) return;
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(hitSFX, transform.position);
     }
 
     public void AddKill()
