@@ -21,6 +21,8 @@ public class SceneSelectionManager : MonoBehaviour
     public GameObject mainPanel;
     public GameObject recordsPanel;
     public GameObject characterPanel;
+    [Tooltip("新手引导面板：首次进入自动打开，之后仅通过 Tutorial 按钮手动打开")]
+    public GameObject tutorialPanel;
 
     [Header("===== 玩家信息 =====")]
     public TextMeshProUGUI coinText;
@@ -92,6 +94,8 @@ public class SceneSelectionManager : MonoBehaviour
 
         ShowMainPanel();
         RefreshAllUI();
+
+        SetupTutorialOnFirstEntry();
     }
 
     void OnDestroy()
@@ -349,6 +353,38 @@ public class SceneSelectionManager : MonoBehaviour
     public void CloseCharacterPanel()
     {
         SetPanelActive(characterPanel, false);
+    }
+
+    // ==================== 新手引导面板 ====================
+
+    const string TutorialShownKey = "SelectionTutorialShown";
+
+    void SetupTutorialOnFirstEntry()
+    {
+        if (tutorialPanel == null) return;
+
+        // 首次进入 Selection 场景时自动打开引导面板
+        if (PlayerPrefs.GetInt(TutorialShownKey, 0) == 0)
+        {
+            PlayerPrefs.SetInt(TutorialShownKey, 1);
+            PlayerPrefs.Save();
+            ShowTutorialPanel();
+        }
+        else
+        {
+            SetPanelActive(tutorialPanel, false);
+        }
+    }
+
+    // Tutorial 按钮点击时调用：始终可手动打开
+    public void ShowTutorialPanel()
+    {
+        SetPanelActive(tutorialPanel, true);
+    }
+
+    public void CloseTutorialPanel()
+    {
+        SetPanelActive(tutorialPanel, false);
     }
 
     // ==================== 返回主菜单 ====================

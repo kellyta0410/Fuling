@@ -530,6 +530,8 @@ public class PlayerController : MonoBehaviour
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
+                // 技能结束恢复 root motion 关闭（位移由代码驱动）
+                animator.applyRootMotion = false;
                 // ⭐ 技能中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
         }
@@ -704,9 +706,7 @@ public class PlayerController : MonoBehaviour
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
 
-        // ⭐ 普通攻击时临时关闭 root motion：攻击需精确站位/判定，动画自带位移会拖走角色造成滑步。
-        // 其余状态(移动/技能/闪避)保持全局开启，位移由 OnAnimatorMove 转交 CharacterController。
-        // 攻击不锁死位移：保留当前 velocity，后续由 attackMoveSpeedFactor 减速带出移动。
+        // ⭐ 普通攻击关闭 root motion：位移由主循环锁死、动画只播放姿势，避免动画自带位移拖走角色滑步。
         animator.applyRootMotion = false;
 
         string stateName = attackStateNames[comboIndex];
@@ -927,20 +927,17 @@ public class PlayerController : MonoBehaviour
         if (vfx != null) Destroy(vfx);
     }
 
-    // 接管 root motion：全局开启时把各状态动画自带位移转交给 CharacterController 应用，
-    // 旋转丢弃（朝向由代码跟随输入控制）。仅普通攻击时（applyRootMotion 被临时关闭）丢弃位移，
-    // 避免动画 root motion 拖走角色干扰攻击判定。技能(Skill Attack)是 360° 转圈动画，
-    // 需应用动画自带旋转才能对齐 preview。
+    // 接管 root motion：
+    //   - 位移：一律由 Update 里的 controller.Move(velocity) 代码驱动，这里不应用动画位移
+    //     （避免双重位移导致滑步/贴墙抖动/判定点飘移）。
+    //   - 技能 360° 转圈：不依赖 deltaRotation(该动画导入烘焙到骨骼时恒为零导致不转)，
+    //     改由代码按动画进度从起始朝向转满一整圈，保证与 preview 一致且位移锁死。
+    // applyRootMotion 仅在技能期间开启（保证 Animator 正常推进，旋转由代码接管），其余状态关闭。
     private void OnAnimatorMove()
     {
         if (animator == null || controller == null) return;
 
-        // ⭐ 普通攻击已临时关闭 root motion：本帧不应用动画位移（位置锁死，判定才准）。
-        // 其余状态全局开启，水平位移跟动画；垂直由代码重力统一处理，避免动画 Y 干扰落地判定。
-        if (isAttacking && !animator.applyRootMotion) return;
-
-        // 技能 360° 转圈：不依赖 deltaRotation(导入烘焙到骨骼时恒为零导致不转)，
-        // 改由代码按动画进度从起始朝向转满一整圈，保证与 preview 一致且位移锁死。
+        // 技能 360° 转圈：按动画进度(CrossFade 过渡后 current/next 状态)驱动完整一圈
         if (isUsingSkill)
         {
             AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
@@ -953,10 +950,7 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 其余状态(移动/受击/死亡前等)：丢弃动画位移，位移一律由代码控制（防滑步/贴墙抖动）
-        // 理由：角色移动由 Update 里的 controller.Move(velocity) 全权驱动，
-        // 若把 deltaPosition 也叠进来会双重位移，贴墙时角色被反复顶挤，判定点飘移。
-        // 因此这里不应用任何位移，只让 Animator 正常播放动画姿势。
+        // 其余状态：不应用任何位移/旋转（位移由代码控制，朝向由 Update 跟随输入）
     }
 
     IEnumerator DelayedSkillDamage(int damage)
