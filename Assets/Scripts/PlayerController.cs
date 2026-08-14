@@ -38,7 +38,6 @@ public class PlayerController : MonoBehaviour
     public AudioClip[] attackSFX;
     [Tooltip("技能攻击音效（单独一条）")]
     public AudioClip skillSFX;
-    private AudioSource sfxSource;
 
     [Header("攻击特效")]
     [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
@@ -214,9 +213,11 @@ public class PlayerController : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
-        // 全程禁用 root motion：本项目位移全部由代码驱动(CharacterController)，开启会叠加动画自带位移造成滑步
+        // ⭐ 全局开启 root motion：让各状态动画自带的位移/突进生效
+        //（位移由 OnAnimatorMove 转交 CharacterController，朝向仍由代码跟随输入控制）；
+        // 仅普通攻击动画期间临时关闭——攻击需要精确站位/判定角度，位置锁死由代码全控。
         if (animator != null)
-            animator.applyRootMotion = false;
+            animator.applyRootMotion = true;
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
@@ -488,6 +489,8 @@ public class PlayerController : MonoBehaviour
                 isAttacking = false;
                 attackTimer = 0f;
                 animator.SetBool("IsAttacking", false);
+                // ⭐ 攻击结束恢复全局开启 root motion（其余状态动画位移继续生效）
+                animator.applyRootMotion = true;
                 // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
@@ -525,9 +528,9 @@ public class PlayerController : MonoBehaviour
         Vector3 moveDir = isDodging ? dodgeDirection : GetMoveDirection(inputVector);
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
-        // 普通移动/攻击/技能时都朝输入方向转向（跟手）。
-        // 攻击/技能中可转向但位移仍锁死；闪避锁死朝向。
-        if (moveDir.magnitude > 0.1f && !isDodging)
+        // 普通移动/攻击时都朝输入方向转向（跟手）。技能由动画自带旋转主导，不受输入转向影响。
+        // 攻击中可转向但位移仍锁死；闪避锁死朝向。
+        if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothRotation * Time.deltaTime);
@@ -693,8 +696,8 @@ public class PlayerController : MonoBehaviour
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
 
-        // 攻击期间彻底锁死位移：关掉 root motion（否则 Animator 勾了 Apply Root Motion 时
-        // 攻击动画自带的位移会把角色拖走造成滑步），并清零残余移动速度。
+        // ⭐ 普通攻击时临时关闭 root motion：攻击需精确站位/判定，动画自带位移会拖走角色造成滑步。
+        // 其余状态(移动/技能/闪避)保持全局开启，位移由 OnAnimatorMove 转交 CharacterController。
         animator.applyRootMotion = false;
         if (!isDodging)
         {
@@ -872,7 +875,6 @@ public class PlayerController : MonoBehaviour
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
         animator.ResetTrigger("SkillAction");
         animator.CrossFade("Skill Attack", 0.08f, 0);
-        Debug.Log($"[技能] PerfmSkillAttack 触发");
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
@@ -914,10 +916,34 @@ public class PlayerController : MonoBehaviour
         if (vfx != null) Destroy(vfx);
     }
 
-    // 接管 root motion：位置、旋转全部丢弃（朝向由代码跟随输入控制，位移由 CharacterController 驱动）
+    // 接管 root motion：全局开启时把各状态动画自带位移转交给 CharacterController 应用，
+    // 旋转丢弃（朝向由代码跟随输入控制）。仅普通攻击时（applyRootMotion 被临时关闭）丢弃位移，
+    // 避免动画 root motion 拖走角色干扰攻击判定。技能(Skill Attack)是 360° 转圈动画，
+    // 需应用动画自带旋转才能对齐 preview。
     private void OnAnimatorMove()
     {
-        // 所有状态都丢弃动画自带的位移与旋转，避免动画 root motion 干扰代码控制的移动/转向
+        if (animator == null || controller == null) return;
+
+        // ⭐ 普通攻击已临时关闭 root motion：本帧不应用动画位移（位置锁死，判定才准）。
+        // 其余状态全局开启，水平位移跟动画；垂直由代码重力统一处理，避免动画 Y 干扰落地判定。
+        if (isAttacking && !animator.applyRootMotion) return;
+
+        // 技能 360° 转圈：应用动画自带旋转对齐 preview（位移仍锁死，防止滑步）
+        if (isUsingSkill)
+        {
+            AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+            if (state.IsName("Skill Attack"))
+            {
+                transform.rotation *= animator.deltaRotation;
+            }
+            return;
+        }
+
+        Vector3 delta = animator.deltaPosition;
+        if (delta.sqrMagnitude > 1e-6f)
+        {
+            controller.Move(new Vector3(delta.x, 0f, delta.z));
+        }
     }
 
     IEnumerator DelayedSkillDamage(int damage)
@@ -938,7 +964,6 @@ public class PlayerController : MonoBehaviour
 
                 enemy.TakeDamageImmediate(damage);
                 enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 1.5f);
-                Debug.Log($"技能攻击 {enemy.name}，造成 {damage} 伤害");
             }
         }
     }
@@ -1411,8 +1436,7 @@ public class PlayerController : MonoBehaviour
             yield return null;
         }
 
-        yield return new WaitForSeconds(deathDelay);
-
+        // 死亡动画播完立即弹面板，不再额外等待（原 deathDelay 已移除）
         isDead = true;
         isDying = false;
         velocity = Vector3.zero;
@@ -1440,30 +1464,21 @@ public class PlayerController : MonoBehaviour
         if (uiManager != null) uiManager.OnPlayerCoinChanged();
     }
 
-    // ==================== 玩家音效（Clip 在 Inspector 上配，音量读 SettingsManager） ====================
-
-    AudioSource GetSFXSource()
-    {
-        if (sfxSource == null)
-        {
-            sfxSource = GetComponent<AudioSource>();
-            if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
-            sfxSource.playOnAwake = false;
-        }
-        return sfxSource;
-    }
+    // ==================== 玩家音效（Clip 在 Inspector 上配，走 AudioManager 播放池） ====================
 
     void PlayRandomAttackSFX()
     {
         if (attackSFX == null || attackSFX.Length == 0) return;
         AudioClip clip = attackSFX[Random.Range(0, attackSFX.Length)];
-        GetSFXSource().PlayOneShot(clip, AudioManager.GetSFXVolume());
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(clip, transform.position);
     }
 
     void PlaySkillSFX()
     {
         if (skillSFX == null) return;
-        GetSFXSource().PlayOneShot(skillSFX, AudioManager.GetSFXVolume());
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(skillSFX, transform.position);
     }
 
     public void AddKill()

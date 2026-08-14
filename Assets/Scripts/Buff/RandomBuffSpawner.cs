@@ -22,6 +22,9 @@ public class RandomBuffSpawner : MonoBehaviour
     [Tooltip("怪物死亡时掉落 Buff 的概率（0~1）")]
     [Range(0f, 1f)]
     public float buffDropChance = 0.25f;
+    [Header("拾取音效兜底")]
+    [Tooltip("pickupPrefab 上没有配 collectSFX 时，用这个作为默认拾取音效")]
+    public AudioClip defaultBuffSFX;
 
     [Header("自动销毁配置")]
     public Transform player;
@@ -75,6 +78,11 @@ public class RandomBuffSpawner : MonoBehaviour
         BuffPickupItem pickup = newBuff.GetComponent<BuffPickupItem>();
         if (pickup == null) pickup = newBuff.AddComponent<BuffPickupItem>();
         pickup.buffData = selected;
+        // 运行时补挂的 BuffPickupItem 没有 pickupPrefab 上的 collectSFX，用兜底音效
+        if (pickup.collectSFX == null)
+        {
+            pickup.collectSFX = defaultBuffSFX;
+        }
 
         AutoDestroyBuff autoDestroy = newBuff.GetComponent<AutoDestroyBuff>();
         if (autoDestroy == null) autoDestroy = newBuff.AddComponent<AutoDestroyBuff>();

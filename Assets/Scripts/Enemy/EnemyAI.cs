@@ -112,6 +112,19 @@ public abstract class EnemyAI : MonoBehaviour
     protected float currentHealthMultiplier = 1f;
     protected float currentDamageMultiplier = 1f;
 
+    // ---------- 卡住自救（绕障碍）----------
+    [Header("卡住自救（绕障碍）")]
+    [Tooltip("追击中位移低于此速度(米/秒)且持续超过 卡住时间 就判定被挡卡住")]
+    public float stuckEscapeSpeed = 0.1f;
+    [Tooltip("位移持续低于 stuckEscapeSpeed 的秒数后触发自救（重寻路绕障）")]
+    public float stuckEscapeDelay = 0.5f;
+    [Tooltip("自救后冷却（秒），避免每次都跟玩家贴脸时反复触发")]
+    public float stuckEscapeCooldown = 1.0f;
+    private float stuckTimer = 0f;
+    private float stuckEscapeCooldownTimer = 0f;
+    private Vector3 stuckEscapeLastPos = Vector3.zero;
+    private bool stuckEscapePosValid = false;
+
     protected float baseSpeed;
     protected float baseHealth;
     protected float baseAttackDamage;
@@ -343,7 +356,10 @@ public abstract class EnemyAI : MonoBehaviour
 
         // 进入攻击范围：停住原地转向玩家，能攻则攻，不再前进贴脸
         // （子类可重写 TryPerformInRangeAttack 接管该行为，如蓄力/咏唱）
-        if (distance <= attackRange)
+        // ⭐ 玩家被墙挡住时不算"已就位"：停住攻击会挥空、被挡在原地，
+        // 改为走下面的追击逻辑，靠 NavMeshAgent 绕行到能看见玩家的位置再攻。
+        if (distance <= attackRange &&
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
         {
             if (TryPerformInRangeAttack())
                 return;
@@ -381,6 +397,11 @@ HandleMovement();
         // 接近目标提前减速，避免冲出一小段才刹停
         if (isChasing && !isAttacking)
             ApplyApproachBrake();
+
+        // 卡住自救：追击中长时间几乎不动（被屏风/障碍物理挡停，agent 却以为路径仍有效）
+        // → 强制 ResetPath 并绕到"墙这边可达"的目标点重寻路
+        if (isChasing && !isAttacking)
+            TryStuckEscape();
 
         // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
         if (enableSeparation && distance > attackRange)
@@ -752,6 +773,77 @@ Vector3 center = player.transform.position;
         // 减速区内：按剩余距离从全速线性降到最低
         float f = Mathf.Clamp01((distance - sd) / approachBrakeRange);
         agent.speed = baseSpd * Mathf.Lerp(approachStopSpeed, 1f, f);
+    }
+
+    /// <summary>
+    /// 卡住自救：追击中明明该朝玩家走，却在原地打转/被障碍(屏风等)物理挡停。
+    /// 此时 NavMeshAgent 认为路径仍有效不重算，就强制 ResetPath 并重新寻路到玩家。
+    /// 额外把目标从"玩家脚下"偏移回"本侧可达点"，避免落点在障碍物正对面导致 NoPath。
+    /// </summary>
+    protected void TryStuckEscape()
+    {
+        if (agent == null || !agent.isOnNavMesh || player == null) return;
+        if (isAttacking || isStaggering) return;
+
+        // 视野可见且能直接走到（无墙）时不需要自救，等普通寻路即可，避免误触发
+        if (!WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position)) return;
+
+        // 已到玩家身边（不必再走）
+        if (Vector3.Distance(transform.position, player.transform.position) <= GetAttackActivationRange()) return;
+
+        if (stuckEscapeCooldownTimer > 0f)
+        {
+            stuckEscapeCooldownTimer -= Time.deltaTime;
+            return;
+        }
+
+        float speed = agent.velocity.magnitude;
+        bool slow = speed <= stuckEscapeSpeed;
+
+        // 首次记录基准点
+        if (!stuckEscapePosValid)
+        {
+            stuckEscapeLastPos = transform.position;
+            stuckEscapePosValid = true;
+            return;
+        }
+
+        float moved = Vector3.Distance(transform.position, stuckEscapeLastPos);
+        stuckEscapeLastPos = transform.position;
+
+        if (slow && moved < 0.02f)
+        {
+            stuckTimer += Time.deltaTime;
+        }
+        else
+        {
+            stuckTimer = 0f;
+            return;
+        }
+
+        if (stuckTimer >= stuckEscapeDelay)
+        {
+            stuckTimer = 0f;
+            stuckEscapeCooldownTimer = stuckEscapeCooldown;
+
+            // 重新寻路。先把目标偏移到"本侧(靠近敌人)"可到达的 NavMesh 点，
+            // 避免落点恰在障碍物正对面对岸，导致 NearesDest 无解或重算后还是穿障。
+            Vector3 target = player.transform.position;
+            Vector3 toEnemy = transform.position - player.transform.position;
+            toEnemy.y = 0f;
+            if (toEnemy.sqrMagnitude > 0.0001f)
+            {
+                Vector3 offset = toEnemy.normalized * (agent.stoppingDistance + 0.5f);
+                Vector3 probe = player.transform.position + offset;
+                NavMeshHit hit;
+                if (NavMesh.SamplePosition(probe, out hit, 3f, NavMesh.AllAreas))
+                    target = hit.position;
+            }
+
+            agent.ResetPath();
+            agent.isStopped = false;
+            agent.SetDestination(target);
+        }
     }
 
     // 攻击冷却：读 EnemyType 资产，资产驱动

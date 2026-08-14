@@ -96,8 +96,8 @@ public class JiangshiEnemy : EnemyAI
         endFrame.startWidth = frameLineWidth;
         endFrame.endWidth = frameLineWidth;
         endFrame.material = new Material(Shader.Find("Sprites/Default"));
-        endFrame.startColor = Color.white;
-        endFrame.endColor = Color.white;
+        endFrame.startColor = endColor;
+        endFrame.endColor = endColor;
         frameGO.SetActive(false);
     }
 

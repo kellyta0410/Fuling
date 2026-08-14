@@ -34,9 +34,9 @@ public class BuffPickupItem : MonoBehaviour
             {
                 handler.ApplyBuff(buffData);
                 Debug.Log($"拾取了 {buffData.buffName}！");
-                if (collectSFX != null)
+                if (collectSFX != null && AudioManager.Instance != null)
                 {
-                    AudioSource.PlayClipAtPoint(collectSFX, transform.position, AudioManager.GetSFXVolume());
+                    AudioManager.Instance.PlaySFX(collectSFX, transform.position);
                 }
                 Destroy(gameObject);
             }

@@ -1,24 +1,13 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-// 全局 BGM 管理器 + 音量读取。SFX(攻击/技能/金币/buff) 的 Clip 放在各自脚本/Prefab 上，
-// 需要音量时统一读这里/直接读 SettingsManager。
+// 全局 BGM 管理器 + 音量读取 + SFX 播放池。
+// SFX(攻击/技能/金币/buff) 的 Clip 放在各自脚本/Prefab 上，需要播放时调用 PlaySFX（走复用池，无 GC）。
+// 注意：本单例不做懒创建（避免空壳假实例顶替场景里配置好的真实例）。
+// 场景里必须放一个挂本脚本的对象（建议 MainMenu），它 DontDestroyOnLoad 跨场景常驻。
 public class AudioManager : MonoBehaviour
 {
-    public static AudioManager Instance
-    {
-        get
-        {
-            if (_instance == null)
-            {
-                GameObject go = new GameObject("AudioManager");
-                _instance = go.AddComponent<AudioManager>();
-                DontDestroyOnLoad(go);
-            }
-            return _instance;
-        }
-    }
-    private static AudioManager _instance;
+    public static AudioManager Instance { get; private set; }
 
     [Header("BGM")]
     [Tooltip("主菜单 / 加载 / 选关 共用一段 BGM")]
@@ -26,7 +15,16 @@ public class AudioManager : MonoBehaviour
     [Tooltip("Easy / Medium 游戏内共用一段 BGM")]
     public AudioClip gameplayBGM;
 
+    [Header("SFX 播放池")]
+    [Tooltip("预创建多少个 AudioSource 循环复用，避免每次拾取/播放都 new 临时对象")]
+    public int sfxPoolSize = 8;
+    [Tooltip("音效是否 2D（=1 完全 2D，不受距离影响；=0 完全 3D 带距离衰减）")]
+    [Range(0f, 1f)]
+    public float sfxSpatialBlend = 1f;
+
     private AudioSource bgmSource;
+    private AudioSource[] sfxPool;
+    private int sfxPoolCursor = 0;
 
     // 主菜单系场景（共用一个 BGM）
     private static readonly string[] MenuScenes = { "MainMenu", "Loading", "Selection", "DifficultySelection" };
@@ -35,17 +33,26 @@ public class AudioManager : MonoBehaviour
 
     void Awake()
     {
-        if (_instance != null && _instance != this)
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        _instance = this;
+        Instance = this;
         DontDestroyOnLoad(gameObject);
 
         bgmSource = gameObject.AddComponent<AudioSource>();
         bgmSource.loop = true;
         bgmSource.playOnAwake = false;
+
+        // 预创建 SFX 播放池
+        sfxPool = new AudioSource[Mathf.Max(1, sfxPoolSize)];
+        for (int i = 0; i < sfxPool.Length; i++)
+        {
+            sfxPool[i] = gameObject.AddComponent<AudioSource>();
+            sfxPool[i].playOnAwake = false;
+            sfxPool[i].spatialBlend = sfxSpatialBlend;
+        }
     }
 
     void OnEnable()
@@ -66,10 +73,9 @@ public class AudioManager : MonoBehaviour
     void Update()
     {
         // 实时同步音乐音量（设置面板滑动时立即生效）
-        if (SettingsManager.Instance != null)
-        {
-            bgmSource.volume = SettingsManager.Instance.GetMusicVolume();
-        }
+        float v = GetMusicVolume();
+        if (Mathf.Abs(bgmSource.volume - v) > 0.001f)
+            bgmSource.volume = v;
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -109,15 +115,53 @@ public class AudioManager : MonoBehaviour
         bgmSource.Stop();
     }
 
-    // ---------- 音量读取（供各脚本自带 AudioSource / PlayClipAtPoint 使用） ----------
+    // ---------- SFX 播放（对象池复用，无临时对象 GC） ----------
+
+    public void PlaySFX(AudioClip clip)
+    {
+        PlaySFX(clip, transform.position);
+    }
+
+    public void PlaySFX(AudioClip clip, Vector3 position)
+    {
+        if (clip == null) return;
+
+        AudioSource src = GetFreeSource();
+        src.spatialBlend = sfxSpatialBlend;
+        src.transform.position = position;
+        src.volume = GetSFXVolume();
+        src.PlayOneShot(clip, src.volume);
+    }
+
+    private AudioSource GetFreeSource()
+    {
+        // 优先找一个空闲的；全都在播就轮转覆盖最早的
+        for (int i = 0; i < sfxPool.Length; i++)
+        {
+            int idx = (sfxPoolCursor + i) % sfxPool.Length;
+            if (!sfxPool[idx].isPlaying)
+            {
+                sfxPoolCursor = (idx + 1) % sfxPool.Length;
+                return sfxPool[idx];
+            }
+        }
+        AudioSource src = sfxPool[sfxPoolCursor];
+        src.Stop();
+        sfxPoolCursor = (sfxPoolCursor + 1) % sfxPool.Length;
+        return src;
+    }
+
+    // ---------- 音量读取（直接读 PlayerPrefs，不依赖 SettingsManager 是否在场） ----------
+    // SettingsManager 写的就是同一个 PlayerPrefs key，两者天然一致；
+    // 这样即使跳过主菜单直接进游戏场景，音量也是用户上次保存的值。
 
     public static float GetMusicVolume()
     {
-        return SettingsManager.Instance != null ? SettingsManager.Instance.GetMusicVolume() : 1f;
+        return PlayerPrefs.GetFloat("MusicVolume", 0.8f);
     }
 
     public static float GetSFXVolume()
     {
-        return SettingsManager.Instance != null ? SettingsManager.Instance.GetSFXVolume() : 1f;
+        return PlayerPrefs.GetFloat("SFXVolume", 0.8f);
     }
 }
