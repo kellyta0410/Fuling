@@ -149,7 +149,8 @@ public class PlayerController : MonoBehaviour
     private static readonly string[] attackStateNames = { "Attack", "Attack2", "Attack3" };
     private float attackTimer = 0f;
     private bool isAttacking = false;
-    private bool queuedAttack = false;   // 攻击排队：攻击中点按钮，等上一个播完再播下一个
+    private bool queuedSkill = false;    // 技能排队：攻击中按技能，等当前攻击播完再放技能
+    private bool queuedAttack = false;   // 攻击排队：技能中按攻击，等技能播完再接普通攻击
     private float attackCooldownTimer = 0f;
     private bool canAttack = true;
     private int comboIndex = 0;
@@ -490,19 +491,19 @@ public class PlayerController : MonoBehaviour
             {
                 isAttacking = false;
                 attackTimer = 0f;
+                canAttack = true;
+                attackCooldownTimer = 0f;
                 animator.SetBool("IsAttacking", false);
                 // 攻击结束恢复 root motion 关闭（位移由代码驱动；技能/死亡时再按需开启）
                 animator.applyRootMotion = false;
                 // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
-            // 攻击点排队：上一个播完，接着播下一个连击
-            if (!isAttacking && queuedAttack)
+            // 攻击播完：若攻击中排了技能，则攻击结束后自动放技能（否则停在回 idle，等下次点按）
+            if (!isAttacking && queuedSkill)
             {
-                queuedAttack = false;
-                canAttack = true;
-                attackCooldownTimer = 0f;
-                BeginAttack();
+                queuedSkill = false;
+                PerformSkillAttack();
             }
         }
 
@@ -526,6 +527,12 @@ public class PlayerController : MonoBehaviour
                 // 技能结束恢复 root motion 关闭（位移由代码驱动）
                 animator.applyRootMotion = false;
                 // ⭐ 技能中允许转向，结束后保持玩家当前朝向（不做回正）。
+                // 技能动画播完：若技能中排了普通攻击，自动接上，保证 skill 与 attack 互相衔接
+                if (queuedAttack)
+                {
+                    queuedAttack = false;
+                    PerformAttack();
+                }
             }
         }
 
@@ -672,15 +679,16 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || isDying) return;
 
-        // ⭐ 技能播放期间忽略普通攻击：防止 animator.Play 打断技能动画导致技能中途被切
-        if (isUsingSkill) return;
-
-        // 正在攻击：这次点击缓存起来，当前攻击播完后再自动播下一段（不打断、不吞掉输入）
-        if (isAttacking)
+        // 技能播放期间按攻击：排队，技能动画播完后再自动接上普通攻击
+        if (isUsingSkill)
         {
             queuedAttack = true;
             return;
         }
+
+        // 攻击动画播完前忽略新攻击点击（手动单击衔接）：每按一次才推进到下一段连击；
+        // 不按则当前段播完停在 idle，再按才进入下一段。
+        if (isAttacking) return;
 
         if (!canAttack) return;
 
@@ -816,6 +824,13 @@ public class PlayerController : MonoBehaviour
     void PerformSkillAttack()
     {
         if (!canUseSkill || isDead || isDying) return;
+
+        // 攻击动画没播完：技能排队，等当前攻击播完再自动放（Update 里触发），不打断攻击
+        if (isAttacking)
+        {
+            queuedSkill = true;
+            return;
+        }
 
         canUseSkill = false;
         skillCooldownTimer = 0f;
@@ -972,7 +987,7 @@ public class PlayerController : MonoBehaviour
         if (!isAttacking) return;
         isAttacking = false;
         attackTimer = 0f;
-        queuedAttack = false;
+        queuedSkill = false;
         animator.SetBool("IsAttacking", false);
         animator.applyRootMotion = false;
     }

@@ -102,8 +102,24 @@ public class SnakeEnemy : EnemyAI
             {
                 Vector3 moveDir = agent.velocity;
                 moveDir.y = 0f;
-                // 有实际移动就朝移动方向转（绕墙时跟随路径转向）；速度≈0（已停到攻击距离）才面向玩家
-                if (moveDir.sqrMagnitude > 0.01f)
+                bool moving = moveDir.sqrMagnitude > 0.01f;
+
+                // 停下时若仍被实体墙隔开（卡在墙对面），改朝 agent 想去的绕行方向
+                // （desiredVelocity，即便当前被挡未动也指向绕行意图），而非面向玩家，
+                // 消除"蛇头对着墙对面"的视觉抖动；真正贴近玩家（无墙可攻）才面向玩家。
+                if (!moving && player != null &&
+                    WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
+                {
+                    Vector3 desired = agent.desiredVelocity;
+                    desired.y = 0f;
+                    if (desired.sqrMagnitude > 0.001f)
+                    {
+                        moveDir = desired;
+                        moving = true;
+                    }
+                }
+
+                if (moving)
                     RotateHeadTowards(moveDir, Time.deltaTime);
                 else
                     RotateHeadTowards(player.transform.position - transform.position, Time.deltaTime);
@@ -213,9 +229,10 @@ public class SnakeEnemy : EnemyAI
     {
         if (isDead || target == null || target.IsDead() || attackHitDealt) return false;
         if (!CanHeadReach(target)) return false;
-        // 不穿墙：蛇头与玩家之间被竖直墙体挡就咬不到
+        // 不穿墙：蛇头与玩家之间被竖直墙体"真正隔开"(直线被挡且 NavMesh 也无法绕行)才咬不到；
+        // 仅蛇头直线被墙角遮挡、但 NavMesh 能绕行到玩家时放行命中
         Vector3 headPos = snakeBody != null ? snakeBody.HeadWorldPosition : transform.position;
-        if (WallPenetrationResolve.IsBlockedBetween(headPos, target.transform.position)) return false;
+        if (IsWallSeparatedFrom(target.transform.position, headPos)) return false;
 
         float finalDamage = baseAttackDamage * currentDamageMultiplier;
         target.TakeDamage(Mathf.RoundToInt(finalDamage));
