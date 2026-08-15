@@ -135,6 +135,13 @@ public abstract class EnemyAI : MonoBehaviour
     private Vector3 stuckEscapeLastPos = Vector3.zero;
     private bool stuckEscapePosValid = false;
 
+    // ⭐ 快速重规划：玩家快速跨墙角时，不再等 TryStuckEscape 卡满 0.5s+1.0s 冷却，
+    // 而是在"墙挡状态由未挡→变挡"(玩家已到墙另一侧/原路径不再合适)的下一帧立即重置路径换新路。
+    private bool lastBlockedByWall = false;        // 上一帧墙挡状态
+    private float fastReplanCooldownTimer = 0f;    // 快速重规划节流，避免每帧昂贵的 CalculatePath
+    [SerializeField, Tooltip("快速重规划节流间隔(秒)：墙挡变化后过此间隔才允许再次整段重算")]
+    private float fastReplanCooldown = 0.35f;
+
     protected float baseSpeed;
     protected float baseHealth;
     protected float baseAttackDamage;
@@ -410,6 +417,33 @@ HandleMovement();
         // 接近目标提前减速，避免冲出一小段才刹停
         if (isChasing && !isAttacking)
             ApplyApproachBrake();
+
+        // ⭐ 快速重规划：玩家快速跨过墙角到墙另一侧时，原路径/旧走廊瞬间失效。
+        // 靠 TryStuckEscape 要等卡满 0.5s+1.0s 冷却才换路，导致明显延迟顶墙。
+        // 这里在"墙挡状态由未挡→变挡"的边沿立即 ResetPath 重新寻路，让 agent 尽快绕墙。
+        if (isChasing && !isAttacking && isAgentValid && agent != null && agent.isOnNavMesh && player != null)
+        {
+            bool nowBlocked = WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position);
+            if (!lastBlockedByWall && nowBlocked)
+            {
+                if (fastReplanCooldownTimer <= 0f)
+                {
+                    agent.ResetPath();
+                    agent.isStopped = false;
+                    agent.SetDestination(player.transform.position);
+                    fastReplanCooldownTimer = fastReplanCooldown;
+                }
+            }
+            lastBlockedByWall = nowBlocked;
+            if (fastReplanCooldownTimer > 0f)
+                fastReplanCooldownTimer -= Time.deltaTime;
+        }
+        else
+        {
+            // 非追击/未激活时把边沿基准复位，避免上次会话残留 true，
+            // 下次追击进入时能正确触发"墙挡由未挡→变挡"的快速重规划。
+            lastBlockedByWall = false;
+        }
 
         // 卡住自救：追击中长时间几乎不动（被屏风/障碍物理挡停，agent 却以为路径仍有效）
         // → 强制 ResetPath 并绕到"墙这边可达"的目标点重寻路
