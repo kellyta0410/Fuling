@@ -52,8 +52,6 @@ public class PlayerController : MonoBehaviour
     public GameObject attackVFXPrefab;
     [Tooltip("技能攻击时生成的特效预制体（如 SlashVFX 横劈版）")]
     public GameObject skillVFXPrefab;
-    [Tooltip("武器挂点（留空则运行时按名字 coin sword 2 自动查找）")]
-    public Transform weaponPivot;
     [Tooltip("挥砍特效：前段从微缩撑到全尺寸所占动画时长的比例(0~1)。越小挥得越快")]
     public float slashGrowAmount = 0.45f;
     [Tooltip("挥出缓动指数：越大越接近\"命中瞬间才拉满\"，越小越线性")]
@@ -229,11 +227,6 @@ public class PlayerController : MonoBehaviour
             animator.applyRootMotion = false;
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
-
-        if (weaponPivot == null)
-        {
-            weaponPivot = FindDeepChild(transform, "coin sword 2");
-        }
 
         // 受击四角先设为透明（运行时总是重建，避免场景里残留的失效引用挡住红光）
         hitCornerImages = AutoCreateCornerImages();
@@ -721,7 +714,7 @@ public class PlayerController : MonoBehaviour
 
     void SpawnAttackVFX(string stateName)
     {
-        if (attackVFXPrefab == null || weaponPivot == null) return;
+        if (attackVFXPrefab == null) return;
 
         // 剑光角度在发起攻击时确定（协程延迟后 comboIndex 可能已切到下一招）
         float yaw;
@@ -755,14 +748,13 @@ public class PlayerController : MonoBehaviour
 
         Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
 
-        // 位置：玩家正前方中间，对齐剑尖（刀尖）的高度与朝向。
-        Vector3 tip = GetWeaponTipPosition();
-        Vector3 spawnPos = transform.position + Vector3.up * (tip.y - transform.position.y);
+        // 位置：玩家正前方中间、略微抬高的高度。
+        Vector3 spawnPos = transform.position + Vector3.up;
         spawnPos += transform.forward * slashForwardOffset;
 
         GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
 
-        // 关键：挂到角色根而不是剑(weaponPivot)。挂在剑上会随剑的挥砍抖动旋转，
+        // 关键：挂到角色根而不是剑。挂在剑上会随剑的挥砍抖动旋转，
         // 读起来像"贴死在剑上"；挂到角色根后特效保持一次稳定挥砍轨迹。
         vfx.transform.SetParent(transform, true);
 
@@ -783,54 +775,6 @@ public class PlayerController : MonoBehaviour
 
         yield return new WaitForSeconds(total);
         if (vfx != null) Destroy(vfx);
-    }
-
-    // 用剑渲染网格包围盒，取离剑根(手柄)最远的角点当作刀尖
-    Vector3 GetWeaponTipPosition()
-    {
-        Renderer[] renderers = weaponPivot.GetComponentsInChildren<Renderer>(true);
-        bool has = false;
-        Vector3 center = weaponPivot.position;
-        Vector3 extents = Vector3.zero;
-
-        foreach (Renderer r in renderers)
-        {
-            if (r is ParticleSystemRenderer || r is TrailRenderer) continue;
-            if (!has)
-            {
-                center = r.bounds.center;
-                extents = r.bounds.extents;
-                has = true;
-            }
-            else
-            {
-                center = Vector3.Lerp(center, r.bounds.center, 0.5f);
-                extents = Vector3.Max(extents, r.bounds.extents);
-            }
-        }
-
-        if (!has) return weaponPivot.position;
-
-        Vector3 pivot = weaponPivot.position;
-        Vector3 tip = center;
-        float best = float.MinValue;
-        for (int x = -1; x <= 1; x += 2)
-        {
-            for (int y = -1; y <= 1; y += 2)
-            {
-                for (int z = -1; z <= 1; z += 2)
-                {
-                    Vector3 corner = center + new Vector3(extents.x * x, extents.y * y, extents.z * z);
-                    float d = (corner - pivot).sqrMagnitude;
-                    if (d > best)
-                    {
-                        best = d;
-                        tip = corner;
-                    }
-                }
-            }
-        }
-        return tip;
     }
 
     IEnumerator DelayedDamage()
@@ -915,8 +859,7 @@ public class PlayerController : MonoBehaviour
         // 横劈：剑光平面绕竖直轴转 90°，从横向前方横向劈出
         Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, 90f, 0f);
 
-        Vector3 tip = weaponPivot != null ? GetWeaponTipPosition() : transform.position + Vector3.up;
-        Vector3 spawnPos = transform.position + Vector3.up * (tip.y - transform.position.y);
+        Vector3 spawnPos = transform.position + Vector3.up;
         spawnPos += transform.forward * slashForwardOffset;
 
         GameObject vfx = Instantiate(skillVFXPrefab, spawnPos, spawnRot);
@@ -1799,18 +1742,5 @@ public class PlayerController : MonoBehaviour
             Gizmos.DrawLine(prev, cur);
             prev = cur;
         }
-    }
-
-    Transform FindDeepChild(Transform parent, string childName)
-    {
-        if (parent == null) return null;
-        if (parent.name == childName) return parent;
-
-        foreach (Transform child in parent)
-        {
-            Transform result = FindDeepChild(child, childName);
-            if (result != null) return result;
-        }
-        return null;
     }
 }
