@@ -806,10 +806,11 @@ public class PlayerController : MonoBehaviour
                 if (Vector3.Angle(transform.forward, toEnemy) > attackFacingAngle)
                     continue;
 
-                // ⭐ 近身/贴脸（≤ attackRange*0.5）豁免墙挡判定：肉搏距离内必然命中，
-                // 避免敌人被击退贴墙(碰撞体微嵌墙面)或玩家贴墙时，射线先撞墙误判"隔墙打不到"。
+                // ⭐ 近身/贴脸（≤ attackRange*0.75）豁免墙挡判定：墙角/贴墙肉搏距离内必然命中，
+                // 避免玩家贴墙或敌人被击退贴墙时，中心连线的射线先撞到墙角障碍误判"隔墙打不到"。
+                // 超过该阈值仍查真墙(IsBlockedBetween)，真隔墙时宁可不中也不穿墙攻击。
                 float distToEnemy = toEnemy.magnitude;
-                if (distToEnemy > attackRange * 0.5f &&
+                if (distToEnemy > attackRange * 0.75f &&
                     WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
                     continue;
 
@@ -923,11 +924,12 @@ public class PlayerController : MonoBehaviour
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
-                // ⭐ 近身/贴脸（≤ skillRange*0.4）豁免墙挡判定：近身必然命中，
+                // ⭐ 近身/贴脸（≤ skillRange*0.6）豁免墙挡判定：近身必然命中，
                 // 避免敌人贴墙/玩家贴墙时射线先撞墙误判"隔墙打不到"。
+                // 超过该阈值仍查真墙(IsBlockedBetween)，真隔墙时宁可不中也不穿墙攻击。
                 Vector3 toEnemy = enemy.transform.position - transform.position;
                 toEnemy.y = 0f;
-                if (toEnemy.magnitude > skillRange * 0.4f &&
+                if (toEnemy.magnitude > skillRange * 0.6f &&
                     WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
                     continue;
 

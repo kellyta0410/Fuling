@@ -366,10 +366,13 @@ public abstract class EnemyAI : MonoBehaviour
 
         // 进入攻击范围：停住原地转向玩家，能攻则攻，不再前进贴脸
         // （子类可重写 TryPerformInRangeAttack 接管该行为，如蓄力/咏唱）
-        // ⭐ 玩家被墙挡住时不算"已就位"：停住攻击会挥空、被挡在原地，
+        // ⭐ 玩家被真墙挡(IsBlockedBetween)时不算"已就位"：停住攻击会挥空、被挡在原地，
         // 改为走下面的追击逻辑，靠 NavMeshAgent 绕行到能看见玩家的位置再攻。
+        // 注意：这里用"真墙"判断(IsBlockedBetween)，不用 NavMesh 可达性——墙已 Bake，
+        // "能绕到玩家身边"≠"现在能攻击"，被真墙隔开就该继续绕行而不是停住。
+        // IsBlockedBetween 自带 ≤1.2m 近身豁免，墙角贴脸(≤1.2m)仍可正常就位攻击。
         if (distance <= attackRange &&
-            !IsWallSeparatedFrom(player.transform.position))
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
         {
             if (TryPerformInRangeAttack())
                 return;
@@ -918,26 +921,6 @@ Vector3 center = player.transform.position;
         return Vector3.Angle(forward, dir) <= facingAngleThreshold;
     }
 
-    // ⭐ 攻击/视线判定：直线视线是否被墙"真正"隔开（用于是否允许攻击）。
-    // 仅当 ① 直线被环境墙体遮挡 且 ② NavMesh 路径也不可达（真正隔墙、无法绕行）时才认为隔开；
-    // 若直线虽被挡，但 NavMesh 能从本侧绕行到目标（墙角/贴墙互搏），返回 false —— 允许攻击。
-    // 避免墙角处玩家与敌人仅因双方中心连线擦到墙角就互相打不到。
-    protected bool IsWallSeparatedFrom(Vector3 targetPos) => IsWallSeparatedFrom(targetPos, transform.position);
-
-    protected bool IsWallSeparatedFrom(Vector3 targetPos, Vector3 fromPos)
-    {
-        if (agent == null || !agent.isOnNavMesh) return WallPenetrationResolve.IsBlockedBetween(fromPos, targetPos);
-
-        // 直线未被墙挡 → 一定不是"真正隔开"
-        if (!WallPenetrationResolve.IsBlockedBetween(fromPos, targetPos)) return false;
-
-        // 直线被墙挡：退回用 NavMesh 路径可达性判断是否真正不可达
-        // （能沿导航网格绕行到目标，而不是必须贴墙直穿 → 不算真正隔开）
-        NavMeshPath path = new NavMeshPath();
-        if (!agent.CalculatePath(targetPos, path)) return true;
-        return path.status != NavMeshPathStatus.PathComplete;
-    }
-
     // 原地旋转面向玩家（不移动，供射程内待机）
     protected void RotateTowardsPlayer(float dt)
     {
@@ -988,10 +971,11 @@ Vector3 center = player.transform.position;
         {
             float dist = Vector3.Distance(transform.position, player.transform.position);
             float attackRangeValue = GetAttackActivationRange();
-            // 不穿墙：敌人到玩家之间被竖直墙体"真正隔开"(直线被挡且 NavMesh 也无法绕行)才伤害不到；
-            // 仅直线被墙角遮挡、但 NavMesh 能绕行到玩家时放行攻击
+            // 不穿墙：敌人到玩家之间被竖直墙体(实墙)挡就伤害不到；
+            // 用真墙 IsBlockedBetween（自带 ≤1.2m 近身豁免），墙角贴脸不误判，
+            // 但真隔墙(>1.2m 且中间有墙)时宁可不中，也不产生隔墙攻击。
             if (dist <= attackRangeValue && IsFacingPlayer() &&
-                !IsWallSeparatedFrom(player.transform.position))
+                !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
             {
                 float finalDamage = baseAttackDamage * currentDamageMultiplier;
                 player.TakeDamage(Mathf.RoundToInt(finalDamage));

@@ -229,10 +229,11 @@ public class SnakeEnemy : EnemyAI
     {
         if (isDead || target == null || target.IsDead() || attackHitDealt) return false;
         if (!CanHeadReach(target)) return false;
-        // 不穿墙：蛇头与玩家之间被竖直墙体"真正隔开"(直线被挡且 NavMesh 也无法绕行)才咬不到；
-        // 仅蛇头直线被墙角遮挡、但 NavMesh 能绕行到玩家时放行命中
+        // 不穿墙：蛇头与玩家之间被竖直墙体(实墙)挡就咬不到；
+        // 用真墙 IsBlockedBetween（自带 ≤1.2m 近身豁免），墙角贴脸不误判，
+        // 但真隔墙(>1.2m 且中间有墙)时宁可不中，也不产生隔墙咬。
         Vector3 headPos = snakeBody != null ? snakeBody.HeadWorldPosition : transform.position;
-        if (IsWallSeparatedFrom(target.transform.position, headPos)) return false;
+        if (WallPenetrationResolve.IsBlockedBetween(headPos, target.transform.position)) return false;
 
         float finalDamage = baseAttackDamage * currentDamageMultiplier;
         target.TakeDamage(Mathf.RoundToInt(finalDamage));
