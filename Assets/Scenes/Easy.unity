@@ -11750,6 +11750,12 @@ Light:
   m_UseViewFrustumForShadowCasterCull: 1
   m_ShadowRadius: 0
   m_ShadowAngle: 0
+--- !u!320 &1882827080 stripped
+PlayableDirector:
+  m_CorrespondingSourceObject: {fileID: 923604802660227356, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+    type: 3}
+  m_PrefabInstance: {fileID: 2025463717}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1945422184
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -11836,10 +11842,30 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 923604802660227356, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: m_SceneBindings.Array.data[0].value
+      value: 
+      objectReference: {fileID: 0}
     - target: {fileID: 1515887338201583946, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: attack1TriggerTime
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515887338201583946, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: attacks.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515887338201583946, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: attacks.Array.data[0].timeline
+      value: 
+      objectReference: {fileID: 1882827080}
+    - target: {fileID: 1515887338201583946, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: attacks.Array.data[0].stateName
+      value: Attack
       objectReference: {fileID: 0}
     - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
