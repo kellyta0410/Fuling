@@ -60,6 +60,8 @@ public class EnemyCollisionBlocker : MonoBehaviour
     private EnemyAI currentContactEnemy;
     private bool wasTouchingPlayer = false;
     private bool initialised = false;
+    // ⭐ 闪避时临时忽略玩家与这个敌人的碰撞（默认 false = 玩家被敌人实体挡停）
+    private bool ignorePlayerCollision = false;
 
     // 单帧实测分离使用的方向/距离（供 Gizmos 显示）
     private Vector3 lastPlayerDir = Vector3.zero;
@@ -94,6 +96,22 @@ public class EnemyCollisionBlocker : MonoBehaviour
         PlayerController pc = Object.FindObjectOfType<PlayerController>();
         if (pc != null) playerController = pc.GetComponent<CharacterController>();
         else playerController = null;
+
+        // ⭐ 玩家与敌人保持正常物理碰撞：玩家 CC 撞上敌人时会被实体挡停（"敌人挡住玩家"，
+        // 敌人不位移——敌人是静态或 kinematic 碰撞体，玩家推不动它）。
+        // 敌人追击/击退把碰撞体扫进玩家体积时，由 ResolvePlayerBack 把敌人推出去（玩家永不被顶动）。
+        // 闪避撞人时 PlayerController 会临时调用 SetIgnorePlayerCollision(true) 让玩家冲开穿过敌人。
+        if (playerController != null && myCollider != null && ignorePlayerCollision)
+            Physics.IgnoreCollision(myCollider, playerController, true);
+    }
+
+    // ⭐ 玩家闪避撞人时临时忽略玩家与这个敌人的碰撞，让玩家能冲开并穿过敌人；
+    // 闪避结束后由 PlayerController 恢复 false（默认 false = 玩家被敌人实体挡停）。
+    public void SetIgnorePlayerCollision(bool ignore)
+    {
+        ignorePlayerCollision = ignore;
+        if (myCollider == null || playerController == null) return;
+        Physics.IgnoreCollision(myCollider, playerController, ignore);
     }
 
     void LateUpdate()
@@ -136,7 +154,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
             Vector3 preDest = agent != null ? agent.destination : Vector3.zero;
             Vector3 preSteer = agent != null ? agent.steeringTarget : Vector3.zero;
             Vector3 preVel = agent != null ? agent.velocity : Vector3.zero;
-            bool preStopped = agent != null && agent.isStopped;
+            bool preStopped = agent != null && agent.isOnNavMesh && agent.isStopped;
 
             // ⭐ agent 是否在"正常沿 NavMesh 寻路"：有完整路径、未停、正在移动、steering 有效。
             bool agentHealthy = agent != null && agent.isOnNavMesh && agent.enabled

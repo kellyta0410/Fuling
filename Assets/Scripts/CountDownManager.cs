@@ -116,14 +116,12 @@ public class CountdownManager : MonoBehaviour
         if (normal != null)
         {
             normal.StopSpawning();
-            Debug.Log("⏸️ 倒计时期间禁用普通生成器");
         }
 
         InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
         if (infinite != null)
         {
             infinite.StopSpawning();
-            Debug.Log("⏸️ 倒计时期间禁用无限生成器");
         }
     }
 
@@ -140,7 +138,6 @@ public class CountdownManager : MonoBehaviour
                 if (infinite != null)
                 {
                     infinite.StartSpawning();
-                    Debug.Log("✅ 倒计时结束，无限生成器已启用");
                 }
             }
             else
@@ -149,7 +146,6 @@ public class CountdownManager : MonoBehaviour
                 if (normal != null)
                 {
                     normal.StartSpawning();
-                    Debug.Log("✅ 倒计时结束，普通生成器已启用");
                 }
             }
         }

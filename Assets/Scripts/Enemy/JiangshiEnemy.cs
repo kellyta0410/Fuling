@@ -14,14 +14,12 @@ public class JiangshiEnemy : EnemyAI
     [Header("瞬移参数")]
     [Tooltip("大于此距离才会瞬移（远距离用瞬移接近；近距离直接走过去打）")]
     public float prepareDistance = 6f;
-    [Tooltip("瞬移距离上限：超过此距离（距离太远）不瞬移，改为走过去追击，避免超远瞬移/穿越大片装饰物")]
-    public float maxBlinkDistance = 12f;
+    [Tooltip("每次瞬移前进的距离(米)：一小步跳跃接近，而不是一次跳到玩家面前")]
+    public float blinkStepDistance = 3f;
     [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 3.0f;
-    [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移到玩家面前")]
+    [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移")]
     public float prepareDurationJitter = 0.8f;
-    [Tooltip("瞬移后距离玩家多远（数值越小越贴脸）")]
-    public float distanceToPlayerAfterBlink = 1.7f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
     [Tooltip("瞬移冷却时间（秒）")]
@@ -199,10 +197,9 @@ public class JiangshiEnemy : EnemyAI
                     return;
                 }
 
-                // ⭐ 远距离：只在无墙遮挡时瞬移接近（蓄力 → 指示 → 瞬移到玩家面前 → 攻击）。
+                // ⭐ 远距离：只在无墙遮挡时瞬移接近（蓄力 → 指示 → 瞬移一小步 → 冷却）。
                 // 有墙挡着就继续绕墙追击，等玩家出墙再瞬移。
-                // ⭐ 距离超过 maxBlinkDistance（太远）也不瞬移：改为走过去追击，避免超远瞬移/穿越大片装饰物。
-                if (distance > prepareDistance && distance <= maxBlinkDistance && !isAttacking && blinkState == BlinkState.Chasing)
+                if (distance > prepareDistance && !isAttacking && blinkState == BlinkState.Chasing)
                 {
                     if (!HasClearLineToPlayer())
                     {
@@ -217,14 +214,14 @@ public class JiangshiEnemy : EnemyAI
 
                     blinkState = BlinkState.Preparing;
                     stateTimer = 0f;
-                    // ⭐ 本次蓄力随机化时长：不同僵尸瞬移时刻错开，避免同时瞬移到玩家面前
+                    // ⭐ 本次蓄力随机化时长：不同僵尸瞬移时刻错开，避免同时瞬移
                     effectivePrepareDuration = Mathf.Max(prepareDuration + Random.Range(-prepareDurationJitter, prepareDurationJitter), 0.5f);
                     hasPrepared = false;
                     hasAttacked = false;
                     lockedFacingDir = GetLockedFacingDir();
-                    // ⭐ 锁定瞬移落点基准：蓄力开始时玩家的位置（地面），之后不跟随玩家
+                    // ⭐ 锁定瞬移落点基准：沿锁定方向前进 blinkStepDistance(3m) 一小步，之后不跟随玩家
                     lockedIndicatorTarget = player != null
-                        ? GetGroundPosition(player.transform.position)
+                        ? GetGroundPosition(transform.position + lockedFacingDir * blinkStepDistance)
                         : GetGroundPosition(transform.position);
                     StopAgent();
 
@@ -235,10 +232,11 @@ public class JiangshiEnemy : EnemyAI
                     return;
                 }
 
-                // ⭐ 超过瞬移距离上限：走过去追击，不瞬移
+                // ⭐ 走到这里说明距离 <= prepareDistance（近距已在上方处理）或正在攻击，
+                // 保持追击即可（不会出现"超过上限走过去"分支，因为远距一律瞬移一小步）
                 if (isAgentValid)
                 {
-                    NotePathMutation("Jiangshi.blink超距 → isStopped=false");
+                    NotePathMutation("Jiangshi.blink未触发 → isStopped=false");
                     agent.isStopped = false;
                     SetChaseDestination(player.transform.position);
                 }
@@ -447,25 +445,18 @@ public class JiangshiEnemy : EnemyAI
     }
 
     /// <summary>
-    /// ⭐ 瞬移到"蓄力开始时锁定的玩家位置"前固定距离处（与指示条终点一致，不实时跟随玩家）。
+    /// ⭐ 每次瞬移只沿"蓄力开始时锁定的朝向"前进 blinkStepDistance(3m) 一小步，
+    /// 锁定方向不跟随玩家；落点与指示条终点一致。
     /// 成功瞬移返回 true；落点路径被墙挡则返回 false（不瞬移，由调用方回到追击）。
     /// </summary>
     private bool PerformBlinkToPlayer()
     {
         if (player == null) return false;
 
-        // ⭐ 落点基准：蓄力开始时锁定的玩家位置（地面），之后不跟随玩家
-        Vector3 lockedPlayerPos = lockedIndicatorTarget;
-        if (lockedPlayerPos.sqrMagnitude < 0.001f)
-            lockedPlayerPos = GetGroundPosition(player.transform.position);
-
-        // 从僵尸指向锁定玩家位置的水平方向
-        Vector3 toTarget = lockedPlayerPos - transform.position;
-        toTarget.y = 0;
-        Vector3 directionToTarget = toTarget.sqrMagnitude > 0.01f ? toTarget.normalized : -transform.forward;
-
-        // ⭐ 目标点 = 锁定玩家位置 - 方向 × 固定距离（落在玩家来向的后方，始终保持固定间隔）
-        Vector3 targetPos = lockedPlayerPos - directionToTarget * distanceToPlayerAfterBlink;
+        // ⭐ 落点基准：蓄力开始时锁定的朝向 × 3m 一小步，不跳到玩家面前
+        if (lockedFacingDir == Vector3.zero)
+            lockedFacingDir = GetLockedFacingDir();
+        Vector3 targetPos = transform.position + lockedFacingDir * blinkStepDistance;
         targetPos.y = transform.position.y;
 
         // ⭐ 瞬移落点校验：从僵尸到落点的路径被墙挡（会穿墙瞬移、玩家看不到瞬移）就放弃瞬移
@@ -494,11 +485,9 @@ public class JiangshiEnemy : EnemyAI
             transform.position = targetPos;
         }
 
-        // 瞬移后面向玩家
-        Vector3 faceDir = (player.transform.position - transform.position).normalized;
-        faceDir.y = 0;
-        if (faceDir != Vector3.zero)
-            transform.rotation = Quaternion.LookRotation(faceDir);;
+        // 瞬移后保持锁定朝向（不跟随玩家）
+        if (lockedFacingDir != Vector3.zero)
+            transform.rotation = Quaternion.LookRotation(lockedFacingDir);
         return true;
     }
 
@@ -613,16 +602,13 @@ public class JiangshiEnemy : EnemyAI
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
 
-        // ⭐ 瞬移目标距离（青色虚线圆）- 显示瞬移后会出现在玩家多近
-        if (player != null)
-        {
-            Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
-            Gizmos.DrawWireSphere(player.transform.position, distanceToPlayerAfterBlink);
-        }
+        // ⭐ 瞬移步进距离（青色圆）- 显示每次瞬移前进多远
+        Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
+        Gizmos.DrawWireSphere(transform.position, blinkStepDistance);
 
 #if UNITY_EDITOR
         UnityEditor.Handles.Label(transform.position + Vector3.up * 3.5f,
-            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移后距离: {distanceToPlayerAfterBlink:F1}m");
+            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移步进: {blinkStepDistance:F1}m");
 #endif
     }
 }

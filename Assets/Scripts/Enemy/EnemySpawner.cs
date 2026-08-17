@@ -746,7 +746,6 @@ public class EnemySpawner : MonoBehaviour
             BuildNavMeshImmediate();
 
         canSpawn = true;
-        if (showDebugLogs) Debug.Log("✅ 普通模式敌人生成已启用！");
 
         if (spawnOnStart && !initialSpawnDone)
         {

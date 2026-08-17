@@ -144,6 +144,18 @@ public abstract class EnemyAI : MonoBehaviour
     private const float stuckMinDesiredSpeed = 0.15f;
     private bool wasAgentStopped = false;
 
+    // ⭐ 保守卡住恢复（偶发漏网）：TryStuckEscape 要求"视线被真墙挡(IsBlockedBetween)"才会自救，
+    // 但少数 enemy 卡住时视线并没有被墙直挡（Carve 角落、夹在障碍缝里、或 path 已失效），
+    // 那类永远等不到自救。这里补一层更宽的自救：
+    //   · 只看"该动却没动"——正在追击、无攻击/硬直、isStopped=false、还有移动需求，
+    //     却连续 stallRecoveryDelay 秒没产生位移 → 触发一次安全重寻路到可达追击点。
+    //   · 触发后有较长冷却防抖，绝不做"每帧 Repath"。
+    //   · 复用 GetChaseReachableTarget()（墙边缘可达点 / 玩家侧偏移可达点），不把目标强设回玩家脚下。
+    private float stallRecoveryTimer = 0f;
+    private float stallRecoveryCooldownTimer = 0f;
+    private const float stallRecoveryDelay = 1.2f;     // 连续多久"该动没动"才算卡住（比 stuckEscapeDelay 更保守）
+    private const float stallRecoveryCooldown = 2.5f;  // 触发后冷却，避免 Repath→Repath→Repath
+
     // ：绕墙追击已整体交给 NavMeshAgent 自行寻路移动，
     // 原有的"快速重规划/本侧可达点覆盖"逻辑会造成 hasPath 闪烁与停在墙边不去绕行，已移除。
     // 真正的物理卡住统一由 TryStuckEscape(含恢复宽限期)兜底。
@@ -187,6 +199,17 @@ public abstract class EnemyAI : MonoBehaviour
     private float pathCornerLogTimer = 0f;
     private const float pathCornerLogInterval = 0.25f;   // 0.25s 一条，够看又不太吵
     private NavMeshPath calcComparePath;                  // 复用缓冲，避免每帧分配
+
+    // 🔍 脱离 NavMesh 追踪：记录第一次 isOnNavMesh:true→false 的瞬间及其来源。
+    // 只追踪、不改任何寻路逻辑。用快照避免在 isOnNavMesh=false 时读 isStopped/velocity 等
+    // 会抛 "IsStopped can only be called on an active agent that has been placed on a NavMesh" 的属性。
+    [Tooltip("🔍 脱离 NavMesh 诊断：isOnNavMesh 首次 true→false 时打印一次快照 + 最后路径操作来源")]
+    public bool logNavMeshLoss = false;
+    private bool lastTrackedOnNavMesh = true;            // 上一帧记录的 isOnNavMesh
+    private bool navMeshLossLogged = false;              // 同一段脱离只打一次
+    private string navMeshLossLastMutation = "none";     // 脱离前最后一次路径操作的来源
+    private Vector3 navMeshLossLastPos;                  // 脱离前的位置
+    private string navMeshLossLastState = "";            // 脱离前 chase/attack/stagger 状态
 
     protected float baseSpeed;
     protected float baseHealth;
@@ -351,6 +374,11 @@ public abstract class EnemyAI : MonoBehaviour
 
     protected virtual void Update()
     {
+        // 🔍 脱离 NavMesh 追踪：放在最前，任何 return 分支都不会跳过它。
+        // 先缓存"本帧 agent 在 NavMesh 上"时的状态；当首帧观察到 isOnNavMesh=false，
+        // 用上一帧缓存快照打印（避免在脱离帧读 isStopped/velocity/destination 抛错）。
+        TrackNavMeshLoss();
+
         // 🔍 绕路 Path 诊断：放在 Update 最前面，任何 return 分支都不会跳过它
         //（dead/stagger/attacking/就位/挡路 等所有状态都能打印 agent 当前路径与 CalculatePath 对照）
         LogPathCorners();
@@ -391,7 +419,7 @@ public abstract class EnemyAI : MonoBehaviour
                 {
                     Debug.Log($"<color=cyan>[AttackEnd]</color> <b>{GetType().Name}</b> name:{name} | " +
                         $"atkTimer:{attackTimer:F2} dur:{attackDuration} → isAttacking:true→false | " +
-                        $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
+                        $"agent stopped:{agent!=null&&agent.isOnNavMesh&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
                 }
                 isAttacking = false;
                 attackTimer = 0f;
@@ -425,7 +453,7 @@ public abstract class EnemyAI : MonoBehaviour
                 // 🔍 冷却刚开始：记录冷却起点状态，确认攻击结束后确实进入了冷却
                 Debug.Log($"<color=yellow>[CooldownStart]</color> <b>{GetType().Name}</b> name:{name} | " +
                     $"canAtk:false→冷却 cd:{attackCooldownTimer:F2} 目标:{GetAttackCooldown():F2}s | " +
-                    $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                    $"agent stopped:{agent!=null&&agent.isOnNavMesh&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
                     $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2}");
             }
             if (attackCooldownTimer >= GetAttackCooldown())
@@ -435,7 +463,7 @@ public abstract class EnemyAI : MonoBehaviour
                 if (logAttackResumeFlow)
                 {
                     Debug.Log($"<color=green>[CooldownEnd]</color> <b>{GetType().Name}</b> name:{name} | canAtk:false→true | " +
-                        $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
+                        $"agent stopped:{agent!=null&&agent.isOnNavMesh&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
                 }
             }
         }
@@ -465,9 +493,11 @@ public abstract class EnemyAI : MonoBehaviour
         // 改为走下面的追击逻辑，靠 NavMeshAgent 绕行到能看见玩家的位置再攻。
         // 注意：这里用"真墙"判断(IsBlockedBetween)，不用 NavMesh 可达性——墙已 Bake，
         // "能绕到玩家身边"≠"现在能攻击"，被真墙隔开就该继续绕行而不是停住。
-        // IsBlockedBetween 自带 ≤1.2m 近身豁免，墙角贴脸(≤1.2m)仍可正常就位攻击。
+        // applyCloseCombatExemption=false：敌我贴薄墙(≤1.2m)时也认真判墙，
+        // 中间有实墙(如 XRay 薄墙)就不算"已就位"，继续走 NavMesh steering 绕墙，
+        // 不再出现"停下转身面向墙后玩家、却不去绕墙"的卡位。
         if (distance <= attackRange &&
-            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
         {
             if (TryPerformInRangeAttack())
                 return;
@@ -505,7 +535,7 @@ public abstract class EnemyAI : MonoBehaviour
         {
             Debug.Log($"<color=cyan>[ResumeChase]</color> <b>{GetType().Name}</b> name:{name} | " +
                 $"攻击结束跨帧 → 进入追击/就位流程 | " +
-                $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                $"agent stopped:{agent!=null&&agent.isOnNavMesh&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
                 $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2} canAtk:{canAttack} " +
                 $"cd:{attackCooldownTimer:F2} 距离玩家:{(player!=null?Vector3.Distance(transform.position,player.transform.position):-1f):F2}");
         }
@@ -528,7 +558,12 @@ HandleMovement();
         // 卡住自救：追击中长时间几乎不动（被屏风/障碍物理挡停，agent 却以为路径仍有效）
         // → 强制 ResetPath 并绕到"墙这边可达"的目标点重寻路
         if (isChasing && !isAttacking)
+        {
             TryStuckEscape();
+            // ⭐ 保守补层：TryStuckEscape 要求"视线被真墙挡"才自救，这里补"该动却没动"的偶发卡住
+            //（Carve 角落/夹缝/路径失效等视线检测恒为 false 的情况），复用同一可达追击点逻辑。
+            TryStallRecovery();
+        }
 
         // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
         if (enableSeparation && distance > attackRange)
@@ -977,13 +1012,15 @@ Vector3 center = player.transform.position;
         }
 
         // 视野可见且能直接走到（无墙）时不需要自救，等普通寻路即可，避免误触发
-        if (!WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position)) return;
+        // applyCloseCombatExemption=false：贴薄墙(≤1.2m)被实墙隔开也算被挡，
+        // 卡在墙对面面向玩家的敌人才能触发自救绕墙。
+        if (!WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false)) return;
 
         // 已到玩家身边：仅当中间无墙（能真正贴着攻击）才算就位、不必绕行。
         // 相隔一堵实墙（即便距离在攻击激活范围内）仍需自救绕到墙这一侧，
         // 否则会卡在墙对面面向玩家（玩家快速穿墙后敌人常处此态）。
         if (Vector3.Distance(transform.position, player.transform.position) <= GetAttackActivationRange()
-            && !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
+            && !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
             return;
 
         if (stuckEscapeCooldownTimer > 0f)
@@ -1047,6 +1084,76 @@ Vector3 center = player.transform.position;
         }
     }
 
+    // ⭐ 保守卡住恢复（偶发漏网的自救补层）：
+    // TryStuckEscape 需要"视线被真墙挡(IsBlockedBetween)"，而少数 enemy 卡住时：
+    //   · 卡在 Carve 障碍角落（墙并不在敌人↔玩家直线上）；
+    //   · 夹在多个敌人/障碍缝里动弹不得；
+    //   · agent 有 hasPath 但 path 实际已失效/到达不了目标/没朝 steeringTarget 走。
+    // 这些情况视线检测恒为 false，永远不会触发自救。
+    // 这里只看"该动却没动"：
+    //   持续满足 → 追击中、无攻击/硬直/死亡、agent 有效在 NavMesh 上、isStopped=false、
+    //              还有移动需求(未到停车距离 / 路径无效或丢失)、位移速度≈0 —— 才累计计时。
+    //   达到 stallRecoveryDelay 秒 → 一次安全重寻路到"可达追击点"(GetChaseReachableTarget)，
+    //   然后进入 stallRecoveryCooldown 冷却，避免每帧 Repath。
+    // 攻击/冷却/硬直/击退恢复期间的 velocity=0 都不满足"还有移动需求"，且停在攻击范围会被上面
+    // 的就位分支先返回，天然不会误触发。
+    protected void TryStallRecovery()
+    {
+        if (agent == null || !agent.isOnNavMesh || player == null) return;
+        if (isDead || isStaggering || isAttacking) { stallRecoveryTimer = 0f; return; }
+        if (!isChasing) { stallRecoveryTimer = 0f; return; }
+        if (agent.isStopped) { stallRecoveryTimer = 0f; return; }   // 攻击/排队等主动停下不算卡住
+
+        // 恢复宽限期（攻击/硬直/击退刚结束）：此期间 velocity 未建立，不判定
+        if (stuckGraceTimer > 0f)
+        {
+            stallRecoveryTimer = 0f;
+            return;
+        }
+
+        // 冷却防抖：触发过一次后 cooldown 秒内不再重复 Repath
+        if (stallRecoveryCooldownTimer > 0f)
+        {
+            stallRecoveryCooldownTimer -= Time.deltaTime;
+            return;
+        }
+
+        // 是否"还有移动需求"：
+        //   · 路径有效(Complete)且未到停车距离 → 还要走；
+        //   · 路径无效(Partial/Invalid) 或根本没路径(hasPath=false) → 需要重寻路。
+        bool needsMove = false;
+        if (agent.hasPath && !agent.pathPending)
+        {
+            if (agent.pathStatus == NavMeshPathStatus.PathComplete)
+                needsMove = agent.remainingDistance > agent.stoppingDistance + 0.15f;
+            else
+                needsMove = true;   // 路径 Partial/Invalid：到不了目标，需要重寻
+        }
+        else if (!agent.hasPath && !agent.pathPending)
+        {
+            needsMove = true;       // 追击中却完全没有路径 → 需要重寻
+        }
+        if (!needsMove) { stallRecoveryTimer = 0f; return; }
+
+        // 位移速度很低才算"卡住"；还在动就清零计时
+        if (agent.velocity.magnitude > stuckEscapeSpeed)
+        {
+            stallRecoveryTimer = 0f;
+            return;
+        }
+
+        stallRecoveryTimer += Time.deltaTime;
+        if (stallRecoveryTimer < stallRecoveryDelay) return;
+
+        // 触发一次安全重寻路：目标用可达追击点，不直接 SetDestination(玩家原位置)
+        stallRecoveryTimer = 0f;
+        stallRecoveryCooldownTimer = stallRecoveryCooldown;
+        NotePathMutation("TryStallRecovery(保守卡住) → ResetPath+SetDest(可达追击点)");
+        agent.ResetPath();
+        agent.isStopped = false;
+        agent.SetDestination(GetChaseReachableTarget());
+    }
+
     // 追击重寻路目标：优先用 NavMesh.Raycast 返回的"墙边缘可达点"(navHit，在敌人这一侧的 NavMesh
     // 边界上，永远可达、不会在墙对岸)；Raycast 未命中(无墙或极端情况)再回退到"玩家脚下偏移向敌人侧"
     // 的可达 NavMesh 点。避免落点恰在墙对岸导致 NoPath，或每次重算都仍落在墙后继续顶墙。
@@ -1102,7 +1209,20 @@ Vector3 center = player.transform.position;
     public void RestoreChaseAfterWarp(Vector3 destination)
     {
         if (agent == null || isDead || isStaggering || isAttacking) return;
-        if (!agent.isOnNavMesh || !agent.enabled) return;
+        if (!agent.enabled) return;
+
+        // ⭐ 确认仍在 NavMesh 上：Warp 推回墙外后若落点恰在 NavMesh 外（墙角/悬空/被推出烘焙边界），
+        // 先贴回最近的可走 NavMesh 点，避免从此 onNavMesh=false 而永久失去寻路。
+        if (!agent.isOnNavMesh)
+        {
+            NavMeshHit anchor;
+            if (NavMesh.SamplePosition(transform.position, out anchor, 2f, NavMesh.AllAreas))
+                agent.Warp(anchor.position);
+            else
+                return; // 周围确实无 NavMesh，无法自救
+        }
+        if (!agent.isOnNavMesh) return;
+
         if (!isChasing || player == null || player.IsDead())
         {
             agent.isStopped = true;
@@ -1176,7 +1296,7 @@ Vector3 center = player.transform.position;
         {
             Debug.Log($"<color=green>[AttackStart]</color> <b>{GetType().Name}</b> name:{name} | " +
                 $"canAtk:{canAttack} isAttacking(前):{isAttacking} atkTimer:{attackTimer:F2} dur:{attackDuration} " +
-                $"| agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                $"| agent stopped:{agent!=null&&agent.isOnNavMesh&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
                 $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2}");
         }
         canAttack = false;
@@ -1593,7 +1713,10 @@ Vector3 center = player.transform.position;
     {
         lastPathMutation = source;
         if (logPathStateChanges)
-            Debug.Log($"[{Time.time:F2}] {name} 路径操作 ← {source} | hasPath:{agent!=null&&agent.hasPath} pending:{agent!=null&&agent.pathPending} isStopped:{agent!=null&&agent.isStopped}");
+        {
+            string safeStopped = agent != null && agent.isOnNavMesh ? agent.isStopped.ToString() : "offNav";
+            Debug.Log($"[{Time.time:F2}] {name} 路径操作 ← {source} | hasPath:{agent!=null&&agent.hasPath} pending:{agent!=null&&agent.pathPending} isStopped:{safeStopped}");
+        }
     }
 
     // 供外部组件(EnemyCollisionBlocker 等)记录路径变更来源
@@ -1640,12 +1763,59 @@ Vector3 center = player.transform.position;
             }
             Debug.Log($"[{Time.time:F2}] {name} hasPath Y→N ← 变化 | " +
                 $"hasPath:{hp} pending:{pd} status:{pathStatus} rem:{rem} | " +
-                $"isStopped:{agent.isStopped} enabled:{agent.enabled} onNavMesh:{agent.isOnNavMesh} | " +
-                $"dest:{agent.destination} steer:{steer} | " +
+                $"isStopped:{(agent.isOnNavMesh ? agent.isStopped.ToString() : "offNav")} enabled:{agent.enabled} onNavMesh:{agent.isOnNavMesh} | " +
+                $"dest:{(agent.isOnNavMesh ? agent.destination.ToString() : "offNav")} steer:{steer} | " +
                 $"最后调用:{lastPathMutation} | 玩家:{player?.transform.position}");
         }
         lastTrackedHasPath = hp;
         lastTrackedPending = pd;
+    }
+
+    // 🔍 脱离 NavMesh 追踪：consequence of Agent 被任何来源推到 NavMesh 多边形外，
+    // isOnNavMesh 变 false 后，任何读 isStopped/velocity/destination/steeringTarget 都会抛
+    // "IsStopped can only be called on an active agent that has been placed on a NavMesh"。
+    // 这里在"还挂在 NavMesh 上"时每帧缓存安全快照；观察首帧 true→false 时，
+    // 用上一帧快照打印（绝不在脱离帧读会抛错的属性），并标记同一段只打一次。
+    private void TrackNavMeshLoss()
+    {
+        if (!logNavMeshLoss || agent == null) return;
+
+        // ⭐ 死亡是预期脱离：Die() 会 agent.enabled=false，属正常流程（保留尸体、停用 agent）。
+        // 这里跳过，避免把"死亡脱离"当成贴墙 bug 打印；同时复位标记，活着的敌人照常追踪。
+        if (isDead)
+        {
+            lastTrackedOnNavMesh = true;
+            navMeshLossLogged = false;
+            return;
+        }
+
+        bool onNav = agent.enabled && agent.isOnNavMesh;
+
+        if (onNav)
+        {
+            // 在 NavMesh 上：缓存当前安全快照，供脱离瞬间打印
+            lastTrackedOnNavMesh = true;
+            navMeshLossLogged = false;
+            navMeshLossLastPos = transform.position;
+            navMeshLossLastMutation = lastPathMutation;
+            navMeshLossLastState =
+                $"chase:{isChasing} atk:{isAttacking} stagger:{isStaggering} dead:{isDead} " +
+                $"canAtk:{canAttack} forceReturn:{forceReturnToRange} wall挡:{WallPenetrationResolve.IsBlockedBetween(transform.position, player != null ? player.transform.position : transform.position, applyCloseCombatExemption:false)}";
+            return;
+        }
+
+        // 观察到不在 NavMesh 上
+        if (lastTrackedOnNavMesh && !navMeshLossLogged)
+        {
+            navMeshLossLogged = true;
+            Debug.Log(
+                $"<color=red>[NavMesh脱离]</color> <b>{GetType().Name}</b> name:{name} | isOnNavMesh:true→false 首次脱离\n" +
+                $"  脱离前(缓存快照): pos:{navMeshLossLastPos:F2} | {navMeshLossLastState}\n" +
+                $"  最后路径操作: {navMeshLossLastMutation}\n" +
+                $"  本帧危险读取请勿做: 当前 agent enabled:{agent.enabled} onNavMesh:{agent.isOnNavMesh}"
+            );
+        }
+        lastTrackedOnNavMesh = false;
     }
 
     // 🔍 追击路径诊断：showPathDebug 开启时，在敌人头顶显示实时
