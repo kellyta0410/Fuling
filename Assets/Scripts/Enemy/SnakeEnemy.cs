@@ -92,8 +92,9 @@ public class SnakeEnemy : EnemyAI
                 }
             }
 
+            NotePathMutation("Snake.HandleMovement → isStopped=false");
             agent.isStopped = false;
-            agent.SetDestination(target);
+            SetChaseDestination(target);
 
             // 蛇式移动：追击绕行时蛇头跟随"移动方向"（agent 沿 NavMesh 路径绕墙），
             // 停下/攻击时才面向玩家。若始终朝向玩家，绕墙时蛇身会横着侧移、

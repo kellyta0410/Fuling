@@ -117,6 +117,8 @@ public class PlayerController : MonoBehaviour
     public float skillCooldown = 15f;
     [Tooltip("攻击命中后敌人被击退的距离（米）")]
     public float enemyKnockbackDistance = 2f;
+    [Tooltip("普通攻击命中后敌人被击退的距离（米）——比技能击退更短，避免普通攻击把敌人推太远/推进墙角")]
+    public float normalAttackKnockbackDistance = 1.2f;
     [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
     public Button dodgeButton;
     [Tooltip("闪避冷却时间（秒）")]
@@ -815,7 +817,7 @@ public class PlayerController : MonoBehaviour
                     continue;
 
                 enemy.TakeDamageImmediate(attackDamage);
-                enemy.AddKnockback(transform.forward, enemyKnockbackDistance);
+                enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
             }
         }
     }

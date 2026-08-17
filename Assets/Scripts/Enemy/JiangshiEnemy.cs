@@ -100,6 +100,7 @@ public class JiangshiEnemy : EnemyAI
         if (blinkState == BlinkState.Preparing || blinkState == BlinkState.PostBlink)
         {
             SetSeparationSuspended(false);
+            HideGroundIndicator();   // ⭐ 隐藏瞬移指示线，避免击退打断蓄力后红线残留在地上
             blinkState = BlinkState.Cooldown;
             stateTimer = 0f;
         }
@@ -181,8 +182,9 @@ public class JiangshiEnemy : EnemyAI
                     {
                         if (isAgentValid)
                         {
+                            NotePathMutation("Jiangshi.Chasing近距 → isStopped=false");
                             agent.isStopped = false;
-                            agent.SetDestination(player.transform.position);
+                            SetChaseDestination(player.transform.position);
                         }
                     }
                     else
@@ -206,8 +208,9 @@ public class JiangshiEnemy : EnemyAI
                     {
                         if (isAgentValid)
                         {
+                            NotePathMutation("Jiangshi.blink挡线 → isStopped=false");
                             agent.isStopped = false;
-                            agent.SetDestination(player.transform.position);
+                            SetChaseDestination(player.transform.position);
                         }
                         return;
                     }
@@ -235,8 +238,9 @@ public class JiangshiEnemy : EnemyAI
                 // ⭐ 超过瞬移距离上限：走过去追击，不瞬移
                 if (isAgentValid)
                 {
+                    NotePathMutation("Jiangshi.blink超距 → isStopped=false");
                     agent.isStopped = false;
-                    agent.SetDestination(player.transform.position);
+                    SetChaseDestination(player.transform.position);
                 }
                 return;
 
@@ -331,8 +335,9 @@ public class JiangshiEnemy : EnemyAI
                 {
                     if (isAgentValid)
                     {
+                        NotePathMutation("Jiangshi.冷却追击 → isStopped=false");
                         agent.isStopped = false;
-                        agent.SetDestination(player.transform.position);
+                        SetChaseDestination(player.transform.position);
                     }
                 }
                 else
@@ -473,11 +478,13 @@ public class JiangshiEnemy : EnemyAI
             NavMeshHit hit;
             if (NavMesh.SamplePosition(targetPos, out hit, 3f, NavMesh.AllAreas))
             {
+                NotePathMutation("Jiangshi.Blink → agent.Warp(采样点)");
                 agent.Warp(hit.position);
                 transform.position = hit.position;
             }
             else
             {
+                NotePathMutation("Jiangshi.Blink → agent.Warp(原目标)");
                 agent.Warp(targetPos);
                 transform.position = targetPos;
             }

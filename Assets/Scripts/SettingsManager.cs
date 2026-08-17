@@ -39,18 +39,41 @@ public class SettingsManager : MonoBehaviour
         return cachedSFXVolume;
     }
 
+    public static float GetMusicVolumeStatic()
+    {
+        return PlayerPrefs.GetFloat("MusicVolume", 0.8f);
+    }
+
+    public static float GetSFXVolumeStatic()
+    {
+        return PlayerPrefs.GetFloat("SFXVolume", 0.8f);
+    }
+
     public void SetMusicVolume(float value)
     {
-        cachedMusicVolume = value;
-        PlayerPrefs.SetFloat("MusicVolume", value);
-        PlayerPrefs.Save();
+        SetMusicVolumeStatic(value);
     }
 
     public void SetSFXVolume(float value)
     {
-        cachedSFXVolume = value;
+        SetSFXVolumeStatic(value);
+    }
+
+    // 静态写入：不依赖单例是否在场景中。
+    // 主菜单场景之外（直接开游戏场景调试 / 跨场景）SettingsManager 可能不在场，
+    // 但 AudioManager 播放 SFX 时直接读 PlayerPrefs，所以这里必须保证始终写入 PlayerPrefs。
+    public static void SetMusicVolumeStatic(float value)
+    {
+        PlayerPrefs.SetFloat("MusicVolume", value);
+        PlayerPrefs.Save();
+        if (Instance != null) Instance.cachedMusicVolume = value;
+    }
+
+    public static void SetSFXVolumeStatic(float value)
+    {
         PlayerPrefs.SetFloat("SFXVolume", value);
         PlayerPrefs.Save();
+        if (Instance != null) Instance.cachedSFXVolume = value;
     }
 
     public void ResetAllData()

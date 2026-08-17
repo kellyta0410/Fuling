@@ -72,8 +72,8 @@ MonoBehaviour:
   approachStopSpeed: 0
   facingAngleThreshold: 60
   turnSpeed: 240
-  detectionRange: 20
-  loseTargetRange: 25
+  detectionRange: 30
+  loseTargetRange: 35
   infiniteDetectionRange: 30
   infiniteLoseTargetRange: 40
   enableSeparation: 1
@@ -88,10 +88,14 @@ MonoBehaviour:
   stuckEscapeSpeed: 0.1
   stuckEscapeDelay: 0.5
   stuckEscapeCooldown: 1
+  fastReplanCooldown: 0.35
+  showPathDebug: 1
+  logPathStateChanges: 1
   ownerTile: {fileID: 0}
   prepareDistance: 3
   maxBlinkDistance: 5
   prepareDuration: 3
+  prepareDurationJitter: 0.8
   distanceToPlayerAfterBlink: 1.7
   directAttackDistance: 2
   blinkCooldown: 10

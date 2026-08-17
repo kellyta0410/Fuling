@@ -626,7 +626,26 @@ public class InfiniteEnemySpawner : MonoBehaviour
     public bool IsPositionValid(Vector3 position)
     {
         NavMeshHit hit;
-        return NavMesh.SamplePosition(position, out hit, 1f, NavMesh.AllAreas);
+        if (!NavMesh.SamplePosition(position, out hit, 1f, NavMesh.AllAreas)) return false;
+        // ⭐ carve 挖洞是运行时才生效：烘烤期间洞口仍是蓝色可走，SamplePosition 会误判通过。
+        // 若雕刻物(NavMeshObstacle)的洞尚未挖/刚挖，敌人可能生成在装饰物里原地卡死。
+        // 直接查碰撞体——只要有 NavMeshObstacle 且非触发器与生成点重叠就拒绝。
+        if (IsInsideNavMeshObstacle(position)) return false;
+        return true;
+    }
+
+    // 生成点是否落在某个 NavMeshObstacle（装饰物 carve 挖洞）的碰撞体内
+    private static Collider[] spawnObstacleBuffer = new Collider[32];
+    private bool IsInsideNavMeshObstacle(Vector3 position, float checkRadius = 0.2f)
+    {
+        int count = Physics.OverlapSphereNonAlloc(position, checkRadius, spawnObstacleBuffer);
+        for (int i = 0; i < count; i++)
+        {
+            Collider c = spawnObstacleBuffer[i];
+            if (c == null || c.isTrigger) continue;
+            if (c.GetComponentInParent<NavMeshObstacle>() != null) return true;
+        }
+        return false;
     }
 
     public void ClearAllEnemies()

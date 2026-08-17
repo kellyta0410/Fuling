@@ -20,12 +20,35 @@ public static class WallPenetrationResolve
     // 推出后额外留的间隙，避免下一帧又因为贴合而误测重叠
     private const float Margin = 0.03f;
 
+    // 🔍 一次 Resolve 的诊断报告：记录是哪面墙、多深、朝哪推，以及移动体本身
+    public struct ResolveResult
+    {
+        public bool moved;                  // 是否有位移
+        public string wallName;             // 触发的墙体（取穿透最深的那面）
+        public Vector3 wallPosition;
+        public float penDist;               // 实测穿透深度
+        public Vector3 pushDir;             // 水平推出方向
+        public string moverColliderType;    // 移动体的碰撞体类型（蛇可能是长 BoxCollider）
+        public Bounds moverBounds;          // 移动体包围盒（看是否长条/超框）
+        public int wallCount;               // 参与判定的墙数量
+    }
+
     /// <summary>
     /// 若 mover 与任一"竖直墙面"重叠，把 mover 沿水平方向推出墙外。
     /// 返回是否有位移（敌人调用方可用它决定是否让 NavMeshAgent.Warp 同步）。
     /// </summary>
     public static bool Resolve(Collider mover, Transform selfRoot)
     {
+        ResolveResult r;
+        return Resolve(mover, selfRoot, out r);
+    }
+
+    /// <summary>带诊断报告的版本（供 🔍 穿墙兜底调试使用，行为与无参版完全一致）</summary>
+    public static bool Resolve(Collider mover, Transform selfRoot, out ResolveResult result)
+    {
+        result = new ResolveResult();
+        result.moverColliderType = mover != null ? mover.GetType().Name : "null";
+        result.moverBounds = mover != null ? mover.bounds : new Bounds();
         if (mover == null) return false;
 
         Bounds b = mover.bounds;
@@ -39,6 +62,7 @@ public static class WallPenetrationResolve
         {
             Collider wall = buffer[i];
             if (!IsWall(mover, wall, selfRoot)) continue;
+            result.wallCount++;
 
             Vector3 dir;
             float dist;
@@ -69,8 +93,18 @@ public static class WallPenetrationResolve
                     mover.transform.position += delta;
                 }
                 moved = true;
+
+                // 🔍 记录穿透最深的墙（最可能是"误判穿墙"的主因）
+                if (dist > result.penDist)
+                {
+                    result.penDist = dist;
+                    result.wallName = wall.name;
+                    result.wallPosition = wall.transform.position;
+                    result.pushDir = dir;
+                }
             }
         }
+        result.moved = moved;
         return moved;
     }
 

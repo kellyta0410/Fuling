@@ -142,6 +142,31 @@ public abstract class EnemyAI : MonoBehaviour
     [SerializeField, Tooltip("快速重规划节流间隔(秒)：墙挡变化后过此间隔才允许再次整段重算")]
     private float fastReplanCooldown = 0.35f;
 
+    // 隔墙追击的目标覆盖：hasPath=N+pending=Y 表示"墙对岸玩家点不可达"导致反复重算死循环。
+    // 隔墙期间把追击目标持续设为"本侧可达的侧向绕行点"，让 agent 一直有可达落点沿墙侧走，
+    // 直到 ≤1.2m 近身豁免进入墙角交战。不能锁 wall-edge(会走到墙边就停)，要用侧向点。
+    private bool chaseOverrideActive = false;
+    private Vector3 chaseOverrideTarget = Vector3.zero;
+    private float chaseOverrideRecheckTimer = 0f;
+    private const float chaseOverrideRecheckInterval = 0.3f;
+    private float chasePathPendingTimer = 0f;      // 本侧目标下持续 pending 的时长，超时强制重算
+    private const float chasePathPendingTimeout = 0.6f;
+
+    [Header("调试")]
+    [Tooltip("🔍 追击路径诊断：在敌人头顶显示实时的 墙挡/hasPath/pathPending/pathStatus/remainingDistance，用于定位隔墙追击为何顶墙")]
+    public bool showPathDebug = false;
+    private TextMesh pathDebugText;      // 头顶诊断文字（showPathDebug 开启时懒创建）
+    private float pathDebugUpdateTimer = 0f;
+    private const float pathDebugUpdateInterval = 0.1f;   // 0.1s 更新一次足够看清，省开销
+
+    // 🔍 路径状态变更监控：勾上后，每帧对比 hasPath，任何 Y→N 或 N→Y 瞬间打印完整快照
+    // 与"最后是谁动了路径"(lastPathMutation)。只用于定位 Y/N 闪烁的调用来源，不改任何逻辑。
+    [Tooltip("🔍 路径状态监控：hasPath 变化瞬间打印完整快照+最后调用来源，用于定位 Y/N 闪烁")]
+    public bool logPathStateChanges = false;
+    private bool lastTrackedHasPath = false;
+    private bool lastTrackedPending = false;
+    private string lastPathMutation = "none";   // 最后执行 ResetPath/SetDestination/Stop/Warp/Move 的位置
+
     protected float baseSpeed;
     protected float baseHealth;
     protected float baseAttackDamage;
@@ -418,23 +443,97 @@ HandleMovement();
         if (isChasing && !isAttacking)
             ApplyApproachBrake();
 
-        // ⭐ 快速重规划：玩家快速跨过墙角到墙另一侧时，原路径/旧走廊瞬间失效。
+        // ⭐ 快速重规划：玩家跨过墙角/双方贴墙时，原路径/旧走廊瞬间失效。
         // 靠 TryStuckEscape 要等卡满 0.5s+1.0s 冷却才换路，导致明显延迟顶墙。
-        // 这里在"墙挡状态由未挡→变挡"的边沿立即 ResetPath 重新寻路，让 agent 尽快绕墙。
+        // 墙挡信号取"物理真墙(IsBlockedBetween) OR NavMesh 直线挡(Raycast)"的并集——
+        // 有的墙是动态 NavMeshObstacle(遇到才 carve)，NavMesh.Raycast 可能长时间返回"未挡"。
+        // ⭐ 敌人贴墙时自身可能半踩 Bake 挖掉的洞：射线/落点一律用 agent 在 NavMesh 上的真实
+        // 位置(agent.nextPosition)而不是 transform.position，否则算出的挡位忽真忽假。
+        // ⭐ 避免闪烁：正常的"持续隔墙"状态**不**反复 ResetPath——ResetPath 会立刻清掉 hasPath
+        // 造成 pending/rem 忽有忽无的抖动。只有三类才整段重算：
+        //   ① 边沿(未挡→变挡)进入；② 路径持续 pending 超时(目标仍算不出来)；③ 有有效路径却顶墙停滞。
+        // 其余时间靠 SetChaseDestination 每帧喂"本侧可达点"，agent 拿着可达落点沿墙侧走。
         if (isChasing && !isAttacking && isAgentValid && agent != null && agent.isOnNavMesh && player != null)
         {
-            bool nowBlocked = WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position);
-            if (!lastBlockedByWall && nowBlocked)
+            Vector3 navPos = Vector3.Lerp(agent.nextPosition, transform.position, 0.5f); // 贴墙时会抖，取中稳一点
+            Vector3 toPos = player.transform.position;
+            toPos.y = navPos.y;
+            NavMeshHit navHit = default;
+            bool navBlocked = (navPos - toPos).sqrMagnitude > 0.01f &&
+                NavMesh.Raycast(navPos, toPos, out navHit, NavMesh.AllAreas);
+            bool physBlocked = WallPenetrationResolve.IsBlockedBetween(navPos, player.transform.position);
+            bool wallBlocked = navBlocked || physBlocked;
+
+            bool stuckPushing = agent.hasPath && !agent.pathPending
+                && agent.velocity.magnitude <= stuckEscapeSpeed
+                && agent.remainingDistance > 0.1f;
+
+            // 隔墙期间：维护"本侧可达目标"，并持续喂给 agent(即使路径仍算不出来，也保证落点可达)。
+            if (wallBlocked)
             {
-                if (fastReplanCooldownTimer <= 0f)
+                if (!chaseOverrideActive)
                 {
+                    chaseOverrideActive = true;
+                    chaseOverrideTarget = GetFlankChaseTarget();
+                }
+                else
+                {
+                    // 周期重采样落点(玩家/自身挪动后旧点可能不够贴近)，仅当变化超阈值才换，
+                    // 避免点抖动连带 ResetPath 闪烁。
+                    chaseOverrideRecheckTimer -= Time.deltaTime;
+                    if (chaseOverrideRecheckTimer <= 0f)
+                    {
+                        chaseOverrideRecheckTimer = chaseOverrideRecheckInterval;
+                        Vector3 fresh = GetFlankChaseTarget();
+                        float move = (fresh - chaseOverrideTarget).sqrMagnitude;
+                        if (move > 0.25f) // 0.5m 移动才算变
+                        {
+                            chaseOverrideTarget = fresh;
+                            NotePathMutation("隔墙落点变化>0.5m → ResetPath");
+                            agent.ResetPath(); // 落点真变了才清路径
+                        }
+                    }
+                }
+
+                // 路径持续 pending 超时：目标仍算不出(抖动档口)→ 强制吊回本侧点重算一次
+                if (agent.pathPending)
+                {
+                    chasePathPendingTimer += Time.deltaTime;
+                    if (chasePathPendingTimer >= chasePathPendingTimeout)
+                    {
+                        NotePathMutation("pending超时0.6s → ResetPath+SetDest(本侧点)");
+                        agent.ResetPath();
+                        agent.isStopped = false;
+                        agent.SetDestination(chaseOverrideTarget);
+                        chasePathPendingTimer = 0f;
+                    }
+                }
+                else
+                {
+                    chasePathPendingTimer = 0f;
+                }
+
+                // 真正需要整段重算的：①边沿进入(首次) ②stuckPushing(有效路径但顶墙)
+                // ③hasPath=false(根本没路径可走，重置到本侧点看能不能算成功)。
+                bool edgeTrigger = !lastBlockedByWall && wallBlocked;
+                bool noPathAtAll = !agent.hasPath && !agent.pathPending;
+
+                if ((edgeTrigger || stuckPushing || noPathAtAll) && fastReplanCooldownTimer <= 0f)
+                {
+                    NotePathMutation($"重规划触发(edge:{edgeTrigger} stuck:{stuckPushing} noPath:{noPathAtAll}) → ResetPath+SetDest");
                     agent.ResetPath();
                     agent.isStopped = false;
-                    agent.SetDestination(player.transform.position);
+                    agent.SetDestination(chaseOverrideActive ? chaseOverrideTarget : player.transform.position);
                     fastReplanCooldownTimer = fastReplanCooldown;
                 }
             }
-            lastBlockedByWall = nowBlocked;
+            else
+            {
+                chaseOverrideActive = false;
+                chasePathPendingTimer = 0f;
+            }
+
+            lastBlockedByWall = wallBlocked;
             if (fastReplanCooldownTimer > 0f)
                 fastReplanCooldownTimer -= Time.deltaTime;
         }
@@ -443,6 +542,8 @@ HandleMovement();
             // 非追击/未激活时把边沿基准复位，避免上次会话残留 true，
             // 下次追击进入时能正确触发"墙挡由未挡→变挡"的快速重规划。
             lastBlockedByWall = false;
+            chaseOverrideActive = false;
+            chasePathPendingTimer = 0f;
         }
 
         // 卡住自救：追击中长时间几乎不动（被屏风/障碍物理挡停，agent 却以为路径仍有效）
@@ -457,6 +558,10 @@ HandleMovement();
         }
 
         UpdateHealthBarPosition();
+
+        UpdatePathDebug();
+
+        TrackPathState();   // 🔍 hasPath Y/N 闪烁监控（仅 logPathStateChanges 开启时打印）
 
         float currentSpeed = GetCurrentSpeed();
         bool isMovingState = isChasing && !isAttacking && currentSpeed > 0.05f;
@@ -704,6 +809,7 @@ Vector3 center = player.transform.position;
             }
             else if (isAgentValid && agent != null && agent.isOnNavMesh)
             {
+                NotePathMutation("ApplySeparation → agent.Move(分离位移)");
                 agent.Move(separationVelocity * Time.deltaTime);
             }
         }
@@ -814,6 +920,7 @@ Vector3 center = player.transform.position;
     {
         if (isAgentValid && agent != null && agent.isOnNavMesh)
         {
+            NotePathMutation("StopAgent → isStopped=true+vel清零");
             agent.isStopped = true;
             agent.velocity = Vector3.zero; // 立即清零残速，避免停下时还滑/推一下
         }
@@ -910,24 +1017,108 @@ Vector3 center = player.transform.position;
             stuckTimer = 0f;
             stuckEscapeCooldownTimer = stuckEscapeCooldown;
 
-            // 重新寻路。先把目标偏移到"本侧(靠近敌人)"可到达的 NavMesh 点，
-            // 避免落点恰在障碍物正对面对岸，导致 NearesDest 无解或重算后还是穿障。
-            Vector3 target = player.transform.position;
-            Vector3 toEnemy = transform.position - player.transform.position;
-            toEnemy.y = 0f;
-            if (toEnemy.sqrMagnitude > 0.0001f)
-            {
-                Vector3 offset = toEnemy.normalized * (agent.stoppingDistance + 0.5f);
-                Vector3 probe = player.transform.position + offset;
-                NavMeshHit hit;
-                if (NavMesh.SamplePosition(probe, out hit, 3f, NavMesh.AllAreas))
-                    target = hit.position;
-            }
-
+            NotePathMutation("TryStuckEscape(卡满0.5s) → ResetPath+SetDest(本侧点)");
             agent.ResetPath();
             agent.isStopped = false;
-            agent.SetDestination(target);
+            agent.SetDestination(GetChaseReachableTarget());
         }
+    }
+
+    // 追击重寻路目标：优先用 NavMesh.Raycast 返回的"墙边缘可达点"(navHit，在敌人这一侧的 NavMesh
+    // 边界上，永远可达、不会在墙对岸)；Raycast 未命中(无墙或极端情况)再回退到"玩家脚下偏移向敌人侧"
+    // 的可达 NavMesh 点。避免落点恰在墙对岸导致 NoPath，或每次重算都仍落在墙后继续顶墙。
+    protected Vector3 GetChaseReachableTarget(NavMeshHit navHit = default)
+    {
+        if (player == null) return transform.position + transform.forward * 2f;
+
+        // 墙/障碍边缘是"敌人这一侧"确定可达的点：拿它当绕墙目标，agent 会先走到墙边再顺着绕。
+        // 把落点往敌人方向再缩回一点(0.3f)，避免正好压在墙边缘/贴角造成一下顶住。
+        if (navHit.hit)
+        {
+            Vector3 edge = navHit.position;
+            Vector3 backFromEdge = transform.position - edge;
+            backFromEdge.y = 0f;
+            if (backFromEdge.sqrMagnitude > 0.0001f)
+            {
+                Vector3 towards = edge - backFromEdge.normalized * 0.3f;
+                NavMeshHit sample;
+                if (NavMesh.SamplePosition(towards, out sample, 1.2f, NavMesh.AllAreas))
+                    return sample.position;
+            }
+            return edge;
+        }
+
+        Vector3 target = player.transform.position;
+        Vector3 toEnemy = transform.position - player.transform.position;
+        toEnemy.y = 0f;
+        if (toEnemy.sqrMagnitude > 0.0001f)
+        {
+            Vector3 offset = toEnemy.normalized * (agent.stoppingDistance + 0.5f);
+            Vector3 probe = player.transform.position + offset;
+            NavMeshHit hit;
+            if (NavMesh.SamplePosition(probe, out hit, 3f, NavMesh.AllAreas))
+                target = hit.position;
+        }
+        return target;
+    }
+
+// 本侧追击目标（解决"玩家贴墙脚半踩进 bake 挖掉洞"导致的 NoPath）:
+// 1) 优先从"玩家位置"沿"指向敌人"方向做小步进采样,取第一个落在 NavMesh 上的点——
+//   玩家脚半踩进墙洞时,往回走一两步就到敌侧墙边,是该侧离玩家最近的可达点;
+// 2) 采样一直失败(极端),再用"垂直两翼横移"(侧滑墙沿线走到墙头绕过去);
+// 3) 全失败退 TryStuckEscape 同款"玩家身边本侧点"。
+protected Vector3 GetFlankChaseTarget()
+{
+    if (player == null) return transform.position + transform.forward * 2f;
+
+    Vector3 fromPlayer = transform.position - player.transform.position;
+    fromPlayer.y = 0f;
+    if (fromPlayer.sqrMagnitude < 0.0001f) return player.transform.position;
+    Vector3 dir = fromPlayer.normalized; // 玩家→敌人的水平方向(回退方向)
+
+    // (1) 步进回退采样：从玩家脚底出发往后找第一个可达 NavMesh 点
+    Vector3 start = player.transform.position; start.y -= 0.3f; // 规避“玩家 pivot 在洞内/半空”
+    for (float d = 0f; d <= 2.5f; d += 0.25f)
+    {
+        Vector3 probe = player.transform.position + dir * d;
+        probe.y = start.y;
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(probe, out hit, 0.6f, NavMesh.AllAreas))
+        {
+            NavMeshHit rayHit;
+            // 该点要能直线直达（不要隔着墙取到对岸）
+            if (!NavMesh.Raycast(transform.position, hit.position, out rayHit, NavMesh.AllAreas))
+                return hit.position;
+        }
+    }
+
+    // (2) 两翼横移兜底：垂直方向滑出墙沿线
+    Vector3 toPlayer = player.transform.position - transform.position;
+    toPlayer.y = 0f;
+    Vector3 perp = Vector3.Cross(Vector3.up, toPlayer.normalized).normalized;
+    float probeDist = Mathf.Max(1.5f, agent.radius + 1.0f);
+    Vector3 basePos = transform.position + toPlayer.normalized * 0.5f;
+    foreach (float side in new[] { 1f, -1f, 1.5f, -1.5f })
+    {
+        Vector3 probe = basePos + perp * (probeDist * side);
+        NavMeshHit hit;
+        if (NavMesh.Raycast(transform.position, probe, out hit, NavMesh.AllAreas)) continue;
+        if (NavMesh.SamplePosition(probe, out hit, 2.5f, NavMesh.AllAreas))
+            return hit.position;
+    }
+
+    // (3) 全能失败 → 退回 TryStuckEscape 同款"玩家身边本侧点"
+    return GetChaseReachableTarget();
+}
+
+    // 追击每帧设目的地统一走这里：隔墙期间(chaseOverrideActive)用"本侧侧向可达目标"，
+    // 否则用调用方给的落点。这样 HandleMovement 每帧 SetDestination 也不会把墙对岸玩家点
+    // 写回隔墙侧——那是 NoPath+pending 死循环的源头。
+    protected void SetChaseDestination(Vector3 fallbackTarget)
+    {
+        if (agent == null || !agent.isOnNavMesh) return;
+        NotePathMutation("SetChaseDestination → SetDestination(" + (chaseOverrideActive ? "本侧点" : "玩家点") + ")");
+        agent.SetDestination(chaseOverrideActive ? chaseOverrideTarget : fallbackTarget);
     }
 
     // 攻击冷却：读 EnemyType 资产，资产驱动
@@ -1155,7 +1346,11 @@ Vector3 center = player.transform.position;
             float step = newMoved - moved;
             moved = newMoved;
 
-            if (agent != null && agent.isOnNavMesh) agent.Move(mv * step);
+            if (agent != null && agent.isOnNavMesh)
+            {
+                NotePathMutation("击退 → agent.Move(强制位移)");
+                agent.Move(mv * step);
+            }
             else transform.position += mv * step;
 
             yield return null;
@@ -1207,6 +1402,7 @@ Vector3 center = player.transform.position;
                     found = NavMesh.SamplePosition(player.transform.position, out hit, 8f, NavMesh.AllAreas);
             }
             if (found) restore = hit.position;
+            NotePathMutation("击退恢复 off-NavMesh → agent.Warp(拉回)");
             agent.Warp(restore);
         }
 
@@ -1230,9 +1426,10 @@ Vector3 center = player.transform.position;
 
         if (isAgentValid && agent != null && agent.isOnNavMesh)
         {
+            NotePathMutation("ResumeChaseAfterStagger → isStopped=false+ResetPath+SetDest");
             agent.isStopped = false;
             agent.ResetPath();
-            agent.SetDestination(player.transform.position);
+            SetChaseDestination(player.transform.position);
         }
     }
 
@@ -1268,7 +1465,11 @@ Vector3 center = player.transform.position;
 
         // 保留尸体的实体碰撞体（玩家仍会被拦住），只禁用 NavMeshAgent：
         // 尸体是静态碰撞（无 agent 驱动），不会被后续敌人物理推动，也就不会把尸体顶到玩家身上
-        if (agent != null) agent.enabled = false;
+        if (agent != null)
+        {
+            NotePathMutation("Die → agent.enabled=false");
+            agent.enabled = false;
+        }
 
         if (ownerTile != null)
         {
@@ -1278,10 +1479,10 @@ Vector3 center = player.transform.position;
         int baseCoin = enemyData != null ? enemyData.coinReward : 10;
         SpawnCoin(baseCoin);
 
-        // ⭐ 死亡时按概率随机掉落 Buff（像金币一样弹出，拾取方式不变）
+        // ⭐ 死亡时累计击杀数，每 buffKillInterval 个必定掉落一个随机 Buff（像金币一样弹出，拾取方式不变）
         if (RandomBuffSpawner.Instance != null)
         {
-            RandomBuffSpawner.Instance.TryDropBuff(transform.position);
+            RandomBuffSpawner.Instance.OnEnemyKilled(transform.position);
         }
         if (player != null) player.AddKill();
 
@@ -1371,5 +1572,127 @@ Vector3 center = player.transform.position;
             Gizmos.color = new Color(0, 1, 0, 0.15f);
             Gizmos.DrawWireSphere(transform.position, separationRadius);
         }
+    }
+
+    // 🔍 记录"最后是谁动了 agent 路径/停止/移动"：每个调用点在动作前调用，便于追踪 Y→N 来源。
+    protected void NotePathMutation(string source)
+    {
+        lastPathMutation = source;
+        if (logPathStateChanges)
+            Debug.Log($"[{Time.time:F2}] {name} 路径操作 ← {source} | hasPath:{agent!=null&&agent.hasPath} pending:{agent!=null&&agent.pathPending} isStopped:{agent!=null&&agent.isStopped}");
+    }
+
+    // 供外部组件(EnemyCollisionBlocker 等)记录路径变更来源
+    public void NotePathMutationExternal(string source)
+    {
+        NotePathMutation(source);
+    }
+
+    // 🔍 供外部组件诊断用：当前行为状态
+    public bool IsStaggeringNow { get { return isStaggering; } }
+    public bool IsAgentValidNow { get { return isAgentValid; } }
+
+    // 🔍 每帧对比 hasPath/pathPending，变化瞬间打印完整快照 + 最后调用来源。
+    // 目标：定位第一次 hasPath Y→N 到底是 ResetPath / SetDestination 重算 / Stop / Warp / Carve。
+    private void TrackPathState()
+    {
+        if (!logPathStateChanges || agent == null) return;
+
+        bool hp = agent.hasPath;
+        bool pd = agent.pathPending;
+
+        // 首次运行：建立基准，不打印
+        if (!lastTrackedHasPath && !lastTrackedPending && !hp && !pd)
+        {
+            lastTrackedHasPath = hp;
+            lastTrackedPending = pd;
+            return;
+        }
+
+        bool changed = (hp != lastTrackedHasPath) || (pd != lastTrackedPending);
+        if (changed)
+        {
+            string pathStatus = "N/A";
+            string steer = "N/A";
+            string rem = "N/A";
+            if (agent.isOnNavMesh)
+            {
+                pathStatus = agent.pathStatus.ToString();
+                if (agent.hasPath)
+                {
+                    rem = agent.remainingDistance.ToString("F2");
+                    if (!agent.pathPending) steer = agent.steeringTarget.ToString("F1");
+                }
+            }
+            Debug.Log($"[{Time.time:F2}] {name} hasPath Y→N ← 变化 | " +
+                $"hasPath:{hp} pending:{pd} status:{pathStatus} rem:{rem} | " +
+                $"isStopped:{agent.isStopped} enabled:{agent.enabled} onNavMesh:{agent.isOnNavMesh} | " +
+                $"dest:{agent.destination} steer:{steer} override:{chaseOverrideActive} | " +
+                $"最后调用:{lastPathMutation} | 玩家:{player?.transform.position}");
+        }
+        lastTrackedHasPath = hp;
+        lastTrackedPending = pd;
+    }
+
+    // 🔍 追击路径诊断：showPathDebug 开启时，在敌人头顶显示实时
+    //   墙挡(IsBlockedBetween)|hasPath|pathPending|pathStatus|remainingDistance，
+    //   用于定位"玩家隔墙、敌人却顶墙不绕行"时到底是哪一环（路径是否有效/是否在重算/是否停滞）。
+    private void UpdatePathDebug()
+    {
+        if (!showPathDebug || isDead)
+        {
+            if (pathDebugText != null) { Destroy(pathDebugText.gameObject); pathDebugText = null; }
+            return;
+        }
+
+        if (pathDebugText == null)
+        {
+            GameObject go = new GameObject("PathDebugText");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = Vector3.up * 2.4f;
+            pathDebugText = go.AddComponent<TextMesh>();
+            pathDebugText.characterSize = 0.12f;
+            pathDebugText.anchor = TextAnchor.MiddleCenter;
+            pathDebugText.alignment = TextAlignment.Center;
+            pathDebugText.fontSize = 40;
+        }
+
+        // 0.1s 节流：避免每帧拼字符串/改材质
+        pathDebugUpdateTimer -= Time.deltaTime;
+        if (pathDebugUpdateTimer > 0f) return;
+        pathDebugUpdateTimer = pathDebugUpdateInterval;
+
+        bool blocked = player != null &&
+            WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position);
+
+        string status = "N/A";
+        string hasPath = "N/A";
+        string pending = "N/A";
+        string remDist = "N/A";
+        string dest = "N/A";
+        string steer = "N/A";
+        if (agent != null && agent.isOnNavMesh)
+        {
+            hasPath = agent.hasPath ? "Y" : "N";
+            pending = agent.pathPending ? "Y" : "N";
+            status = agent.pathStatus.ToString();
+            if (agent.hasPath) remDist = agent.remainingDistance.ToString("F2");
+            dest = agent.destination.ToString("F1");
+            // steeringTarget = 当前沿路径要去的拐点，用来验证"移动方向是否真的跟 NavMesh 绕行路"，
+            // 而非只是目标点换了。追击中若 steeringTarget 贴着墙拐弯而 transform 直朝玩家，就是方向覆盖。
+            if (agent.hasPath && agent.pathPending == false)
+                steer = agent.steeringTarget.ToString("F1");
+        }
+
+        pathDebugText.text = "墙挡:" + (blocked ? "✔" : "✘")
+            + "  hasPath:" + hasPath
+            + "  pending:" + pending
+            + "\n" + status
+            + "  rem:" + remDist
+            + "\n" + (player != null ? "玩家:" + player.transform.position.ToString("F1") : "无玩家")
+            + "  dest:" + dest
+            + "\nsteer:" + steer
+            + "  override:" + (chaseOverrideActive ? "本侧点" : "玩家点");
+        pathDebugText.color = blocked ? Color.yellow : Color.white;
     }
 }

@@ -29,6 +29,8 @@ public class UIManager : MonoBehaviour
     [Header("InGame 设置 - 音量控制")]
     public Slider musicSlider;
     public Slider sfxSlider;
+    [Tooltip("拖动 SFX 音量滑块松手后播放一次确认音（不填会自动生成一个短促提示音）")]
+    public AudioClip sfxSliderConfirmClip;
 
     [Header("游戏引用")]
     public PlayerController player;
@@ -51,6 +53,9 @@ public class UIManager : MonoBehaviour
 
     private Vector2 timerOriginalPosition;
     private float timeLimit;
+    private Coroutine sfxSliderConfirmCoroutine;
+    private AudioClip generatedConfirmClip;
+    private bool suppressSFXConfirmSound;
 
     // 计时器模式
     private bool isTimerMode = false;
@@ -177,13 +182,26 @@ public class UIManager : MonoBehaviour
 
     void LoadSettings()
     {
-        if (SettingsManager.Instance == null) return;
+        if (SettingsManager.Instance != null)
+        {
+            float music = SettingsManager.Instance.GetMusicVolume();
+            float sfx = SettingsManager.Instance.GetSFXVolume();
 
-        float music = SettingsManager.Instance.GetMusicVolume();
-        float sfx = SettingsManager.Instance.GetSFXVolume();
+            suppressSFXConfirmSound = true;
+            if (musicSlider != null) musicSlider.value = music;
+            if (sfxSlider != null) sfxSlider.value = sfx;
+            suppressSFXConfirmSound = false;
+            return;
+        }
 
-        if (musicSlider != null) musicSlider.value = music;
-        if (sfxSlider != null) sfxSlider.value = sfx;
+        // 场景中没有 SettingsManager（如直接播放游戏场景调试）时，直接读 PlayerPrefs
+        float musicV = SettingsManager.GetMusicVolumeStatic();
+        float sfxV = SettingsManager.GetSFXVolumeStatic();
+
+        suppressSFXConfirmSound = true;
+        if (musicSlider != null) musicSlider.value = musicV;
+        if (sfxSlider != null) sfxSlider.value = sfxV;
+        suppressSFXConfirmSound = false;
 
         //UpdateVolumeTexts();
     }
@@ -199,14 +217,51 @@ public class UIManager : MonoBehaviour
 
     void OnMusicSliderChanged(float value)
     {
-        SettingsManager.Instance?.SetMusicVolume(value);
+        SettingsManager.SetMusicVolumeStatic(value);
         //UpdateVolumeTexts();
     }
 
     void OnSFXSliderChanged(float value)
     {
-        SettingsManager.Instance?.SetSFXVolume(value);
-        //UpdateVolumeTexts();
+        SettingsManager.SetSFXVolumeStatic(value);
+
+        // 程序加载/刷新滑块值时不要播确认音，只响应用户拖动
+        if (suppressSFXConfirmSound) return;
+
+        // 松手后播放一次确认音，让玩家听到当前 SFX 音量
+        if (sfxSliderConfirmCoroutine != null) StopCoroutine(sfxSliderConfirmCoroutine);
+        sfxSliderConfirmCoroutine = StartCoroutine(PlaySFXConfirmAfterDelay(0.25f));
+    }
+
+    IEnumerator PlaySFXConfirmAfterDelay(float delay)
+    {
+        yield return new WaitForSecondsRealtime(delay);
+        sfxSliderConfirmCoroutine = null;
+        AudioManager.Instance?.PlaySFX(GetConfirmClip());
+    }
+
+    AudioClip GetConfirmClip()
+    {
+        if (sfxSliderConfirmClip != null) return sfxSliderConfirmClip;
+        if (generatedConfirmClip == null) generatedConfirmClip = CreateClickClip();
+        return generatedConfirmClip;
+    }
+
+    AudioClip CreateClickClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.08f;
+        int length = (int)(sampleRate * duration);
+        AudioClip clip = AudioClip.Create("SliderClick", length, 1, sampleRate, false);
+        float[] samples = new float[length];
+        for (int i = 0; i < length; i++)
+        {
+            float t = (float)i / sampleRate;
+            float decay = 1f - t / duration;
+            samples[i] = Mathf.Sin(2f * Mathf.PI * 1800f * t) * decay * 0.4f;
+        }
+        clip.SetData(samples, 0);
+        return clip;
     }
 
     public void OpenPauseMenu()

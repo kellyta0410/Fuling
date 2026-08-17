@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 
 // Buff 掉落管理器：不再按定时在场景里刷新 Buff，
-// 改为由怪物死亡时随机掉落（EnemyAI.Die() → RandomBuffSpawner.Instance.TryDropBuff）。
+// 改为每击杀 buffKillInterval 个敌人必定掉落一个随机 Buff（EnemyAI.Die() → RandomBuffSpawner.Instance.OnEnemyKilled）。
 // 掉落物仍是 Buff prefab，拾取方式不变（BuffPickupItem.OnTriggerEnter）。
 public class RandomBuffSpawner : MonoBehaviour
 {
@@ -19,9 +19,8 @@ public class RandomBuffSpawner : MonoBehaviour
 
     [Header("掉落配置")]
     public BuffEntry[] buffPool;
-    [Tooltip("怪物死亡时掉落 Buff 的概率（0~1）")]
-    [Range(0f, 1f)]
-    public float buffDropChance = 0.25f;
+    [Tooltip("每击杀多少个敌人必定掉落一个随机 Buff")]
+    public int buffKillInterval = 3;
     [Header("拾取音效兜底")]
     [Tooltip("pickupPrefab 上没有配 collectSFX 时，用这个作为默认拾取音效")]
     public AudioClip defaultBuffSFX;
@@ -33,6 +32,7 @@ public class RandomBuffSpawner : MonoBehaviour
     public float cleanupInterval = 2f;
 
     private float cleanupTimer;
+    private int killCounter;
 
     void Awake()
     {
@@ -60,17 +60,24 @@ public class RandomBuffSpawner : MonoBehaviour
         }
     }
 
-    // ⭐ 按概率从 buffPool 中加权随机抽一个 Buff，在死亡位置掉落（像金币一样弹出）
-    // 返回是否真的掉了。表示要不要给 Buff 掉落概率基础上再加一次随机（否）。
-    // 拾取仍然靠 BuffPickupItem：掉落物带 Rigidbody+重力，落地后玩家碰到即拾取。
-    public bool TryDropBuff(Vector3 dropPos)
+    // ⭐ 每击杀 buffKillInterval 个敌人必定掉落一个随机 Buff（由 EnemyAI.Die() 调用）
+    public void OnEnemyKilled(Vector3 dropPos)
     {
-        if (!enabled) return false;
-        if (buffPool == null || buffPool.Length == 0) return false;
-        if (Random.value > buffDropChance) return false;
+        if (!enabled) return;
+        killCounter++;
+        if (killCounter < buffKillInterval) return;
+        killCounter = 0;
+
+        SpawnBuff(dropPos);
+    }
+
+    // 在死亡位置掉落一个随机 Buff（像金币一样弹出），拾取方式不变（BuffPickupItem）
+    void SpawnBuff(Vector3 dropPos)
+    {
+        if (buffPool == null || buffPool.Length == 0) return;
 
         BuffDataSO selected = PickRandomBuff();
-        if (selected == null || selected.pickupPrefab == null) return false;
+        if (selected == null || selected.pickupPrefab == null) return;
 
         Vector3 offset = new Vector3(Random.Range(-0.3f, 0.3f), 0.5f, Random.Range(-0.3f, 0.3f));
         GameObject newBuff = Instantiate(selected.pickupPrefab, dropPos + offset, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
@@ -94,8 +101,6 @@ public class RandomBuffSpawner : MonoBehaviour
             Vector3 randomDir = new Vector3(Random.Range(-0.5f, 0.5f), 1, Random.Range(-0.5f, 0.5f)).normalized;
             rb.AddForce(randomDir * 1.5f, ForceMode.Impulse);
         }
-
-        return true;
     }
 
     private BuffDataSO PickRandomBuff()

@@ -129,8 +129,8 @@ public class AudioManager : MonoBehaviour
         AudioSource src = GetFreeSource();
         src.spatialBlend = sfxSpatialBlend;
         src.transform.position = position;
-        src.volume = GetSFXVolume();
-        src.PlayOneShot(clip, src.volume);
+        src.volume = 1f;
+        src.PlayOneShot(clip, GetSFXVolume());
     }
 
     private AudioSource GetFreeSource()
