@@ -54,7 +54,7 @@ MonoBehaviour:
   hitSFX: {fileID: 0}
   attackSFX: {fileID: 0}
   moveSFX: {fileID: 8300000, guid: d4c5bad8319f80f4d8efb33195fcb3c4, type: 3}
-  deathSFX: {fileID: 0}
+  deathSFX: {fileID: 8300000, guid: 5be3d1a4a398a19498e18b8ff48c51b9, type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
   healthBarOffset: {x: 0, y: 2, z: 0}
@@ -88,9 +88,13 @@ MonoBehaviour:
   stuckEscapeSpeed: 0.1
   stuckEscapeDelay: 0.5
   stuckEscapeCooldown: 1
-  fastReplanCooldown: 0.35
   showPathDebug: 1
   logPathStateChanges: 1
+  logWallResolveDetails: 0
+  logWallResolveDetailsGlobal: 0
+  logAttackResumeFlow: 0
+  logStuckDetection: 0
+  logPathCorners: 0
   ownerTile: {fileID: 0}
   serpentineMove: 1
   headTurnSpeed: 160

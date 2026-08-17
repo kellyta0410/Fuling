@@ -542,7 +542,7 @@ public class PlayerController : MonoBehaviour
         float inputMagnitude = isDodging ? 1f : Mathf.Clamp01(inputVector.magnitude);
 
         // 普通移动/攻击时都朝输入方向转向（跟手）。技能由动画自带旋转主导，不受输入转向影响。
-        // 攻击中可转向但位移仍锁死；闪避锁死朝向。
+        // 攻击中可转向且可减速位移（0.5×）；闪避锁死朝向但沿闪避方向强制位移。
         if (moveDir.magnitude > 0.1f && !isDodging && !isUsingSkill)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDir);
@@ -566,10 +566,14 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        // 攻击/技能期间都锁死水平位移（定位准确，配合动画判定；不叠加任何 root 位移）
-        float currentSpeed = isDodging ? dodgeSpeed : (isAttacking || isUsingSkill ? 0f : speed);
+        // 攻击/技能期间不再锁死位移：改用各自的减速倍率，边打边走（攻击 0.5×、技能 0.35×）
+        float currentSpeed = isDodging ? dodgeSpeed
+            : isAttacking ? speed * attackMoveSpeedFactor
+            : isUsingSkill ? speed * skillMoveSpeedFactor
+            : speed;
 
-        if (isAttacking || isUsingSkill)
+        // 闪避时以闪避方向为准，其余情况位移交给下方输入速度处理（不再强制清零）
+        if (isDodging)
         {
             velocity.x = 0f;
             velocity.z = 0f;

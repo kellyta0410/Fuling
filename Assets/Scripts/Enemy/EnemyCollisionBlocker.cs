@@ -120,7 +120,13 @@ public class EnemyCollisionBlocker : MonoBehaviour
         }
 
         // 穿墙兜底：无论敌人怎么被移动(追击/击退/冲锋/瞬移/分离)，
-        // 只要碰撞体与任何竖直墙(实墙或 X-Ray 半透明墙)重叠，就水平推出墙外。
+        // 只要碰撞体与任何竖直墙(实墙或 X-Ray 半透明墙)发生**明显**穿透，就水平推出墙外。
+        // ⭐ 触发条件已收紧，按 agent 状态 + 穿透深度分档处理：
+        //   · agent 正常沿 NavMesh 绕墙走(有完整路径/未停/在移动)：
+        //       - 浅穿透(< MinResolvePenetration) 完全忽略(墙角/蛇身擦边)；
+        //       - 中等穿透(< WarpPenetrationThreshold) 只同步 nextPosition，不 Warp——保留刚算好的绕行路径；
+        //       - 深穿透(≥ WarpPenetrationThreshold，真被击退/瞬移插进墙里) Warp + 恢复追击路径。
+        //   · agent 非正常寻路(停/攻击/硬直/无路径)：任何接触都 Warp 推出 + 恢复寻路状态。
         if (resolveWallOverlap)
         {
             Vector3 preResolvePos = transform.position;
@@ -132,15 +138,48 @@ public class EnemyCollisionBlocker : MonoBehaviour
             Vector3 preVel = agent != null ? agent.velocity : Vector3.zero;
             bool preStopped = agent != null && agent.isStopped;
 
+            // ⭐ agent 是否在"正常沿 NavMesh 寻路"：有完整路径、未停、正在移动、steering 有效。
+            bool agentHealthy = agent != null && agent.isOnNavMesh && agent.enabled
+                && agent.hasPath && !agent.pathPending
+                && agent.pathStatus == NavMeshPathStatus.PathComplete
+                && !agent.isStopped;
+
+            float minPen = agentHealthy ? WallPenetrationResolve.MinResolvePenetration : 0f;
+
             WallPenetrationResolve.ResolveResult res;
-            bool wallResolved = WallPenetrationResolve.Resolve(myCollider, transform, out res);
+            bool wallResolved = WallPenetrationResolve.Resolve(myCollider, transform, out res, minPen);
 
             if (wallResolved && agent != null && agent.isOnNavMesh)
             {
-                NotePathMutationExternal("穿墙兜底 → agent.Warp(推回墙外)");
-                agent.Warp(transform.position);
+                if (agentHealthy && res.penDist < WallPenetrationResolve.WarpPenetrationThreshold)
+                {
+                    // ⭐ 中等穿透：agent 正常走绕行路时的轻微擦墙。Resolve 已把 transform 推出墙外，
+                    // 这里只同步 agent 内部位置，不 Warp → 保留当前 NavMesh 路径，不让它反复被清。
+                    NotePathMutationExternal("穿墙兜底(中等) → nextPosition 同步，不 Warp(保留路径)");
+                    agent.nextPosition = transform.position;
 
-                if (logWallResolveDetails || GlobalLogWallResolve)
+                    if (logWallResolveDetails || GlobalLogWallResolve)
+                    {
+                        string enemyType = enemyAI != null ? enemyAI.GetType().Name : "?";
+                        Debug.Log(
+                            $"<color=orange>[穿墙兜底·不Warp]</color> <b>{enemyType}</b> name:{name} " +
+                            $"| 墙:{res.wallName} 穿透:{res.penDist:F3}m(<Warp阈值) " +
+                            $"| 状态: chase:{enemyAI!=null&&enemyAI.IsChasingNow} atk:{enemyAI!=null&&enemyAI.IsAttackingNow} " +
+                            $"| 保留 hasPath:{agent.hasPath} dest:{agent.destination:F2}");
+                    }
+                }
+                else
+                {
+                    NotePathMutationExternal("穿墙兜底 → agent.Warp(推回墙外)");
+                    agent.Warp(transform.position);
+
+                    // ⭐ Warp 会清掉 agent 当前路径(hasPath→False)：Warp 后立即恢复追击寻路，
+                    // 让 agent 保持 enabled、isStopped=false 并重新 SetDestination 回原追击/玩家目标，
+                    // 避免一次 Warp 后长期停在原地（hasPath=False + 不追）。
+                    if (enemyAI != null)
+                        enemyAI.RestoreChaseAfterWarp(preDest);
+
+                    if (logWallResolveDetails || GlobalLogWallResolve)
                 {
                     // 🔍 连续 Warp 计数：距离上次 Warp ≤1s 视为连续触发（循环证据）
                     float now = Time.time;
@@ -163,6 +202,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
                         $"hasPath:{agent.hasPath} pending:{agent.pathPending} status:{agent.pathStatus} vel:{agent.velocity:F2} stopped:{agent.isStopped} " +
                         $"<color=red>warpClearedPath:{warpClearedPath}</color>"
                     );
+                }
                 }
             }
         }
@@ -307,9 +347,26 @@ public class EnemyCollisionBlocker : MonoBehaviour
             Vector3 residual = delta - (after - before);
             if (residual.sqrMagnitude > 1e-6f)
             {
-                transform.position += residual;
-                NotePathMutationExternal("分离被挡 → agent.Warp(补齐)");
-                agent.Warp(transform.position);
+                // 分离位移被障碍挡下的残留：别急着 Warp——Warp 会清掉 agent 当前路径。
+                // 残留很小(几厘米，正常绕行/贴墙的浅接触)且有有效路径时，只同步 nextPosition
+                // 再让 agent 自己接着走，避免把刚算好的绕行路径打断。
+                bool stirringHealthy = agent.hasPath && !agent.pathPending
+                    && agent.pathStatus == NavMeshPathStatus.PathComplete && !agent.isStopped;
+                if (stirringHealthy && residual.sqrMagnitude < 0.01f)
+                {
+                    transform.position += residual;
+                    agent.nextPosition = transform.position;   // 不 Warp，保留路径
+                }
+                else
+                {
+                    Vector3 preWarpDest = agent.destination;
+                    transform.position += residual;
+                    NotePathMutationExternal("分离被挡 → agent.Warp(补齐残留)");
+                    agent.Warp(transform.position);
+                    // ⭐ 若在追击中且残留来自分离，Warp 清掉路径后同样恢复追击目标
+                    if (enemyAI != null)
+                        enemyAI.RestoreChaseAfterWarp(preWarpDest);
+                }
             }
         }
         else
