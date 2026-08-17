@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Audio;
 
 public class SnakeEnemy : EnemyAI
 {
@@ -207,6 +208,13 @@ public class SnakeEnemy : EnemyAI
             moveAudioSource.loop = true;
             moveAudioSource.playOnAwake = false;
             moveAudioSource.spatialBlend = AudioManager.Instance != null ? AudioManager.Instance.sfxSpatialBlend : 1f;
+            // 统一走 Mixer：挂到 Sfx 组，音量交给 Sfx 组控制
+            if (AudioManager.Instance != null && AudioManager.Instance.masterMixer != null)
+            {
+                AudioMixerGroup[] sfx = AudioManager.Instance.masterMixer.FindMatchingGroups("Sfx");
+                if (sfx != null && sfx.Length > 0)
+                    moveAudioSource.outputAudioMixerGroup = sfx[0];
+            }
         }
 
         bool moving = isChasing && !isDead;
@@ -215,7 +223,11 @@ public class SnakeEnemy : EnemyAI
         {
             if (!moveAudioSource.isPlaying)
             {
-                moveAudioSource.volume = AudioManager.GetSFXVolume();
+                // 已挂 Sfx 组时音量交给 Mixer；找不到 Mixer 时兜底直接用设置音量
+                if (moveAudioSource.outputAudioMixerGroup != null)
+                    moveAudioSource.volume = 1f;
+                else
+                    moveAudioSource.volume = Mathf.Clamp01(AudioManager.GetSFXVolume() * (AudioManager.Instance != null ? AudioManager.Instance.sfxVolumeGain : 1f));
                 moveAudioSource.Play();
             }
         }

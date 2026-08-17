@@ -306,7 +306,6 @@ public class UIManager : MonoBehaviour
         if (settingsPanel != null)
         {
             settingsPanel.SetActive(false);
-            Time.timeScale = 1f;
         }
 
     }

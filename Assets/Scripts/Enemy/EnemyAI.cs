@@ -167,6 +167,23 @@ public abstract class EnemyAI : MonoBehaviour
     private bool lastTrackedPending = false;
     private string lastPathMutation = "none";   // 最后执行 ResetPath/SetDestination/Stop/Warp/Move 的位置
 
+    // 🔍 穿墙兜底诊断：勾上后本敌人每次触发『穿墙兜底 Warp』打印完整状态。
+    // 运行时自动挂载的 EnemyCollisionBlocker 是脚本实例（Inspector 勾不了），这里透传给它的 logWallResolveDetails；
+    // 也可用 EnemyCollisionBlocker.GlobalLogWallResolve 一次性对所有敌人开启。
+    [Tooltip("🔍 穿墙兜底诊断：本敌人触发『穿墙兜底 Warp』时打印完整状态快照（透传给运行时挂载的 EnemyCollisionBlocker）")]
+    public bool logWallResolveDetails = false;
+    [Tooltip("🔍 全局穿墙兜底诊断：场景内所有敌人同时开启（等价于每个敌人勾上 logWallResolveDetails）")]
+    public bool logWallResolveDetailsGlobal = false;
+
+    // 🔍 攻击停止/恢复 流程诊断：StopAgent 调用来源 + 攻击 Start→Stop→Execute→End→Resume 全链路
+    [Tooltip("🔍 攻击流程诊断：StopAgent 记录调用来源与完整状态；攻击开始/结束/恢复追击 各打一条日志")]
+    public bool logAttackResumeFlow = false;
+    private bool wasAttackingLastFrame = false;   // 🔍 用于检测"攻击结束→恢复追击"的跨帧转移
+
+    // 🔍 stuck 检测诊断：打印 stuckPushing/TryStuckEscape 计算时的完整状态
+    [Tooltip("🔍 stuck 检测诊断：重规划触发时打印 velocity/desiredVelocity/remainingDistance/isStopped/状态/是否攻击")]
+    public bool logStuckDetection = false;
+
     protected float baseSpeed;
     protected float baseHealth;
     protected float baseAttackDamage;
@@ -237,10 +254,14 @@ public abstract class EnemyAI : MonoBehaviour
         SetupNonBlockingPhysics();
 
         // 自动挂载碰撞解决器：检测敌人↔玩家/敌人↔敌人重叠，只移动敌人、不推玩家
-        if (GetComponent<EnemyCollisionBlocker>() == null)
+        EnemyCollisionBlocker blocker = GetComponent<EnemyCollisionBlocker>();
+        if (blocker == null)
         {
-            gameObject.AddComponent<EnemyCollisionBlocker>();
+            blocker = gameObject.AddComponent<EnemyCollisionBlocker>();
         }
+        // 🔍 透传穿墙兜底诊断开关（运行时自动挂载的实例无法在 Inspector 勾选，由这里转发）
+        blocker.logWallResolveDetails = logWallResolveDetails;
+        if (logWallResolveDetailsGlobal) EnemyCollisionBlocker.GlobalLogWallResolve = true;
 
         if (enemyData != null)
         {
@@ -326,6 +347,10 @@ public abstract class EnemyAI : MonoBehaviour
 
     protected virtual void Update()
     {
+        // 🔍 攻击结束→恢复追击 跨帧检测：先记录本帧进入前的 isAttacking，用于下一帧判定"攻击刚结束"
+        bool wasAttackingThisFrameEnter = wasAttackingLastFrame;
+        wasAttackingLastFrame = isAttacking;
+
         if (isDead)
         {
             StopAgent();
@@ -346,6 +371,12 @@ public abstract class EnemyAI : MonoBehaviour
             attackTimer += Time.deltaTime;
             if (attackTimer >= attackDuration)
             {
+                if (logAttackResumeFlow)
+                {
+                    Debug.Log($"<color=cyan>[AttackEnd]</color> <b>{GetType().Name}</b> name:{name} | " +
+                        $"atkTimer:{attackTimer:F2} dur:{attackDuration} → isAttacking:true→false | " +
+                        $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
+                }
                 isAttacking = false;
                 attackTimer = 0f;
                 if (animator != null) animator.SetBool("IsAttacking", false);
@@ -370,10 +401,23 @@ public abstract class EnemyAI : MonoBehaviour
         if (!canAttack)
         {
             attackCooldownTimer += Time.deltaTime;
+            if (logAttackResumeFlow && attackCooldownTimer < 0.05f)
+            {
+                // 🔍 冷却刚开始：记录冷却起点状态，确认攻击结束后确实进入了冷却
+                Debug.Log($"<color=yellow>[CooldownStart]</color> <b>{GetType().Name}</b> name:{name} | " +
+                    $"canAtk:false→冷却 cd:{attackCooldownTimer:F2} 目标:{GetAttackCooldown():F2}s | " +
+                    $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                    $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2}");
+            }
             if (attackCooldownTimer >= GetAttackCooldown())
             {
                 canAttack = true;
                 attackCooldownTimer = 0f;
+                if (logAttackResumeFlow)
+                {
+                    Debug.Log($"<color=green>[CooldownEnd]</color> <b>{GetType().Name}</b> name:{name} | canAtk:false→true | " +
+                        $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath}");
+                }
             }
         }
 
@@ -437,6 +481,16 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
+        // 🔍 攻击结束→恢复追击 跨帧检测：上一帧还在攻击(isAttacking)，本帧已走出攻击分支
+        if (logAttackResumeFlow && wasAttackingThisFrameEnter && !isAttacking)
+        {
+            Debug.Log($"<color=cyan>[ResumeChase]</color> <b>{GetType().Name}</b> name:{name} | " +
+                $"攻击结束跨帧 → 进入追击/就位流程 | " +
+                $"agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2} canAtk:{canAttack} " +
+                $"cd:{attackCooldownTimer:F2} 距离玩家:{(player!=null?Vector3.Distance(transform.position,player.transform.position):-1f):F2}");
+        }
+
 HandleMovement();
 
         // 接近目标提前减速，避免冲出一小段才刹停
@@ -467,6 +521,18 @@ HandleMovement();
             bool stuckPushing = agent.hasPath && !agent.pathPending
                 && agent.velocity.magnitude <= stuckEscapeSpeed
                 && agent.remainingDistance > 0.1f;
+
+            if (logStuckDetection && stuckPushing)
+            {
+                Debug.Log(
+                    $"<color=orange>[StuckDet]</color> <b>{GetType().Name}</b> name:{name} " +
+                    $"stuckPushing:true | wallBlocked:{wallBlocked} | " +
+                    $"vel:{agent.velocity.magnitude:F3}(≤{stuckEscapeSpeed}) " +
+                    $"desiredVel:{agent.desiredVelocity.magnitude:F3} " +
+                    $"rem:{agent.remainingDistance:F2}(>0.1) hasPath:{agent.hasPath} pending:{agent.pathPending} " +
+                    $"stopped:{agent.isStopped} status:{agent.pathStatus} " +
+                    $"| state: chase:{isChasing} atk:{isAttacking} stagger:{isStaggering} dead:{isDead} canAtk:{canAttack}");
+            }
 
             // 隔墙期间：维护"本侧可达目标"，并持续喂给 agent(即使路径仍算不出来，也保证落点可达)。
             if (wallBlocked)
@@ -916,11 +982,22 @@ Vector3 center = player.transform.position;
         }
     }
 
-    protected void StopAgent()
+    protected void StopAgent([System.Runtime.CompilerServices.CallerMemberName] string caller = "")
     {
         if (isAgentValid && agent != null && agent.isOnNavMesh)
         {
             NotePathMutation("StopAgent → isStopped=true+vel清零");
+            if (logAttackResumeFlow)
+            {
+                string type = GetType().Name;
+                Debug.Log(
+                    $"<color=magenta>[StopAgent]</color> <b>{type}</b> name:{name} 来源:{caller} " +
+                    $"| state: chase:{isChasing} atk:{isAttacking} stagger:{isStaggering} dead:{isDead} canAtk:{canAttack} " +
+                    $"atkTimer:{attackTimer:F2}/{attackDuration:F2} cd:{attackCooldownTimer:F2} " +
+                    $"| agent: stopped:{agent.isStopped} hasPath:{agent.hasPath} pending:{agent.pathPending} " +
+                    $"status:{agent.pathStatus} vel:{agent.velocity.magnitude:F2} rem:{agent.remainingDistance:F2}"
+                );
+            }
             agent.isStopped = true;
             agent.velocity = Vector3.zero; // 立即清零残速，避免停下时还滑/推一下
         }
@@ -1005,6 +1082,17 @@ Vector3 center = player.transform.position;
         if (slow && moved < 0.02f)
         {
             stuckTimer += Time.deltaTime;
+            if (logStuckDetection && stuckTimer >= 0.05f && (stuckTimer < 0.08f || stuckTimer >= stuckEscapeDelay - 0.02f))
+            {
+                // 🔍 仅在刚起测 和 将触发 两个时刻打印，避免刷屏
+                Debug.Log(
+                    $"<color=orange>[TryStuck]</color> <b>{GetType().Name}</b> name:{name} " +
+                    $"stuckTimer:{stuckTimer:F2}/{stuckEscapeDelay} | " +
+                    $"vel:{speed:F3}(≤{stuckEscapeSpeed}) desiredVel:{agent.desiredVelocity.magnitude:F3} " +
+                    $"rem:{agent.remainingDistance:F2} stopped:{agent.isStopped} status:{agent.pathStatus} " +
+                    $"| state: chase:{isChasing} atk:{isAttacking} stagger:{isStaggering} dead:{isDead} canAtk:{canAttack} " +
+                    $"距玩家:{(player!=null?Vector3.Distance(transform.position,player.transform.position):-1f):F2}");
+            }
         }
         else
         {
@@ -1174,6 +1262,13 @@ protected Vector3 GetFlankChaseTarget()
     protected virtual void PerformAttack()
     {
         if (!canAttack || isDead || isAttacking) return;
+        if (logAttackResumeFlow)
+        {
+            Debug.Log($"<color=green>[AttackStart]</color> <b>{GetType().Name}</b> name:{name} | " +
+                $"canAtk:{canAttack} isAttacking(前):{isAttacking} atkTimer:{attackTimer:F2} dur:{attackDuration} " +
+                $"| agent stopped:{agent!=null&&agent.isStopped} hasPath:{agent!=null&&agent.hasPath} " +
+                $"vel:{(agent!=null?agent.velocity.magnitude:0f):F2}");
+        }
         canAttack = false;
         attackCooldownTimer = 0f;
         isAttacking = true;
@@ -1426,6 +1521,13 @@ protected Vector3 GetFlankChaseTarget()
 
         if (isAgentValid && agent != null && agent.isOnNavMesh)
         {
+            if (logAttackResumeFlow)
+            {
+                Debug.Log($"<color=cyan>[ResumeChaseAfterStagger]</color> <b>{GetType().Name}</b> name:{name} | " +
+                    $"硬直结束 → isStopped:true→false + ResetPath + SetDest | " +
+                    $"chase:{isChasing} atk:{isAttacking} stagger:{isStaggering} canAtk:{canAttack} " +
+                    $"距玩家:{(player!=null?Vector3.Distance(transform.position,player.transform.position):-1f):F2}");
+            }
             NotePathMutation("ResumeChaseAfterStagger → isStopped=false+ResetPath+SetDest");
             agent.isStopped = false;
             agent.ResetPath();

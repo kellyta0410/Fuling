@@ -43,8 +43,13 @@ public class EnemyCollisionBlocker : MonoBehaviour
     [Header("调试")]
     public bool showPenetrationGizmos = false;
     [Header("🔍 穿墙兜底诊断")]
-    [Tooltip("勾上后每次触发『穿墙兜底 Warp』打印：是哪面墙、穿透多深、Warp 前后 agent 完整状态（position/destination/steeringTarget/hasPath/pathStatus/velocity）")]
+    [Tooltip("勾上后每次触发『穿墙兜底 Warp』打印：是哪面墙、穿透多深、Warp 前后 agent 完整状态（position/destination/steeringTarget/hasPath/pathStatus/velocity）。运行时自动挂载的组件请用 GlobalLogWallResolve")]
     public bool logWallResolveDetails = false;
+
+    // 🔍 全局穿墙兜底日志开关：对场景内所有敌人（含运行时自动挂载的）一次性开启。
+    // 运行时自动挂载的 EnemyCollisionBlocker 实例上没法在 Inspector 勾选，
+    // 用这个静态开关让 Snake/Jiangshi 等所有敌人同时输出诊断日志。
+    public static bool GlobalLogWallResolve = false;
 
     // ---------- 运行时 ----------
     private EnemyAI enemyAI;
@@ -135,7 +140,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
                 NotePathMutationExternal("穿墙兜底 → agent.Warp(推回墙外)");
                 agent.Warp(transform.position);
 
-                if (logWallResolveDetails)
+                if (logWallResolveDetails || GlobalLogWallResolve)
                 {
                     // 🔍 连续 Warp 计数：距离上次 Warp ≤1s 视为连续触发（循环证据）
                     float now = Time.time;
@@ -144,8 +149,10 @@ public class EnemyCollisionBlocker : MonoBehaviour
                     lastWallWarpTime = now;
 
                     Vector3 postPos = transform.position;
+                    bool warpClearedPath = preHasPath && !agent.hasPath;   // 🔍 Warp 是否把 hasPath 从 Y 打回 N
+                    string enemyType = enemyAI != null ? enemyAI.GetType().Name : "?";
                     Debug.Log(
-                        $"<color=orange>[穿墙兜底] {name}</color> 连续Warp:{consecutiveWallWarps} " +
+                        $"<color=orange>[穿墙兜底]</color> <b>{enemyType}</b> name:{name} 连续Warp:{consecutiveWallWarps} " +
                         $"| 墙:{res.wallName} pos:{res.wallPosition:F2} 穿透深度:{res.penDist:F3}m 推出方向:{res.pushDir:F2} " +
                         $"| 碰撞体:{res.moverColliderType} 包围盒:{res.moverBounds.size:F2} " +
                         $"| 状态: chase:{enemyAI!=null&&enemyAI.IsChasingNow} atk:{enemyAI!=null&&enemyAI.IsAttackingNow} stagger:{enemyAI!=null&&enemyAI.IsStaggeringNow} dead:{enemyAI!=null&&enemyAI.isDead}\n" +
@@ -153,7 +160,8 @@ public class EnemyCollisionBlocker : MonoBehaviour
                         $"hasPath:{preHasPath} pending:{prePending} status:{preStatus} vel:{preVel:F2} stopped:{preStopped}\n" +
                         $"  <color=yellow>[Resolve后]</color> pos:{transform.position:F2} " +
                         $"<color=cyan>[Warp后]</color> pos:{postPos:F2} dest:{agent.destination:F2} steer:{agent.steeringTarget:F2} " +
-                        $"hasPath:{agent.hasPath} pending:{agent.pathPending} status:{agent.pathStatus} vel:{agent.velocity:F2} stopped:{agent.isStopped}"
+                        $"hasPath:{agent.hasPath} pending:{agent.pathPending} status:{agent.pathStatus} vel:{agent.velocity:F2} stopped:{agent.isStopped} " +
+                        $"<color=red>warpClearedPath:{warpClearedPath}</color>"
                     );
                 }
             }

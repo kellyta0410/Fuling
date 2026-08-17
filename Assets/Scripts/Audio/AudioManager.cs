@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.SceneManagement;
 
 // 全局 BGM 管理器 + 音量读取 + SFX 播放池。
@@ -21,10 +22,21 @@ public class AudioManager : MonoBehaviour
     [Tooltip("音效是否 2D（=1 完全 2D，不受距离影响；=0 完全 3D 带距离衰减）")]
     [Range(0f, 1f)]
     public float sfxSpatialBlend = 1f;
+    [Tooltip("SFX 音量增益倍率（调大让整体音效更响；结果会被钳制到 0~1）")]
+    [Range(0.1f, 3f)]
+    public float sfxVolumeGain = 1.5f;
+
+    [Header("Mixer 控制")]
+    [Tooltip("MasterMixer：BGM 走 Music 组、所有 SFX（含按钮点击音）走 Sfx 组，音量统一由暴露参数控制")]
+    public AudioMixer masterMixer;
 
     private AudioSource bgmSource;
     private AudioSource[] sfxPool;
     private int sfxPoolCursor = 0;
+
+    // Mixer 暴露参数最近一次写入的 dB 值（避免每帧重复 SetFloat）
+    private float lastMixerMusicDB = float.PositiveInfinity;
+    private float lastMixerSFXDB = float.PositiveInfinity;
 
     // 主菜单系场景（共用一个 BGM）
     private static readonly string[] MenuScenes = { "MainMenu", "Loading", "Selection", "DifficultySelection" };
@@ -53,6 +65,9 @@ public class AudioManager : MonoBehaviour
             sfxPool[i].playOnAwake = false;
             sfxPool[i].spatialBlend = sfxSpatialBlend;
         }
+
+        // 统一走 Mixer：BGM → Music 组，SFX 池 → Sfx 组
+        SetupOutputGroups();
     }
 
     void OnEnable()
@@ -72,15 +87,59 @@ public class AudioManager : MonoBehaviour
 
     void Update()
     {
-        // 实时同步音乐音量（设置面板滑动时立即生效）
-        float v = GetMusicVolume();
-        if (Mathf.Abs(bgmSource.volume - v) > 0.001f)
-            bgmSource.volume = v;
+        if (masterMixer != null)
+        {
+            // 统一走 Mixer：Music/Sfx 组音量由暴露参数控制
+            float musicDB = LinearToDecibels(GetMusicVolume());
+            float sfxDB = LinearToDecibels(Mathf.Clamp01(GetSFXVolume() * sfxVolumeGain));
+
+            if (Mathf.Abs(musicDB - lastMixerMusicDB) > 0.01f)
+            {
+                lastMixerMusicDB = musicDB;
+                masterMixer.SetFloat("MusicVolume", musicDB);
+            }
+            if (Mathf.Abs(sfxDB - lastMixerSFXDB) > 0.01f)
+            {
+                lastMixerSFXDB = sfxDB;
+                masterMixer.SetFloat("SFXVolume", sfxDB);
+            }
+        }
+        else
+        {
+            // 兜底（没有 Mixer 时）：直接同步 BGM 源音量
+            float v = GetMusicVolume();
+            if (Mathf.Abs(bgmSource.volume - v) > 0.001f)
+                bgmSource.volume = v;
+        }
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         PlayBGMForScene(scene.name);
+    }
+
+    // BGM → Music 组，SFX 池 → Sfx 组
+    void SetupOutputGroups()
+    {
+        if (masterMixer == null) return;
+
+        AudioMixerGroup[] music = masterMixer.FindMatchingGroups("Music");
+        if (music != null && music.Length > 0)
+            bgmSource.outputAudioMixerGroup = music[0];
+
+        AudioMixerGroup[] sfx = masterMixer.FindMatchingGroups("Sfx");
+        if (sfx != null && sfx.Length > 0)
+        {
+            for (int i = 0; i < sfxPool.Length; i++)
+                sfxPool[i].outputAudioMixerGroup = sfx[0];
+        }
+    }
+
+    // 线性 0~1 音量 → dB（0.0001≈-80dB 静音，1≈0dB 全音量）
+    static float LinearToDecibels(float linear)
+    {
+        linear = Mathf.Clamp(linear, 0.0001f, 1f);
+        return Mathf.Log10(linear) * 20f;
     }
 
     void PlayBGMForScene(string sceneName)
@@ -106,7 +165,7 @@ public class AudioManager : MonoBehaviour
         if (bgmSource.clip == clip && bgmSource.isPlaying) return;
 
         bgmSource.clip = clip;
-        bgmSource.volume = GetMusicVolume();
+        bgmSource.volume = 1f;
         bgmSource.Play();
     }
 
@@ -130,7 +189,10 @@ public class AudioManager : MonoBehaviour
         src.spatialBlend = sfxSpatialBlend;
         src.transform.position = position;
         src.volume = 1f;
-        src.PlayOneShot(clip, GetSFXVolume());
+        if (masterMixer != null)
+            src.PlayOneShot(clip);
+        else
+            src.PlayOneShot(clip, Mathf.Clamp01(GetSFXVolume() * sfxVolumeGain));
     }
 
     private AudioSource GetFreeSource()
