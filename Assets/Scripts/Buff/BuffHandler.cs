@@ -107,13 +107,13 @@ public class BuffHandler : MonoBehaviour
         GameObject effect = Instantiate(healEffectPrefab, parent.position, Quaternion.identity, parent);
 
         // 特效本体放到玩家脚下（地板位置），光柱从地面往上冲
-        effect.transform.localPosition = Vector3.zero;
+        //effect.transform.localPosition = Vector3.zero;
 
-        HealEffectBuilder builder = effect.GetComponent<HealEffectBuilder>();
-        if (builder != null)
-        {
-            builder.Init(ParticleFXHelper.GetBuffColor(type));
-        }
+        //HealEffectBuilder builder = effect.GetComponent<HealEffectBuilder>();
+        //if (builder != null)
+        //{
+            //builder.Init(ParticleFXHelper.GetBuffColor(type));
+        //}
 
         if (healEffectLifetime > 0f)
             Destroy(effect, healEffectLifetime);
@@ -200,7 +200,7 @@ public class Buff
                 Debug.LogWarning($"未知持续Buff类型：{Data.buffType}");
                 break;
         }
-        handler.SpawnBuffEffect(Data.buffType); // 持续buff也播对应颜色的光柱
+       // handler.SpawnBuffEffect(Data.buffType); // 持续buff也播对应颜色的光柱
     }
 
     public void OnRemove()

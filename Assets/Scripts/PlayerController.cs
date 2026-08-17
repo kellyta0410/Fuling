@@ -708,13 +708,15 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向，位置锁死不位移。
+        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向。
+        // 位移 = 输入方向减速移动(0.5×) + 攻击动画自带的 root 位移(OnAnimatorMove 应用)。
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
 
-        // ⭐ 普通攻击关闭 root motion：位移由主循环锁死、动画只播放姿势，避免动画自带位移拖走角色滑步。
-        animator.applyRootMotion = false;
+        // ⭐ 普通攻击开启 root motion：让动画自带的位移拖动角色（挥砍前冲等），
+        // 由 OnAnimatorMove 经 controller.Move 应用位移，避免 Unity 自动叠加 transform 跳穿墙体。
+        animator.applyRootMotion = true;
 
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
@@ -915,7 +917,12 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 其余状态：不应用任何位移/旋转（位移由代码控制，朝向由 Update 跟随输入）
+        // 其余状态（含攻击）：应用动画自带的位移（挥砍前冲等），经 CharacterController 走碰撞，
+        // 不直接改 transform，避免动画位移叠加速度位移造成穿墙/抖动。
+        // 朝向不受动画 root 影响，仍由 Update 跟随输入旋转。
+        Vector3 delta = animator.deltaPosition;
+        if (delta.sqrMagnitude > 0.0001f)
+            controller.Move(delta);
     }
 
     IEnumerator DelayedSkillDamage(int damage)
