@@ -20,9 +20,6 @@ public class PlayerController : MonoBehaviour
     [Tooltip("普通攻击期间可移动，但速度降为此倍率×speed（不锁死位移，边打边走）")]
     [Range(0f, 1f)]
     public float attackMoveSpeedFactor = 0.5f;
-    [Tooltip("技能期间可移动，但速度降为此倍率×speed（不锁死位移）")]
-    [Range(0f, 1f)]
-    public float skillMoveSpeedFactor = 0.35f;
     public int attackDamage = 20;
     public float attackRange = 2f;
     public float attackCooldown = 1f;
@@ -46,22 +43,6 @@ public class PlayerController : MonoBehaviour
     public AudioClip skillSFX;
     [Tooltip("玩家被敌人打中的受击音效")]
     public AudioClip hitSFX;
-
-    [Header("攻击特效")]
-    [Tooltip("普通攻击时在武器位置生成的特效预制体（如 SlashVFX）")]
-    public GameObject attackVFXPrefab;
-    [Tooltip("技能攻击时生成的特效预制体（如 SlashVFX 横劈版）")]
-    public GameObject skillVFXPrefab;
-    [Tooltip("挥砍特效：前段从微缩撑到全尺寸所占动画时长的比例(0~1)。越小挥得越快")]
-    public float slashGrowAmount = 0.45f;
-    [Tooltip("挥出缓动指数：越大越接近\"命中瞬间才拉满\"，越小越线性")]
-    public float slashGrowExponent = 1.5f;
-    [Tooltip("挥砍甩出总角度(度)：弧光在挥出阶段绕竖直轴从 -角度/2 甩到 +角度/2，像被剑砍出来划开空气而不是贴在剑上")]
-    public float slashSwingAngle = 70f;
-    [Tooltip("挥砍甩出方向：0 = 随连招交替左右挥，1 = 固定从左到右，-1 = 从右到左")]
-    public int slashSwingDirection = 0;
-    [Tooltip("剑光出现位置在玩家前方的偏移量(米)：让剑光更靠前、落在攻击范围内而非贴在角色身上")]
-    public float slashForwardOffset = 0.9f;
 
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
@@ -119,6 +100,10 @@ public class PlayerController : MonoBehaviour
     public float enemyKnockbackDistance = 2f;
     [Tooltip("普通攻击命中后敌人被击退的距离（米）——比技能击退更短，避免普通攻击把敌人推太远/推进墙角")]
     public float normalAttackKnockbackDistance = 1.2f;
+    [Tooltip("闪避撞开敌人的半径（米）：闪避冲刺路径附近这个范围里的敌人都被推开")]
+    public float dodgePushRadius = 1.6f;
+    [Tooltip("闪避撞开敌人的推力（米）：被闪避冲到的敌人沿闪避方向推开的距离")]
+    public float dodgePushDistance = 2f;
     [Tooltip("闪避按钮（可不拖，运行时自动创建在普通攻击按钮左边）")]
     public Button dodgeButton;
     [Tooltip("闪避冷却时间（秒）")]
@@ -164,7 +149,6 @@ public class PlayerController : MonoBehaviour
     private bool canUseSkill = true;
     private bool isUsingSkill = false;
     private float skillTimer = 0f;
-    private float skillStartYaw = 0f;   // 技能开始瞬间的朝向，用于代码驱动 360° 转圈对齐动画
     public float skillDuration = 0.8f;
     private Image[] cooldownMasks = new Image[3];
 
@@ -175,6 +159,10 @@ public class PlayerController : MonoBehaviour
     private float dodgeTimer = 0f;
     private float dodgeSpeed = 10f;
     private Vector3 dodgeDirection = Vector3.zero;
+    // ⭐ 闪避撞开去重：同一段闪避期间已撞过的敌人不再重复推，避免每帧重复 AddKnockback
+    private readonly System.Collections.Generic.HashSet<EnemyAI> dodgePushedEnemies = new System.Collections.Generic.HashSet<EnemyAI>();
+    // ⭐ 闪避期间被临时忽略碰撞的敌人（闪避结束恢复碰撞，保证"敌人挡住玩家"只在正常移动时生效）
+    private readonly System.Collections.Generic.List<EnemyCollisionBlocker> dodgeIgnoredBlockers = new System.Collections.Generic.List<EnemyCollisionBlocker>();
 
     // ==================== 角色配置 ====================
     private CharacterData currentCharacterData;
@@ -223,11 +211,9 @@ public class PlayerController : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
-        // ⭐ root motion 全局关闭：角色位移一律由代码(CharacterController)驱动，动画只负责姿势，
-        // 避免动画自带位移叠加造成滑步/贴墙抖动。技能 360° 转圈由 OnAnimatorMove 代码驱动旋转，
-        // 但 deltaRotation 需要 applyRootMotion=true 才有值，故技能开启、其余关闭。
-        if (animator != null)
-            animator.applyRootMotion = false;
+        // ⭐ applyRootMotion 由 Inspector 的 "Apply Root Motion" 勾选框手动控制（不再在脚本里强制开关），
+        // 位移是否生效取决于勾选：勾上则算法位移(如 Attack2 突进)经 OnAnimatorMove 应用，原地 clip 不受影响；
+        // 技能 360° 转圈由 OnAnimatorMove 代码驱动旋转。
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
@@ -463,8 +449,7 @@ public class PlayerController : MonoBehaviour
             dodgeTimer += Time.deltaTime;
             if (dodgeTimer >= dodgeDuration)
             {
-                isDodging = false;
-                dodgeTimer = 0f;
+                EndDodge();
             }
         }
 
@@ -496,8 +481,7 @@ public class PlayerController : MonoBehaviour
                 canAttack = true;
                 attackCooldownTimer = 0f;
                 animator.SetBool("IsAttacking", false);
-                // 攻击结束恢复 root motion 关闭（位移由代码驱动；技能/死亡时再按需开启）
-                animator.applyRootMotion = false;
+                // 攻击结束：applyRootMotion 保持 Inspector 手动勾选值，不做运行时强制开/关。
                 // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
@@ -526,8 +510,7 @@ public class PlayerController : MonoBehaviour
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
-                // 技能结束恢复 root motion 关闭（位移由代码驱动）
-                animator.applyRootMotion = false;
+                // 技能结束：applyRootMotion 保持 Inspector 手动勾选值，不做运行时强制开/关。
                 // ⭐ 技能中允许转向，结束后保持玩家当前朝向（不做回正）。
                 // 技能动画播完：若技能中排了普通攻击，自动接上，保证 skill 与 attack 互相衔接
                 if (queuedAttack)
@@ -566,10 +549,10 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        // 攻击/技能期间不再锁死位移：改用各自的减速倍率，边打边走（攻击 0.5×、技能 0.35×）
+        // ⭐ 攻击/技能期间代码位移=0：位移完全交给动画自带 root motion
+        //（OnAnimatorMove 应用 deltaPosition），游戏行为与 preview 一致，不滑步。
         float currentSpeed = isDodging ? dodgeSpeed
-            : isAttacking ? speed * attackMoveSpeedFactor
-            : isUsingSkill ? speed * skillMoveSpeedFactor
+            : (isAttacking || isUsingSkill) ? 0f
             : speed;
 
         // 闪避时以闪避方向为准，其余情况位移交给下方输入速度处理（不再强制清零）
@@ -577,6 +560,8 @@ public class PlayerController : MonoBehaviour
         {
             velocity.x = 0f;
             velocity.z = 0f;
+            // ⭐ 闪避撞开敌人：冲刺沿路把挡在前面的敌人按闪避方向推开（唯一保留的击退推力）
+            ApplyDodgePush();
         }
         if (isGrounded)
         {
@@ -709,89 +694,24 @@ public class PlayerController : MonoBehaviour
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
         // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向。
-        // 位移 = 输入方向减速移动(0.5×) + 攻击动画自带的 root 位移(OnAnimatorMove 应用)。
+        // 攻击期间位移 = 动画自带 root 位移（OnAnimatorMove 应用），代码位移为 0，避免滑步。
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
 
-        // ⭐ 普通攻击开启 root motion：让动画自带的位移拖动角色（挥砍前冲等），
-        // 由 OnAnimatorMove 经 controller.Move 应用位移，避免 Unity 自动叠加 transform 跳穿墙体。
-        animator.applyRootMotion = true;
-
+        // ⭐ 普通攻击开启 root motion 的要求移除：applyRootMotion 由 Inspector 手动勾选控制，
+        // 勾选后动画自带位移(如 Attack2 突进)经 OnAnimatorMove 的 controller.Move 应用，
+        // 避免 Unity 自动叠加 transform 跳穿墙体。
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
         animator.Play(stateName, 0, 0f);
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
         PlayRandomAttackSFX();
-        SpawnAttackVFX(stateName);
         StartCoroutine(DelayedDamage());
     }
 
-    void SpawnAttackVFX(string stateName)
-    {
-        if (attackVFXPrefab == null) return;
-
-        // 剑光角度在发起攻击时确定（协程延迟后 comboIndex 可能已切到下一招）
-        float yaw;
-        switch (comboIndex)
-        {
-            case 0: yaw = -45f; break;
-            case 1: yaw = 45f; break;
-            default: yaw = 0f; break;
-        }
-        if (slashSwingDirection != 0) yaw = slashSwingDirection * 45f; // 手动覆盖方向
-
-        // 剑光出现在动画中段（命中帧附近），位置在玩家正前方中间、对齐剑尖朝向。
-        StartCoroutine(SpawnAttackVFXDelayed(stateName, yaw));
-    }
-
-    IEnumerator SpawnAttackVFXDelayed(string stateName, float yaw)
-    {
-        // 等一帧让 Animator 切到新攻击状态，再取动画总时长计算"中段"延迟
-        yield return null;
-        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
-        float total = info.shortNameHash == Animator.StringToHash(stateName)
-            ? info.length
-            : attackDuration;
-        if (total <= 0.01f) total = attackDuration;
-
-        // 动画中段出现（可让命中帧与剑光同步；如果动画还没切到该状态就按固定比例兜底）
-        yield return new WaitForSeconds(Mathf.Max(total * 0.5f, attackDamageDelay));
-
-        // 若攻击已经结束（例如连击被更快输入打断），就不再生成
-        if (!isAttacking) yield break;
-
-        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
-
-        // 位置：玩家正前方中间、略微抬高的高度。
-        Vector3 spawnPos = transform.position + Vector3.up;
-        spawnPos += transform.forward * slashForwardOffset;
-
-        GameObject vfx = Instantiate(attackVFXPrefab, spawnPos, spawnRot);
-
-        // 关键：挂到角色根而不是剑。挂在剑上会随剑的挥砍抖动旋转，
-        // 读起来像"贴死在剑上"；挂到角色根后特效保持一次稳定挥砍轨迹。
-        vfx.transform.SetParent(transform, true);
-
-        // 完整尺寸直接出现，播放一次后随攻击结束销毁
-        StartCoroutine(DespawnAttackVFX(vfx, stateName));
-    }
-
-    // 特效完整出现一次，等攻击动画播放完再销毁。不做"从零放大 + 甩出"动画。
-    IEnumerator DespawnAttackVFX(GameObject vfx, string stateName)
-    {
-        yield return null; // 等一帧让 Animator 切换到新状态
-        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
-        float total = info.shortNameHash == Animator.StringToHash(stateName)
-            ? info.length
-            : attackDuration;
-        if (total <= 0.01f) total = attackDuration;
-        total = Mathf.Max(total, 0.05f);
-
-        yield return new WaitForSeconds(total);
-        if (vfx != null) Destroy(vfx);
-    }
+    // ==================== 技能攻击 ====================
 
     IEnumerator DelayedDamage()
     {
@@ -845,10 +765,8 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
-        skillStartYaw = transform.eulerAngles.y;   // 记录技能起始朝向，供代码驱动转圈
-        // ⭐ 技能需要动画旋转(360° 转圈)，强制开启 root motion：
-        // 若玩家从普攻中切入技能，普攻已把 applyRootMotion 关掉，必须恢复，否则 deltaRotation 恒为零。
-        animator.applyRootMotion = true;
+        // ⭐ 技能旋转完全交给动画本身：360° 旋转烘焙在 Hips 骨骼上，游戏行为与 preview 一致
+        //（根对象不动、模型原地自转），不再用代码驱动 transform 旋转。
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -858,68 +776,23 @@ public class PlayerController : MonoBehaviour
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
         StartCoroutine(DelayedSkillDamage(finalDamage));
-        SpawnSkillVFX();
-    }
-
-    // 技能横劈特效：出现在玩家正前方中间，剑光横着（绕竖直轴 90°）劈向正前方。
-    void SpawnSkillVFX()
-    {
-        if (skillVFXPrefab == null) return;
-
-        // 延迟到技能动画中段出现（和命中帧对齐）
-        StartCoroutine(SpawnSkillVFXDelayed());
-    }
-
-    IEnumerator SpawnSkillVFXDelayed()
-    {
-        yield return null;
-        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
-        float total = info.IsName("Skill Attack") ? info.length : skillDuration;
-        if (total <= 0.01f) total = skillDuration;
-        yield return new WaitForSeconds(Mathf.Max(total * 0.5f, skillDamageDelay));
-
-        if (!isUsingSkill) yield break;
-
-        // 横劈：剑光平面绕竖直轴转 90°，从横向前方横向劈出
-        Quaternion spawnRot = Quaternion.LookRotation(transform.forward, Vector3.up) * Quaternion.Euler(0f, 90f, 0f);
-
-        Vector3 spawnPos = transform.position + Vector3.up;
-        spawnPos += transform.forward * slashForwardOffset;
-
-        GameObject vfx = Instantiate(skillVFXPrefab, spawnPos, spawnRot);
-        vfx.transform.SetParent(transform, true);
-
-        // 技能播完销毁
-        yield return new WaitForSeconds(Mathf.Max(total, 0.1f));
-        if (vfx != null) Destroy(vfx);
     }
 
     // 接管 root motion：
-    //   - 位移：一律由 Update 里的 controller.Move(velocity) 代码驱动，这里不应用动画位移
-    //     （避免双重位移导致滑步/贴墙抖动/判定点飘移）。
-    //   - 技能 360° 转圈：不依赖 deltaRotation(该动画导入烘焙到骨骼时恒为零导致不转)，
-    //     改由代码按动画进度从起始朝向转满一整圈，保证与 preview 一致且位移锁死。
-    // applyRootMotion 仅在技能期间开启（保证 Animator 正常推进，旋转由代码接管），其余状态关闭。
+    //   - 位移：正常移动由 Update 里的 controller.Move(velocity) 代码驱动；
+    //     攻击等动画自带的位移(如 Attack2 突进)在这里经 controller.Move 应用，避免双重位移滑步。
+    //   - 技能 360° 转圈：旋转烘焙在 Hips 骨骼上由动画自带，游戏行为与 preview 一致
+    //     （根对象不旋转、模型原地自转），这里不覆盖 transform.rotation。
+    // applyRootMotion 由 Inspector 的 "Apply Root Motion" 勾选框手动控制：勾选后本回调每帧生效，
+    // 原地 clip(Idle/Run/Skill) delta ≈ 0 不产生位移，位移动画则应用；
+    // 未勾选则动画位移不生效，全部由代码驱动。
     private void OnAnimatorMove()
     {
-        if (animator == null || controller == null) return;
+        if (animator == null || controller == null || !controller.enabled) return;
 
-        // 技能 360° 转圈：按动画进度(CrossFade 过渡后 current/next 状态)驱动完整一圈
-        if (isUsingSkill)
-        {
-            AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
-            AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(0);
-            float t = state.IsName("Skill Attack") ? state.normalizedTime
-                    : next.IsName("Skill Attack") ? next.normalizedTime
-                    : skillTimer / Mathf.Max(skillDuration, 0.01f);
-            t = Mathf.Clamp01(t);
-            transform.rotation = Quaternion.Euler(0f, skillStartYaw + 360f * t, 0f);
-            return;
-        }
-
-        // 其余状态（含攻击）：应用动画自带的位移（挥砍前冲等），经 CharacterController 走碰撞，
+        // 应用动画自带的位移（挥砍前冲、技能位移等），经 CharacterController 走碰撞，
         // 不直接改 transform，避免动画位移叠加速度位移造成穿墙/抖动。
-        // 朝向不受动画 root 影响，仍由 Update 跟随输入旋转。
+        // 朝向不受动画 root 影响，仍由 Update 跟随输入旋转（技能期间输入转向已禁用）。
         Vector3 delta = animator.deltaPosition;
         if (delta.sqrMagnitude > 0.0001f)
             controller.Move(delta);
@@ -994,6 +867,50 @@ public class PlayerController : MonoBehaviour
         isDodging = true;
         canDodge = false;
         dodgeCooldownTimer = 0f;
+        dodgePushedEnemies.Clear();
+    }
+
+    // ⭐ 闪避撞开敌人：以玩家为球心、闪避方向前段为探测范围，把范围内的非死亡敌人
+    // 沿闪避方向推开 dodgePushDistance。同一段闪避只推每个敌人一次（去重）。
+    // 全项目唯一的"玩家推动敌人"来源——普攻/技能已不推，只有闪避保留推力。
+    void ApplyDodgePush()
+    {
+        if (dodgeDirection.sqrMagnitude < 0.0001f) return;
+
+        Collider[] hits = Physics.OverlapSphere(transform.position, dodgePushRadius);
+        foreach (Collider hit in hits)
+        {
+            if (hit == null) continue;
+            EnemyAI enemy = hit.GetComponentInParent<EnemyAI>();
+            if (enemy == null || enemy.isDead) continue;
+            if (dodgePushedEnemies.Contains(enemy)) continue;
+
+            dodgePushedEnemies.Add(enemy);
+
+            // ⭐ 临时忽略玩家与该敌人的碰撞：闪避冲刺能冲开并穿过敌人（玩家实体不挡自己人撞开）。
+            EnemyCollisionBlocker blocker = hit.GetComponentInParent<EnemyCollisionBlocker>();
+            if (blocker != null)
+            {
+                blocker.SetIgnorePlayerCollision(true);
+                dodgeIgnoredBlockers.Add(blocker);
+            }
+
+            enemy.AddKnockback(dodgeDirection, dodgePushDistance);
+        }
+    }
+
+    // ⭐ 闪避结束：恢复对闪避期间撞开的敌人的碰撞（回到"敌人挡住玩家"），并清空去重记录
+    void EndDodge()
+    {
+        isDodging = false;
+        dodgeTimer = 0f;
+        dodgePushedEnemies.Clear();
+
+        foreach (EnemyCollisionBlocker blocker in dodgeIgnoredBlockers)
+        {
+            if (blocker != null) blocker.SetIgnorePlayerCollision(false);
+        }
+        dodgeIgnoredBlockers.Clear();
     }
 
     // 取消当前普通攻击：闪避触发时调用，避免攻击状态残留（仍锁位移/方向，闪避会覆盖 currentSpeed）
@@ -1004,7 +921,6 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         queuedSkill = false;
         animator.SetBool("IsAttacking", false);
-        animator.applyRootMotion = false;
     }
 
     // ⭐ 在普通攻击按钮上方创建技能按钮
@@ -1376,6 +1292,19 @@ public class PlayerController : MonoBehaviour
         isDying = true;
         velocity = Vector3.zero;
 
+        // ⭐ 死亡时若正在闪避，恢复被临时忽略的敌人碰撞，避免敌人永久穿过玩家
+        if (isDodging)
+        {
+            isDodging = false;
+            dodgeTimer = 0f;
+            dodgePushedEnemies.Clear();
+            foreach (EnemyCollisionBlocker blocker in dodgeIgnoredBlockers)
+            {
+                if (blocker != null) blocker.SetIgnorePlayerCollision(false);
+            }
+            dodgeIgnoredBlockers.Clear();
+        }
+
         PlaceOnGround();
 
         if (controller != null) controller.enabled = false;
@@ -1388,7 +1317,6 @@ public class PlayerController : MonoBehaviour
 
         animator.SetBool("IsMoving", false);
         animator.SetBool("IsAttacking", false);
-        animator.applyRootMotion = false;
         animator.SetTrigger("Die");
 
         Debug.Log($"玩家死亡");

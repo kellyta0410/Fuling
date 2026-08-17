@@ -88,13 +88,14 @@ MonoBehaviour:
   stuckEscapeSpeed: 0.1
   stuckEscapeDelay: 0.5
   stuckEscapeCooldown: 1
-  showPathDebug: 1
-  logPathStateChanges: 1
+  showPathDebug: 0
+  logPathStateChanges: 0
   logWallResolveDetails: 0
   logWallResolveDetailsGlobal: 0
   logAttackResumeFlow: 0
   logStuckDetection: 0
   logPathCorners: 0
+  logNavMeshLoss: 1
   ownerTile: {fileID: 0}
   serpentineMove: 1
   headTurnSpeed: 160

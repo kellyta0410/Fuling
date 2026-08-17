@@ -137,15 +137,18 @@ public static class WallPenetrationResolve
     /// ⭐ 近身豁免：两点距离 ≤ CloseCombatDistance 时直接放行（不判隔墙）。
     /// 墙角/贴墙肉搏时双方中心连线会擦到墙角墙体，直线检测会误判"隔墙打不到"，
     /// 导致玩家挥空、敌人不攻击。近身距离内必然互可接触，跳过墙挡判定。
+    /// applyCloseCombatExemption=false 时（敌人追击就位/蛇头朝向等"要不要绕墙"判断）：
+    /// 即使 ≤1.2m 也认真 raycast，被实墙隔开就判"被挡"，避免敌人贴薄墙时
+    /// 误以为已就位、停下并面向墙后玩家而不绕行。
     /// </summary>
     private const float CloseCombatDistance = 1.2f;
 
-    public static bool IsBlockedBetween(Vector3 from, Vector3 to)
+    public static bool IsBlockedBetween(Vector3 from, Vector3 to, bool applyCloseCombatExemption = true)
     {
         Vector3 dir = to - from;
         float dist = dir.magnitude;
         if (dist <= 0.01f) return false;
-        if (dist <= CloseCombatDistance) return false; // ⭐ 近身豁免：贴脸/墙角互搏必然命中
+        if (applyCloseCombatExemption && dist <= CloseCombatDistance) return false; // ⭐ 近身豁免：贴脸/墙角互搏必然命中
         dir /= dist;
 
         RaycastHit[] hits = Physics.RaycastAll(from, dir, dist);

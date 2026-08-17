@@ -109,8 +109,10 @@ public class SnakeEnemy : EnemyAI
                 // 停下时若仍被实体墙隔开（卡在墙对面），改朝 agent 想去的绕行方向
                 // （desiredVelocity，即便当前被挡未动也指向绕行意图），而非面向玩家，
                 // 消除"蛇头对着墙对面"的视觉抖动；真正贴近玩家（无墙可攻）才面向玩家。
+                // applyCloseCombatExemption=false：贴薄墙(≤1.2m)被实墙隔开也算被挡，
+                // 蛇头转向绕行方向而非隔着墙面向玩家。
                 if (!moving && player != null &&
-                    WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position))
+                    WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
                 {
                     Vector3 desired = agent.desiredVelocity;
                     desired.y = 0f;
