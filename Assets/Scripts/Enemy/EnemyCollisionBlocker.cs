@@ -17,6 +17,10 @@ public class EnemyCollisionBlocker : MonoBehaviour
     [Header("玩家碰撞")]
     [Tooltip("与玩家重叠时，把敌人推出去（玩家不动），避免物理把玩家顶开")]
     public bool resolvePlayerOverlap = true;
+    [Tooltip("与玩家保持的分离缓冲（米）：敌人表面多留一点空隙，吸收 agent 每帧推进量，" +
+        "让敌人的碰撞体在物理步进/玩家 CC 扫描前就已隔开，杜绝物理对玩家的任何顶推")]
+    [Range(0f, 0.5f)]
+    public float playerResolveBuffer = 0.15f;
 
     [Header("敌人之间碰撞")]
     [Tooltip("敌人互相重叠时，各自往反方向推一半距离，避免互相穿模/顶堆")]
@@ -226,6 +230,31 @@ public class EnemyCollisionBlocker : MonoBehaviour
         }
     }
 
+    // ⭐ 每次物理步进前先分离敌人↔玩家：FixedUpdate 先于物理解算(Simulate) 与
+    // 玩家 controller.Move(Update 扫描) 执行，先把敌人的碰撞体推出玩家体积，
+    // 物理引擎便永远见不到"敌人扫进玩家 CC"的穿透 → 不产生 depenetrate 顶推。
+    // 否则敌人(agent 追击 / 被击退后重新贴回玩家)在 Update 里推进玩家 CC 后，
+    // 下一次物理解算会把玩家顶动一下——"击退后再往前稍微推玩家"就是这个帧序问题。
+    // LateUpdate 保留作兜底（捕捉同帧 agent 推进造成的瞬时重叠）。
+    void FixedUpdate()
+    {
+        TryInit();
+
+        if (enemyAI != null && enemyAI.isDead) return;
+        if (myCollider == null) return;
+        if (suspendSeparation) return;
+
+        if (resolvePlayerOverlap)
+        {
+            ResolvePlayerBack();
+        }
+
+        if (resolveEnemyOverlap)
+        {
+            ResolveEnemiesBack();
+        }
+    }
+
     // 玩家重叠：把敌人从玩家体积里推出来（方向 = 远离玩家），玩家永远不动。
     // 玩家是 CharacterController（胶囊），用水平面近似（玩家半径 + 敌人水平半径）做几何分离，
     // 比 ComputePenetration 对 CC 更稳定，且天然只推敌人、不推玩家。
@@ -250,7 +279,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
 
         Vector3 toPlayer = pcPos - myPos;
         float distToPlayer = toPlayer.magnitude;
-        float needDist = enemyHalf + playerWorldRadius;
+        float needDist = enemyHalf + playerWorldRadius + playerResolveBuffer;
 
         if (distToPlayer < needDist && distToPlayer > 0.0001f)
         {
