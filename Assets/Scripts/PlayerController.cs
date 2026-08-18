@@ -33,7 +33,7 @@ public class PlayerController : MonoBehaviour
     [Tooltip("普通攻击造成伤害的延迟（秒），对齐普通攻击动画命中那一刻")]
     public float attackDamageDelay = 0.35f;
     [Tooltip("普通攻击判定方位角(度)：只有玩家正前方 ±该角度 内的敌人才会收到伤害，背后/侧面打不到；技能不受此限制(全方位)")]
-    public float attackFacingAngle = 90f;
+    public float attackFacingAngle = 150f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
     public float skillDamageDelay = 0.5f;
     [Header("攻击音效（Clip 放这里，音量读 SettingsManager）")]
@@ -211,9 +211,7 @@ public class PlayerController : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
-        // ⭐ applyRootMotion 由 Inspector 的 "Apply Root Motion" 勾选框手动控制（不再在脚本里强制开关），
-        // 位移是否生效取决于勾选：勾上则算法位移(如 Attack2 突进)经 OnAnimatorMove 应用，原地 clip 不受影响；
-        // 技能 360° 转圈由 OnAnimatorMove 代码驱动旋转。
+        // Apply Root Motion 是否生效由 Inspector 决定，脚本不参与。
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
 
@@ -481,7 +479,6 @@ public class PlayerController : MonoBehaviour
                 canAttack = true;
                 attackCooldownTimer = 0f;
                 animator.SetBool("IsAttacking", false);
-                // 攻击结束：applyRootMotion 保持 Inspector 手动勾选值，不做运行时强制开/关。
                 // ⭐ 攻击中允许转向，结束后保持玩家当前朝向（不做回正）。
             }
 
@@ -510,7 +507,6 @@ public class PlayerController : MonoBehaviour
             {
                 isUsingSkill = false;
                 skillTimer = 0f;
-                // 技能结束：applyRootMotion 保持 Inspector 手动勾选值，不做运行时强制开/关。
                 // ⭐ 技能中允许转向，结束后保持玩家当前朝向（不做回正）。
                 // 技能动画播完：若技能中排了普通攻击，自动接上，保证 skill 与 attack 互相衔接
                 if (queuedAttack)
@@ -549,8 +545,7 @@ public class PlayerController : MonoBehaviour
         }
         wasGrounded = isGrounded;
 
-        // ⭐ 攻击/技能期间代码位移=0：位移完全交给动画自带 root motion
-        //（OnAnimatorMove 应用 deltaPosition），游戏行为与 preview 一致，不滑步。
+        // 攻击/技能期间代码位移=0：位移完全交给动画本身。
         float currentSpeed = isDodging ? dodgeSpeed
             : (isAttacking || isUsingSkill) ? 0f
             : speed;
@@ -694,14 +689,10 @@ public class PlayerController : MonoBehaviour
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
         // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向。
-        // 攻击期间位移 = 动画自带 root 位移（OnAnimatorMove 应用），代码位移为 0，避免滑步。
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
             transform.rotation = Quaternion.LookRotation(inputDir);
 
-        // ⭐ 普通攻击开启 root motion 的要求移除：applyRootMotion 由 Inspector 手动勾选控制，
-        // 勾选后动画自带位移(如 Attack2 突进)经 OnAnimatorMove 的 controller.Move 应用，
-        // 避免 Unity 自动叠加 transform 跳穿墙体。
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
         animator.Play(stateName, 0, 0f);
@@ -765,8 +756,7 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
-        // ⭐ 技能旋转完全交给动画本身：360° 旋转烘焙在 Hips 骨骼上，游戏行为与 preview 一致
-        //（根对象不动、模型原地自转），不再用代码驱动 transform 旋转。
+        // 技能旋转完全交给动画本身：360° 旋转烘焙在 Hips 骨骼上。
         // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
         // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
         // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
@@ -776,26 +766,6 @@ public class PlayerController : MonoBehaviour
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
         StartCoroutine(DelayedSkillDamage(finalDamage));
-    }
-
-    // 接管 root motion：
-    //   - 位移：正常移动由 Update 里的 controller.Move(velocity) 代码驱动；
-    //     攻击等动画自带的位移(如 Attack2 突进)在这里经 controller.Move 应用，避免双重位移滑步。
-    //   - 技能 360° 转圈：旋转烘焙在 Hips 骨骼上由动画自带，游戏行为与 preview 一致
-    //     （根对象不旋转、模型原地自转），这里不覆盖 transform.rotation。
-    // applyRootMotion 由 Inspector 的 "Apply Root Motion" 勾选框手动控制：勾选后本回调每帧生效，
-    // 原地 clip(Idle/Run/Skill) delta ≈ 0 不产生位移，位移动画则应用；
-    // 未勾选则动画位移不生效，全部由代码驱动。
-    private void OnAnimatorMove()
-    {
-        if (animator == null || controller == null || !controller.enabled) return;
-
-        // 应用动画自带的位移（挥砍前冲、技能位移等），经 CharacterController 走碰撞，
-        // 不直接改 transform，避免动画位移叠加速度位移造成穿墙/抖动。
-        // 朝向不受动画 root 影响，仍由 Update 跟随输入旋转（技能期间输入转向已禁用）。
-        Vector3 delta = animator.deltaPosition;
-        if (delta.sqrMagnitude > 0.0001f)
-            controller.Move(delta);
     }
 
     IEnumerator DelayedSkillDamage(int damage)
