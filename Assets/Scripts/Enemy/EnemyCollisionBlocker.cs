@@ -17,10 +17,6 @@ public class EnemyCollisionBlocker : MonoBehaviour
     [Header("玩家碰撞")]
     [Tooltip("与玩家重叠时，把敌人推出去（玩家不动），避免物理把玩家顶开")]
     public bool resolvePlayerOverlap = true;
-    [Tooltip("与玩家保持的分离缓冲（米）：敌人表面多留一点空隙，吸收 agent 每帧推进量，" +
-        "让敌人的碰撞体在物理步进/玩家 CC 扫描前就已隔开，杜绝物理对玩家的任何顶推")]
-    [Range(0f, 0.5f)]
-    public float playerResolveBuffer = 0.15f;
 
     [Header("敌人之间碰撞")]
     [Tooltip("敌人互相重叠时，各自往反方向推一半距离，避免互相穿模/顶堆")]
@@ -230,31 +226,6 @@ public class EnemyCollisionBlocker : MonoBehaviour
         }
     }
 
-    // ⭐ 每次物理步进前先分离敌人↔玩家：FixedUpdate 先于物理解算(Simulate) 与
-    // 玩家 controller.Move(Update 扫描) 执行，先把敌人的碰撞体推出玩家体积，
-    // 物理引擎便永远见不到"敌人扫进玩家 CC"的穿透 → 不产生 depenetrate 顶推。
-    // 否则敌人(agent 追击 / 被击退后重新贴回玩家)在 Update 里推进玩家 CC 后，
-    // 下一次物理解算会把玩家顶动一下——"击退后再往前稍微推玩家"就是这个帧序问题。
-    // LateUpdate 保留作兜底（捕捉同帧 agent 推进造成的瞬时重叠）。
-    void FixedUpdate()
-    {
-        TryInit();
-
-        if (enemyAI != null && enemyAI.isDead) return;
-        if (myCollider == null) return;
-        if (suspendSeparation) return;
-
-        if (resolvePlayerOverlap)
-        {
-            ResolvePlayerBack();
-        }
-
-        if (resolveEnemyOverlap)
-        {
-            ResolveEnemiesBack();
-        }
-    }
-
     // 玩家重叠：把敌人从玩家体积里推出来（方向 = 远离玩家），玩家永远不动。
     // 玩家是 CharacterController（胶囊），用水平面近似（玩家半径 + 敌人水平半径）做几何分离，
     // 比 ComputePenetration 对 CC 更稳定，且天然只推敌人、不推玩家。
@@ -279,7 +250,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
 
         Vector3 toPlayer = pcPos - myPos;
         float distToPlayer = toPlayer.magnitude;
-        float needDist = enemyHalf + playerWorldRadius + playerResolveBuffer;
+        float needDist = enemyHalf + playerWorldRadius;
 
         if (distToPlayer < needDist && distToPlayer > 0.0001f)
         {
@@ -334,19 +305,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
             if (overlapping && dist > 0.001f)
             {
                 // 各承担一半；对方敌人每帧也会执行本逻辑，双方各推 0.5 恰好分离
-                Vector3 sep = dir * dist * 0.5f;
-
-                // ⭐ 敌人互推的位移绝不允许把敌人推向玩家：剔除指向玩家的分量。
-                // 否则后排互推时前排会被推到玩家方向、扫进玩家体积，
-                // 物理解算(CharacterController)会把玩家一起顶走——这就是"敌人互推推挤玩家"的根源。
-                // （EnemyAI.ApplySeparation 已有此过滤，但这个 LateUpdate 硬分离没有，需在此补齐）
-                sep = FilterDeltaTowardPlayer(sep);
-
-                // 切向位移也可能把敌人碰撞体扫进玩家体积（橡皮式侧擦仍会顶玩家），
-                // 沿本帧位移方向球扫玩家，命中则把位移缩到玩家表面外。
-                sep = ClampDeltaToPlayerSurface(sep);
-
-                MoveEnemy(sep);
+                MoveEnemy(dir * dist * 0.5f);
                 nowContact = true;
                 contact = other;
                 lastEnemyDir = dir;
@@ -355,56 +314,6 @@ public class EnemyCollisionBlocker : MonoBehaviour
         }
 
         RaiseEnemyContact(nowContact, contact);
-    }
-
-    // ⭐ 敌人互推过滤：剔除分离位移里"指向玩家"的分量。
-    // 后排互推把前排顶向玩家，前排被顶进玩家体积后，物理解算会把玩家一起顶走。
-    // 只保留横向/远离玩家的分量，保证敌人互推永远不把任何一方推向玩家。
-    private Vector3 FilterDeltaTowardPlayer(Vector3 delta)
-    {
-        if (playerController == null || delta.sqrMagnitude < 1e-6f) return delta;
-
-        Vector3 toPlayer = playerController.transform.position - transform.position;
-        toPlayer.y = 0f;
-        float distSqr = toPlayer.sqrMagnitude;
-        if (distSqr < 0.0001f) return delta;
-
-        toPlayer /= Mathf.Sqrt(distSqr);
-        float inward = Vector3.Dot(delta, toPlayer);
-        if (inward > 0f)
-            delta -= toPlayer * inward;
-        return delta;
-    }
-
-    // ⭐ 球扫玩家表面：敌人互推/分离的位移即使横向切向，也绝不允许把敌人碰撞体
-    // 扫进玩家体积（橡皮式侧擦仍会顶玩家，甚至把玩家顶进贴墙的 X-Ray 墙里）。
-    // 沿本帧位移方向，用敌人包围球向玩家球扫，命中则把位移缩到恰好停在玩家表面外。
-    private Vector3 ClampDeltaToPlayerSurface(Vector3 delta)
-    {
-        if (playerController == null || !playerController.enabled) return delta;
-        if (myCollider == null || delta.sqrMagnitude < 1e-6f) return delta;
-
-        LayerMask playerLayerMask = 1 << playerController.gameObject.layer;
-        if (playerLayerMask == 0) return delta;
-
-        float moveLen = delta.magnitude;
-        Vector3 moveDir = delta.normalized;
-
-        // 敌人碰撞体近似成包围球（蛇长盒也能包住），从中心向前球扫
-        Vector3 from = myCollider.bounds.center;
-        float castR = Mathf.Max(myCollider.bounds.extents.magnitude, 0.2f);
-
-        if (Physics.SphereCast(from, castR, moveDir, out RaycastHit hit,
-                moveLen + castR + 0.1f, playerLayerMask))
-        {
-            float allow = Mathf.Max(hit.distance - castR, 0f);  // 表面距离玩家还有多远可走
-            if (allow < moveLen)
-            {
-                float scale = Mathf.Clamp01(Mathf.Max(allow - 0.05f, 0f) / moveLen);
-                delta *= scale;
-            }
-        }
-        return delta;
     }
 
     // ---------- 事件（上沿） ----------

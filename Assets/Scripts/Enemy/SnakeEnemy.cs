@@ -36,11 +36,10 @@ public class SnakeEnemy : EnemyAI
         {
             if (IsSerpentine)
             {
-                // 蛇（眼镜蛇式）：停距按"蛇头几何够到范围"折算，而不是 attackRange×0.9 的估算。
-                // 蛇身长短不一，0.9×attackRange 常大于蛇头(前伸+突刺)能到的最远距离，
-                // 蛇停在够不到玩家的位置 → 永远不进攻击态。用实际够距×0.8 停，
-                // 保证蛇一开局就能贴身追击并够到玩家咬到。
-                agent.stoppingDistance = Mathf.Max(1.2f, GetHeadReach() * 0.8f);
+                // 蛇（眼镜蛇式）：身体停远些，攻击靠蛇头突刺命中。
+                // 蛇头在根前方约半个身长，突刺+判定球还能再够 ~1.9m，
+                // 根停约 0.9×攻击范围时蛇头(前伸+突刺)恰好够到玩家。
+                agent.stoppingDistance = (enemyData != null ? enemyData.attackRange * 0.9f : 3.6f);
                 // 旋转交给蛇自己平滑控制（头先转），否则 agent 会把整个身体瞬转抽搐
                 agent.updateRotation = false;
 
@@ -85,13 +84,7 @@ public class SnakeEnemy : EnemyAI
                 Vector3? slot = GetFormationTarget();
                 if (slot.HasValue)
                 {
-                    // 蛇的占位点必须在蛇头够到范围内：蛇身长、基类占位环按 attackRange×0.9
-                    // 算出的半径常比蛇头够距还大，蛇停上去够不到玩家 → 干瞪眼不咬。
-                    // 占位点够不到就放弃占位，直接压向玩家贴身咬。
-                    if (IsSerpentine && !IsSlotWithinHeadReach(slot.Value))
-                        target = player.transform.position;
-                    else
-                        target = slot.Value;
+                    target = slot.Value;
                 }
                 else if (!IsSerpentine)
                 {
@@ -270,6 +263,7 @@ public class SnakeEnemy : EnemyAI
     {
         if (snakeBody == null) return true;
 
+        float bodyWorld = snakeBody.HeadForwardOffset * 2f;
         float playerR = 0.5f;
         Collider pc = cachedPlayerCollider;
         if (pc == null && player != null)
@@ -279,35 +273,13 @@ public class SnakeEnemy : EnemyAI
         }
         if (pc != null && pc.bounds.extents.x > 0f) playerR = pc.bounds.extents.x;
 
+        float reach = snakeBody.HeadForwardOffset
+                    + bodyWorld * snakeBody.headLungeRatio
+                    + headHitRadius + playerR + 0.15f;
+
         Vector3 a = transform.position; a.y = 0f;
         Vector3 b = target.transform.position; b.y = 0f;
-        return Vector3.Distance(a, b) <= GetHeadReach(playerR);
-    }
-
-    // 蛇头从蛇根算起的最大够到距离（世界单位）。
-    // 停距(OnStart)、攻击触发距离、命中判定共用同一口径，保证三者一致：
-    // 停距 < 够距 ≤ 触发距离，蛇停在够距内就一定能进入攻击态并咬到玩家。
-    private float GetHeadReach(float playerR = 0.5f)
-    {
-        // snakeBody 可能在 OnStart 时尚未赋值（CreateHeadHitbox 之后才有），就地查找
-        SnakeBodyAnimation sb = snakeBody != null ? snakeBody : GetComponentInChildren<SnakeBodyAnimation>(true);
-        if (sb == null) return (enemyData != null ? enemyData.attackRange : 3.6f);
-
-        float bodyWorld = sb.HeadForwardOffset * 2f;
-        return sb.HeadForwardOffset
-             + bodyWorld * sb.headLungeRatio
-             + headHitRadius + playerR + 0.15f;
-    }
-
-    // 环形占位点是否落在蛇头够到范围内（从玩家到占位点的水平距离 ≤ 够距）。
-    // 蛇头判定是从"蛇根→玩家"距离来的，蛇走到占位点后根就在占位点，
-    // 身长前伸的蛇头刚好向玩家方向拱出，所以够距判定用玩家到占位点。
-    private bool IsSlotWithinHeadReach(Vector3 slot)
-    {
-        if (player == null) return true;
-        Vector3 a = slot; a.y = 0f;
-        Vector3 b = player.transform.position; b.y = 0f;
-        return Vector3.Distance(a, b) <= GetHeadReach();
+        return Vector3.Distance(a, b) <= reach;
     }
 
     // 蛇的伤害判定交给蛇头判定球，不再使用“身体中心到玩家距离”的通用判定，避免身体误伤
@@ -335,17 +307,20 @@ public class SnakeEnemy : EnemyAI
         return base.TryPerformInRangeAttack();
     }
 
-    // 攻击触发距离以"蛇头几何够到范围"为准：距玩家 ≤ 够距才进入攻击态。
+    // 攻击触发距离以蛇头为基准：蛇头在身体前端（约身长一半的前方）。
     // 基类用根(agent)到玩家的距离判断，对长身体的蛇来说根停 4m 时蛇头已在 2m 外、够不着；
-    // 且若触发距离 > 够距，蛇会在够不到的位置停住干瞪眼，永远不攻。
-    // 用与停距同口径的够距做触发距离（不低于停距），保证蛇一停就能咬。
+    // 改成把触发距离减去蛇头前伸量，让根停得足够近、蛇头(前伸+突刺)恰好够到玩家，
+    // 同时不低于 stoppingDistance，避免永远停不到攻击位置。
     protected override float GetAttackActivationRange()
     {
         if (!IsSerpentine || snakeBody == null) return base.GetAttackActivationRange();
 
-        float reach = GetHeadReach();
-        float stopping = agent != null ? agent.stoppingDistance : reach;
-        return Mathf.Max(stopping, reach);
+        float baseRange = base.GetAttackActivationRange();
+        float headOffset = snakeBody.HeadForwardOffset;     // 蛇头在根前方多远（世界单位）
+        // 蛇头已经把"根到玩家"的有效距离前伸了半个身长，触发距离相应收紧半个身长，
+        // 但至少不小于 agent 停距（否则蛇永远进不了攻击态）。
+        return Mathf.Max(agent != null ? agent.stoppingDistance : baseRange,
+                         baseRange - headOffset);
     }
 
     protected override void OnDestroy()
