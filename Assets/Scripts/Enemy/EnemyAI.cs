@@ -84,6 +84,10 @@ public abstract class EnemyAI : MonoBehaviour
     public float facingAngleThreshold = 45f;
     public float turnSpeed = 240f;
 
+    [Header("攻击就位判定带")]
+    [Tooltip("敌人距离 > attackRange 但 ≤ attackRange×该倍数 时算\"半就位\"：先原地转向玩家并继续压近，而不是反复进出攻击圈\"贴脸却不出手\"。普通/简单模式敌群贴脸卡住时加大到 1.2~1.5")]
+    public float attackRangeSlackMultiplier = 1.2f;
+
     [Header("追击检测（普通模式）")]
     public float detectionRange = 30f;
     public float loseTargetRange = 45f;
@@ -505,6 +509,15 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
+        // ⭐ 半就位带：距离 > attackRange 但 ≤ attackRange×attackRangeSlackMultiplier 时，
+        // 不算"攻击圈外"（否则 separation 会把敌群在攻击边界反复推挤、贴脸却不出手），
+        // 但也不停死攻击——先原地转向玩家，再继续走上面的追击/压近流程，进入严格距离后才出手。
+        if (distance <= attackRange * attackRangeSlackMultiplier &&
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
+        {
+            RotateTowardsPlayer(Time.deltaTime);
+        }
+
         // ----- 根据模式选择追击范围 -----
         float detection, lose;
         if (useDirectChase)
@@ -565,8 +578,9 @@ HandleMovement();
             TryStallRecovery();
         }
 
-        // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
-        if (enableSeparation && distance > attackRange)
+        // 已进入攻击范围 / 半就位带内不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"、
+        // 或把"半就位"的敌人从攻击判定带里推回攻击圈外反复震荡
+        if (enableSeparation && distance > attackRange * attackRangeSlackMultiplier)
         {
             ApplySeparation();
         }

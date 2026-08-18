@@ -54,7 +54,7 @@ MonoBehaviour:
   hitSFX: {fileID: 0}
   attackSFX: {fileID: 8300000, guid: f9a89cee12f597148ba47268594d9d8d, type: 3}
   moveSFX: {fileID: 8300000, guid: 3b152308828987740b8225d43e746c4d, type: 3}
-  deathSFX: {fileID: 8300000, guid: 5be3d1a4a398a19498e18b8ff48c51b9, type: 3}
+  deathSFX: {fileID: 8300000, guid: 952fac87cd6fcb345b52ce734cdd3077, type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
   healthBarOffset: {x: 0, y: 3.5, z: 0}
@@ -72,6 +72,7 @@ MonoBehaviour:
   approachStopSpeed: 0
   facingAngleThreshold: 60
   turnSpeed: 240
+  attackRangeSlackMultiplier: 1.2
   detectionRange: 30
   loseTargetRange: 35
   infiniteDetectionRange: 30
