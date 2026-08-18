@@ -1164,16 +1164,15 @@ public class PlayerController : MonoBehaviour
     // 自动生成全屏径向渐晕红（中心透明、越靠边越红、柔和朦胧的受击效果）
     Image[] AutoCreateCornerImages()
     {
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            GameObject canvasGO = new GameObject("HitOverlayCanvas");
-            canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasGO.AddComponent<GraphicRaycaster>();
-            canvas.sortingOrder = 999;
-        }
+        // 专用顶层 Overlay Canvas（sortingOrder 最高）：受击红晕永远盖在所有 UI 之上。
+        // 不偷场景里的 Canvas——复用可能命中世界空间/血条 Canvas(渲染不到屏幕) 或嵌套
+        // 子 Canvas(rect 不全屏)，红晕都会看不见。自建一个根级 Canvas 最稳。
+        GameObject canvasGO = new GameObject("HitOverlayCanvas");
+        Canvas canvas = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasGO.AddComponent<GraphicRaycaster>();
+        canvas.sortingOrder = 999;
 
         // 生成径向渐晕纹理：中心透明，越往边缘越不透明
         int size = 256;
