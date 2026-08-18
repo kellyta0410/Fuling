@@ -48,7 +48,7 @@ PlayableDirector:
   m_InitialTime: 0
   m_SceneBindings:
   - key: {fileID: 2217012270102461116, guid: a66ad595b28fad746abfeb0cd4cc6d60, type: 2}
-    value: {fileID: 920520777187579428}
+    value: {fileID: 0}
   - key: {fileID: -685824265303654754, guid: a66ad595b28fad746abfeb0cd4cc6d60, type: 2}
     value: {fileID: 1521904939121054062}
   m_ExposedReferences:
@@ -146,7 +146,6 @@ MonoBehaviour:
   maxHealth: 100
   speed: 9
   attackMoveSpeedFactor: 0.5
-  skillMoveSpeedFactor: 0.35
   attackDamage: 5
   attackRange: 4
   attackCooldown: 0
@@ -162,15 +161,6 @@ MonoBehaviour:
   - {fileID: 8300000, guid: b2215bb7fba93ea48b0cf8d809ef6952, type: 3}
   skillSFX: {fileID: 8300000, guid: adc9435643ec51e43888c49a8f2e15a3, type: 3}
   hitSFX: {fileID: 0}
-  attackVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
-    type: 3}
-  skillVFXPrefab: {fileID: 3220761935283099954, guid: ed378b9775ab06c4c83bd577ff08d083,
-    type: 3}
-  slashGrowAmount: 0.45
-  slashGrowExponent: 1.5
-  slashSwingAngle: 70
-  slashSwingDirection: 0
-  slashForwardOffset: 0.9
   wallResolveEnabled: 1
   showGizmos: 1
   groundLayer:
@@ -212,7 +202,7 @@ Animator:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6337212771832704822}
   m_Enabled: 1
-  m_Avatar: {fileID: 9000000, guid: dba371b08a0ea3b4384930148ac3dbdf, type: 3}
+  m_Avatar: {fileID: 9000000, guid: d24a8a5d0faca7842b1233f5875dc907, type: 3}
   m_Controller: {fileID: 9100000, guid: 1b6573848a273b443bc990615b3faf2d, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
@@ -237,8 +227,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   animator: {fileID: 920520777187579428}
-  attack1Timeline: {fileID: 923604802660227356}
-  attack1TriggerTime: 0.4
+  attacks:
+  - stateName: Attack
+    timeline: {fileID: 923604802660227356}
 --- !u!1001 &545601042838557748
 PrefabInstance:
   m_ObjectHideFlags: 0
