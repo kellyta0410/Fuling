@@ -41,6 +41,8 @@ public class PlayerController : MonoBehaviour
     public AudioClip[] attackSFX;
     [Tooltip("技能攻击音效（单独一条）")]
     public AudioClip skillSFX;
+    [Tooltip("闪避/冲刺音效（每次闪避播放一次）")]
+    public AudioClip dashSFX;
     [Tooltip("玩家被敌人打中的受击音效")]
     public AudioClip hitSFX;
 
@@ -838,6 +840,12 @@ public class PlayerController : MonoBehaviour
         canDodge = false;
         dodgeCooldownTimer = 0f;
         dodgePushedEnemies.Clear();
+
+        // ⭐ 闪避绑闪避动画：直接 Play("Dash") 强制切到 Dash 状态（与普通攻击的 Play 方式一致，
+        // 不用 SetTrigger 避免 trigger 残留；Dash 状态出口用 exit-time 回落 Idle→Run）。
+        // Dash 状态 m_Speed 要按闪避时长调（配成 4≈把 1s 闪避动画压到 0.25s 内播完）。
+        if (animator != null) animator.Play("Dash", 0, 0f);
+        PlayDashSFX();
     }
 
     // ⭐ 闪避撞开敌人：以玩家为球心、闪避方向前段为探测范围，把范围内的非死亡敌人
@@ -1164,16 +1172,15 @@ public class PlayerController : MonoBehaviour
     // 自动生成全屏径向渐晕红（中心透明、越靠边越红、柔和朦胧的受击效果）
     Image[] AutoCreateCornerImages()
     {
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            GameObject canvasGO = new GameObject("HitOverlayCanvas");
-            canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasGO.AddComponent<GraphicRaycaster>();
-            canvas.sortingOrder = 999;
-        }
+        // 专用顶层 Overlay Canvas（sortingOrder 最高）：受击红晕永远盖在所有 UI 之上。
+        // 不偷场景里的 Canvas——复用可能命中世界空间/血条 Canvas(渲染不到屏幕) 或嵌套
+        // 子 Canvas(rect 不全屏)，红晕都会看不见。自建一个根级 Canvas 最稳。
+        GameObject canvasGO = new GameObject("HitOverlayCanvas");
+        Canvas canvas = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasGO.AddComponent<GraphicRaycaster>();
+        canvas.sortingOrder = 999;
 
         // 生成径向渐晕纹理：中心透明，越往边缘越不透明
         int size = 256;
@@ -1385,6 +1392,14 @@ public class PlayerController : MonoBehaviour
         if (hitSFX == null) return;
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlaySFX(hitSFX, transform.position);
+    }
+
+    // 闪避音效：Inspector 上 dashSFX 字段拖好，每次闪避播一次
+    void PlayDashSFX()
+    {
+        if (dashSFX == null) return;
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(dashSFX, transform.position);
     }
 
     public void AddKill()
