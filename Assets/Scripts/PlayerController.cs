@@ -41,8 +41,10 @@ public class PlayerController : MonoBehaviour
     public AudioClip[] attackSFX;
     [Tooltip("技能攻击音效（单独一条）")]
     public AudioClip skillSFX;
-    [Tooltip("玩家被敌人打中的受击音效")]
-    public AudioClip hitSFX;
+    [Tooltip("玩家被敌人打中的受击音效，每次随机取一个")]
+    public AudioClip[] hitSFX;
+    [Tooltip("闪避音效（闪避开始时播放一次）")]
+    public AudioClip dashSFX;
 
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
@@ -112,7 +114,7 @@ public class PlayerController : MonoBehaviour
     public float dodgeDistance = 8f;
     [Tooltip("闪避持续时间（秒，越短闪得越快）")]
     public float dodgeDuration = 0.25f;
-    [Tooltip("玩家身上的 DashEffect 子物体（挂在玩家下），仅在闪避期间激活，其余时间隐藏")]
+    [Tooltip("玩家身上的 DashEffect 子物体（GameObject，把玩家下的 DashEffect 拖进来）；闪避期间激活，其余时间隐藏。留空则自动按名字查找名为 DashEffect 的子物体")]
     public GameObject dashEffect;
 
     // ==================== 运行时数据 ====================
@@ -218,6 +220,8 @@ public class PlayerController : MonoBehaviour
         dataManager = GameDataManager.Instance;
 
         // ⭐ 闪避特效默认隐藏，只在闪避期间激活（即使场景里某处设置成了激活，也强制关掉）
+        // 同时兜底解析：字段没拖或 prefab 引用失效时，按名字自动找玩家身上的 DashEffect 子物体
+        ResolveDashEffect();
         if (dashEffect != null) dashEffect.SetActive(false);
 
         // 受击四角先设为透明（运行时总是重建，避免场景里残留的失效引用挡住红光）
@@ -847,7 +851,11 @@ public class PlayerController : MonoBehaviour
         dodgePushedEnemies.Clear();
 
         // ⭐ 激活闪避特效
+        ResolveDashEffect();
         if (dashEffect != null) dashEffect.SetActive(true);
+
+        // ⭐ 闪避音效
+        PlayDashSFX();
     }
 
     // ⭐ 闪避撞开敌人：以玩家为球心、闪避方向前段为探测范围，把范围内的非死亡敌人
@@ -894,6 +902,35 @@ public class PlayerController : MonoBehaviour
 
         // ⭐ 隐藏闪避特效
         if (dashEffect != null) dashEffect.SetActive(false);
+    }
+
+    // ⭐ 解析闪避特效引用：字段没拖或引用失效时，按名字递归找玩家身上的 DashEffect 子物体。
+    void ResolveDashEffect()
+    {
+        if (dashEffect != null) return;
+
+        Transform found = FindChildRecursive(transform, "DashEffect");
+        if (found != null)
+        {
+            dashEffect = found.gameObject;
+            Debug.Log("[闪避特效] 按名字自动找到子物体: DashEffect");
+        }
+        else
+        {
+            Debug.LogWarning("[闪避特效] 玩家身上找不到名为 DashEffect 的子物体，闪避特效不会显示。请把玩家下的 DashEffect 子物体拖到 PlayerController 的 dashEffect 槽。");
+        }
+    }
+
+    Transform FindChildRecursive(Transform root, string name)
+    {
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            if (child.name == name) return child;
+            Transform hit = FindChildRecursive(child, name);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     // 取消当前普通攻击：闪避触发时调用，避免攻击状态残留（仍锁位移/方向，闪避会覆盖 currentSpeed）
@@ -1396,9 +1433,17 @@ public class PlayerController : MonoBehaviour
 
     void PlayPlayerHitSFX()
     {
-        if (hitSFX == null) return;
+        if (hitSFX == null || hitSFX.Length == 0) return;
+        AudioClip clip = hitSFX[Random.Range(0, hitSFX.Length)];
         if (AudioManager.Instance != null)
-            AudioManager.Instance.PlaySFX(hitSFX, transform.position);
+            AudioManager.Instance.PlaySFX(clip, transform.position);
+    }
+
+    void PlayDashSFX()
+    {
+        if (dashSFX == null) return;
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(dashSFX, transform.position);
     }
 
     public void AddKill()
