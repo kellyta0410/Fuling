@@ -4,10 +4,23 @@ using UnityEngine.SceneManagement;
 
 // 全局 BGM 管理器 + 音量读取 + SFX 播放池。
 // SFX(攻击/技能/金币/buff) 的 Clip 放在各自脚本/Prefab 上，需要播放时调用 PlaySFX（走复用池，无 GC）。
-// 注意：本单例不做懒创建（避免空壳假实例顶替场景里配置好的真实例）。
 // 场景里必须放一个挂本脚本的对象（建议 MainMenu），它 DontDestroyOnLoad 跨场景常驻。
+// 兜底：单独直接播放任意场景（如 Easy / Medium / Infinite 调试）时，若场景里没有 AudioManager，
+// 启动时会自动创建一个运行时实例（BGM 从 Resources 读取），SFX 照常工作；与场景真实实例并存时
+// 由 Awake 的单例守卫自动去重，不会冲突。
 public class AudioManager : MonoBehaviour
 {
+    // 任何场景单独播放（测试）时，场景没有配置好的 AudioManager 就自动补一个运行时实例。
+    // AfterSceneLoad 保证在场景内所有对象的 Awake 之后、Start 之前执行：
+    // 若场景里已有真实实例（Awake 已注册 Instance），这里不会重复创建。
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void AutoCreateIfMissing()
+    {
+        if (Instance != null) return;
+        GameObject go = new GameObject("AudioManager (Runtime)");
+        go.AddComponent<AudioManager>();
+    }
+
     public static AudioManager Instance { get; private set; }
 
     [Header("BGM")]
@@ -18,7 +31,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("SFX 播放池")]
     [Tooltip("预创建多少个 AudioSource 循环复用，避免每次拾取/播放都 new 临时对象")]
-    public int sfxPoolSize = 8;
+    public int sfxPoolSize = 16;
     [Tooltip("音效是否 2D（=1 完全 2D，不受距离影响；=0 完全 3D 带距离衰减）")]
     [Range(0f, 1f)]
     public float sfxSpatialBlend = 1f;
@@ -41,7 +54,7 @@ public class AudioManager : MonoBehaviour
     // 主菜单系场景（共用一个 BGM）
     private static readonly string[] MenuScenes = { "MainMenu", "Loading", "Selection", "DifficultySelection" };
     // 游戏内场景（共用另一个 BGM），可按需要自行追加
-    private static readonly string[] GameplayScenes = { "Easy", "Medium" };
+    private static readonly string[] GameplayScenes = { "Easy", "Medium", "Infinite" };
 
     void Awake()
     {
@@ -68,6 +81,11 @@ public class AudioManager : MonoBehaviour
 
         // 统一走 Mixer：BGM → Music 组，SFX 池 → Sfx 组
         SetupOutputGroups();
+
+        // 兜底：场景没配 Clip（例如运行时自建的实例）时从 Resources 读，
+        // 保证任意场景单独播放（测试）也能出 BGM。已有场景配置的不受影响。
+        if (menuBGM == null) menuBGM = Resources.Load<AudioClip>("Audio/BGM MAIN MENU");
+        if (gameplayBGM == null) gameplayBGM = Resources.Load<AudioClip>("Audio/BGM GAMEPLAY");
     }
 
     void OnEnable()

@@ -39,7 +39,7 @@ public class UpgradeConfigSO : ScriptableObject
     // 例如：L2=25, L3=55, L4=95, L5=145, L6=205（costBase=25, costIncrease=30, costAcceleration=10）
     public int GetLevelCost(int level)
     {
-        if (level <= 1 || level >= maxLevel) return 0; // 无上级(满级)免费
+        if (level <= 1 || level > maxLevel) return 0; // 起始级/超出满级(无上级)免费
         int steps = level - 2;
         int cost = costBase;
         int stepInc = costIncrease;

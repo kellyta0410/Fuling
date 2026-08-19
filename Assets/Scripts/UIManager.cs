@@ -35,6 +35,10 @@ public class UIManager : MonoBehaviour
     [Tooltip("拖动 SFX 音量滑块松手后播放一次确认音（不填会自动生成一个短促提示音）")]
     public AudioClip sfxSliderConfirmClip;
 
+    [Header("按钮点击音")]
+    [Tooltip("按钮点击音（不填时回退用 sfxSliderConfirmClip，再没有就生成短提示音）")]
+    public AudioClip clickSFX;
+
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
@@ -280,7 +284,6 @@ public class UIManager : MonoBehaviour
             }
         }
     }
-
     public void ClosePauseMenu()
     {
         if (pausemenu != null)
@@ -293,6 +296,15 @@ public class UIManager : MonoBehaviour
                 player.SetJoystickEnabled(true);
             }
         }
+    }
+
+    // 按钮点击音：走 AudioManager 播放池（与其它 SFX 同一音量体系）。
+    // Easy/Medium 的按钮已在场景里通过 AudioSource.Play 接线点击音，这里只用于
+    // 没有场景级 AudioSource 的场景（如 Infinite），避免重复播放。
+    public void PlayClickSFX()
+    {
+        AudioClip clip = clickSFX != null ? clickSFX : GetConfirmClip();
+        AudioManager.Instance?.PlaySFX(clip);
     }
 
     public void OpenSettings()
