@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
 using UnityEngine;
@@ -36,6 +37,18 @@ public static class RewardVideoAdService
     private static object cachedAd;
     private static Action<bool> pendingCallback;
 
+    // 广告日志：同时打到 Unity 日志和文件（真机无 Device Logs 时也能看）
+    static void AdLog(string msg)
+    {
+        UnityEngine.Debug.Log(msg);
+        try
+        {
+            string path = Path.Combine(Application.persistentDataPath, "fuling_ad_log.txt");
+            File.AppendAllText(path, DateTime.Now.ToString("HH:mm:ss.fff ") + msg + Environment.NewLine);
+        }
+        catch { }
+    }
+
     /// <summary>
     /// 展示激励视频。onResult(true) = 完整看完，可发奖励；onResult(false) = 中途关闭/加载失败。
     /// 平台路由：
@@ -56,7 +69,7 @@ public static class RewardVideoAdService
             }
             catch (Exception e)
             {
-                Debug.LogError($"[广告] 微信激励视频调用失败：{e.Message}");
+                AdLog($"[广告] 微信激励视频调用失败：{e.Message}");
                 SafeInvoke(false);
             }
             return;
@@ -68,7 +81,7 @@ public static class RewardVideoAdService
 #endif
 
         // ⭐ 兜底：没有可用真实广告 provider → 直接发放奖励（免费复活/测试）
-        Debug.Log("[广告] 无真实广告 provider，直接发放奖励（免费复活）");
+        AdLog("[广告] 无真实广告 provider，直接发放奖励（免费复活）");
         SafeInvoke(true);
     }
 
@@ -85,7 +98,7 @@ public static class RewardVideoAdService
         {
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null)
             {
-                Debug.Log("[广告] 未检测到 AdMob（GoogleMobileAds.Api），跳过");
+                AdLog("[广告] 未检测到 AdMob（GoogleMobileAds.Api），跳过");
                 return false;
             }
 
@@ -100,7 +113,7 @@ public static class RewardVideoAdService
             object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
             if (request == null)
             {
-                Debug.LogWarning("[广告] AdMob AdRequest 创建失败，免费发放");
+                AdLog("[广告] AdMob AdRequest 创建失败，免费发放");
                 SafeInvoke(true);
                 return true;
             }
@@ -108,7 +121,7 @@ public static class RewardVideoAdService
             MethodInfo load = FindStaticMethod("GoogleMobileAds.Api.RewardedAd", "Load", 3);
             if (load == null)
             {
-                Debug.LogWarning("[广告] AdMob RewardedAd.Load 不存在，免费发放");
+                AdLog("[广告] AdMob RewardedAd.Load 不存在，免费发放");
                 SafeInvoke(true);
                 return true;
             }
@@ -116,18 +129,18 @@ public static class RewardVideoAdService
             Delegate loadCb = BuildDelegate2(load.GetParameters()[2].ParameterType, (Action<object, object>)HandleAdMobLoad);
             if (loadCb == null)
             {
-                Debug.LogWarning("[广告] AdMob Load 回调构造失败，免费发放");
+                AdLog("[广告] AdMob Load 回调构造失败，免费发放");
                 SafeInvoke(true);
                 return true;
             }
 
             load.Invoke(null, new object[] { AdMobUnitId, request, loadCb });
-            Debug.Log($"[广告] AdMob 激励视频已请求加载（unitId={AdMobUnitId}）");
+            AdLog($"[广告] AdMob 激励视频已请求加载（unitId={AdMobUnitId}）");
             return true;
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"[广告] AdMob 调用异常，免费发放：{e.Message}");
+            AdLog($"[广告] AdMob 调用异常，免费发放：{e.Message}");
             SafeInvoke(true);
             return true;
         }
@@ -156,7 +169,7 @@ public static class RewardVideoAdService
         if (adObj == null || errorObj != null)
         {
             string msg = DescribeAdError(errorObj);
-            Debug.LogWarning($"[广告] AdMob 加载失败：{msg} → 免费发放（测试/无填充）");
+            AdLog($"[广告] AdMob 加载失败：{msg} → 免费发放（测试/无填充）");
             SafeInvoke(true);
             return;
         }
@@ -165,7 +178,7 @@ public static class RewardVideoAdService
         MethodInfo show = adType.GetMethod("Show");
         if (show == null)
         {
-            Debug.LogWarning("[广告] AdMob Show 不存在，免费发放");
+            AdLog("[广告] AdMob Show 不存在，免费发放");
             SafeInvoke(true);
             return;
         }
@@ -179,7 +192,7 @@ public static class RewardVideoAdService
     // Show 回调触发 = 用户看完整段再说（v11 在 Android 主线程回调）
     static void HandleAdMobReward(object rewardObj)
     {
-        Debug.Log("[广告] AdMob 激励视频完整看完，发放奖励");
+        AdLog("[广告] AdMob 激励视频完整看完，发放奖励");
         SafeInvoke(true);
     }
 
@@ -224,7 +237,7 @@ public static class RewardVideoAdService
         // 4. 先 Load 再 Show（官方推荐：避免 show() 在未拉取到时 reject）
         MethodInfo load = adType.GetMethod("Load");
         try { if (load != null) load.Invoke(ad, null); }
-        catch (Exception e) { Debug.LogWarning($"[广告] Load 失败：{e.Message}"); }
+        catch (Exception e) { AdLog($"[广告] Load 失败：{e.Message}"); }
 
         MethodInfo show = adType.GetMethod("Show");
         if (show == null) show = adType.GetMethod("ShowAsync");
@@ -233,7 +246,7 @@ public static class RewardVideoAdService
         try { show.Invoke(ad, null); }
         catch (Exception e)
         {
-            Debug.LogWarning($"[广告] Show 失败：{e.Message}");
+            AdLog($"[广告] Show 失败：{e.Message}");
             SafeInvoke(false);
         }
     }
@@ -255,14 +268,14 @@ public static class RewardVideoAdService
             watched = v is bool b && b;
         }
 
-        Debug.Log($"[广告] 激励视频关闭，isEnded={watched}");
+        AdLog($"[广告] 激励视频关闭，isEnded={watched}");
         SafeInvoke(watched);
     }
 
     static void HandleOnError(object err)
     {
         if (pendingCallback == null) return;
-        Debug.LogWarning($"[广告] 激励视频错误：{err}");
+        AdLog($"[广告] 激励视频错误：{err}");
         SafeInvoke(false);
     }
 
@@ -289,7 +302,7 @@ public static class RewardVideoAdService
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"[广告] 解析 WX 类型失败：{e.Message}");
+            AdLog($"[广告] 解析 WX 类型失败：{e.Message}");
         }
         return null;
     }
@@ -330,7 +343,7 @@ public static class RewardVideoAdService
         Type t = ResolveType(typeName);
         if (t == null) return null;
         try { return Activator.CreateInstance(t); }
-        catch (Exception e) { Debug.LogWarning($"[广告] 创建 {typeName} 失败：{e.Message}"); return null; }
+        catch (Exception e) { AdLog($"[广告] 创建 {typeName} 失败：{e.Message}"); return null; }
     }
 
     static void SetField(Type type, object obj, string name, object value)

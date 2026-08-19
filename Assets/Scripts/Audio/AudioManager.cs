@@ -60,7 +60,11 @@ public class AudioManager : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            // 只销毁重复的 AudioManager 组件，保留 GameObject 及其上的点击音 AudioSource：
+            // 返回主菜单时场景会再放一个挂本脚本 + 点击音 AudioSource 的物体，
+            // 如果连 GameObject 一起销毁，按钮上 UnityEvent 引用的那个 AudioSource 就变成空，
+            // 点击音会消失。保留外壳即可让按钮点击音继续可用。
+            Destroy(this);
             return;
         }
         Instance = this;
