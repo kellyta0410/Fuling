@@ -109,6 +109,7 @@ public static class RewardVideoAdService
                 Delegate initCb = BuildDelegate(init.GetParameters()[0].ParameterType, (Action<object>)(_ => { }));
                 init.Invoke(null, new object[] { initCb });
             }
+            AdLog("[广告] step1: MobileAds.Initialize 完成");
 
             object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
             if (request == null)
@@ -117,6 +118,7 @@ public static class RewardVideoAdService
                 SafeInvoke(true);
                 return true;
             }
+            AdLog("[广告] step2: AdRequest 创建完成");
 
             MethodInfo load = FindStaticMethod("GoogleMobileAds.Api.RewardedAd", "Load", 3);
             if (load == null)
@@ -125,6 +127,7 @@ public static class RewardVideoAdService
                 SafeInvoke(true);
                 return true;
             }
+            AdLog("[广告] step3: RewardedAd.Load 找到");
 
             Delegate loadCb = BuildDelegate2(load.GetParameters()[2].ParameterType, (Action<object, object>)HandleAdMobLoad);
             if (loadCb == null)
@@ -133,14 +136,15 @@ public static class RewardVideoAdService
                 SafeInvoke(true);
                 return true;
             }
+            AdLog("[广告] step4: Load 回调构造完成");
 
             load.Invoke(null, new object[] { AdMobUnitId, request, loadCb });
-            AdLog($"[广告] AdMob 激励视频已请求加载（unitId={AdMobUnitId}）");
+            AdLog($"[广告] step5: RewardedAd.Load 已调用，无异常（unitId={AdMobUnitId}）");
             return true;
         }
         catch (Exception e)
         {
-            AdLog($"[广告] AdMob 调用异常，免费发放：{e.Message}");
+            AdLog($"[广告] AdMob 调用异常，免费发放：{e}");
             SafeInvoke(true);
             return true;
         }

@@ -52,7 +52,7 @@ public class AudioManager : MonoBehaviour
     private float lastMixerSFXDB = float.PositiveInfinity;
 
     // 主菜单系场景（共用一个 BGM）
-    private static readonly string[] MenuScenes = { "MainMenu", "Loading", "Selection", "DifficultySelection" };
+    private static readonly string[] MenuScenes = { "MainMenu", "Loading", "Selection", "DifficultySelection", "Story" };
     // 游戏内场景（共用另一个 BGM），可按需要自行追加
     private static readonly string[] GameplayScenes = { "Easy", "Medium", "Infinite" };
 

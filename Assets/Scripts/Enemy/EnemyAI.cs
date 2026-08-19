@@ -636,7 +636,11 @@ HandleMovement();
         if (!enableFormation || player == null) return null;
         if (enemyLayerMask == 0) enemyLayerMask = LayerMask.GetMask("Enemy");
 
-        float attackRange = enemyData != null ? enemyData.attackRange : 1.5f;
+        // ⭐ 环半径按"实际攻击生效距离"折算：蛇等长身体敌人的 attackRange(4m) 只是根到玩家的
+        // 原始人为设定，真实够到距离由 GetAttackActivationRange(蛇=蛇头可达范围) 决定。
+        // 否则蛇会绕 3.6m 大圈往返占位，而攻击生效只有 2.17m → 停在大圈上永远不咬，
+        // 只有玩家走近(≈2.2m)被"推"到才出手。
+        float attackRange = GetAttackActivationRange();
         float ringR = Mathf.Max(formationRingPadding, attackRange * 0.9f);
         if (ringR <= 0f) return null;
 

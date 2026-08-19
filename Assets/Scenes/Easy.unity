@@ -11662,6 +11662,16 @@ PrefabInstance:
       propertyPath: joystickHandle
       value: 
       objectReference: {fileID: 736320569}
+    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: skillDamageDelay
+      value: 0.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 5666960912331255701, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
+        type: 3}
+      propertyPath: attackDamageDelay
+      value: 0.3
+      objectReference: {fileID: 0}
     - target: {fileID: 6337212771832704822, guid: ea7f7943ae50c934b9d17d9b9a5c48ef,
         type: 3}
       propertyPath: m_Name
@@ -13933,11 +13943,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   buffPool:
   - buffData: {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
-    weight: 4
+    weight: 1
   - buffData: {fileID: 11400000, guid: b3c100088aec0a9448b1bd543780eae5, type: 2}
-    weight: 3
+    weight: 1
   - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
-    weight: 3
+    weight: 1
   buffKillInterval: 3
   defaultBuffSFX: {fileID: 8300000, guid: 1e511d6671ea4134399acdc4c54f5319, type: 3}
   player: {fileID: 2025463718}
@@ -16356,6 +16366,7 @@ MonoBehaviour:
   sfxSlider: {fileID: 8643746178245777608}
   sfxSliderConfirmClip: {fileID: 8300000, guid: cca79893167967c4fb36f0f31eaee021,
     type: 3}
+  clickSFX: {fileID: 0}
   player: {fileID: 2025463719}
   enemySpawner: {fileID: 6270854919426408856}
   infiniteSpawner: {fileID: 0}
