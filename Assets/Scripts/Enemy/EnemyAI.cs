@@ -84,6 +84,10 @@ public abstract class EnemyAI : MonoBehaviour
     public float facingAngleThreshold = 45f;
     public float turnSpeed = 240f;
 
+    [Header("攻击就位判定带")]
+    [Tooltip("敌人距离 > attackRange 但 ≤ attackRange×该倍数 时算\"半就位\"：先原地转向玩家并继续压近，而不是反复进出攻击圈\"贴脸却不出手\"。普通/简单模式敌群贴脸卡住时加大到 1.2~1.5")]
+    public float attackRangeSlackMultiplier = 1.2f;
+
     [Header("追击检测（普通模式）")]
     public float detectionRange = 30f;
     public float loseTargetRange = 45f;
@@ -505,6 +509,15 @@ public abstract class EnemyAI : MonoBehaviour
             return;
         }
 
+        // ⭐ 半就位带：距离 > attackRange 但 ≤ attackRange×attackRangeSlackMultiplier 时，
+        // 不算"攻击圈外"（否则 separation 会把敌群在攻击边界反复推挤、贴脸却不出手），
+        // 但也不停死攻击——先原地转向玩家，再继续走上面的追击/压近流程，进入严格距离后才出手。
+        if (distance <= attackRange * attackRangeSlackMultiplier &&
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
+        {
+            RotateTowardsPlayer(Time.deltaTime);
+        }
+
         // ----- 根据模式选择追击范围 -----
         float detection, lose;
         if (useDirectChase)
@@ -565,8 +578,9 @@ HandleMovement();
             TryStallRecovery();
         }
 
-        // 已进入攻击范围（就位/攻击中）不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"
-        if (enableSeparation && distance > attackRange)
+        // 已进入攻击范围 / 半就位带内不再施加分离位移，避免后排把前排往玩家方向顶出"推一下"、
+        // 或把"半就位"的敌人从攻击判定带里推回攻击圈外反复震荡
+        if (enableSeparation && distance > attackRange * attackRangeSlackMultiplier)
         {
             ApplySeparation();
         }
@@ -1202,6 +1216,27 @@ Vector3 center = player.transform.position;
         agent.SetDestination(fallbackTarget);
     }
 
+    // ⭐ 半就位带压近目标点：当本敌人在"攻击就位判定带"内（距离 > attackRange 但 ≤ attackRange×slack）时，
+    // 把追击目的地从"玩家脚下"收拢到"距玩家 attackRange×0.95"的站位点。
+    // 目的：敌人仍能走进严格攻击范围出手（A/C 的收益不丢），但 NavMeshAgent 不再一路把根/身体
+    // 怼进玩家体积 —— 否则敌群贴脸时重复穿透玩家胶囊、被 EnemyCollisionBlocker 每帧推出，
+    // 表现就是"敌人一直推动玩家"。
+    // 带外（远追/已就位）直接返回 fallback，不影响绕墙、环形占位与排队。
+    protected Vector3 GetStandoffTarget(Vector3 fallback)
+    {
+        if (player == null) return fallback;
+        float ar = GetAttackActivationRange();
+        float dist = Vector3.Distance(transform.position, player.transform.position);
+        if (dist <= ar * attackRangeSlackMultiplier && dist > ar * 0.95f && dist > 0.0001f)
+        {
+            Vector3 away = transform.position - player.transform.position;
+            away.y = 0f;
+            if (away.sqrMagnitude > 0.0001f)
+                return player.transform.position + away.normalized * (ar * 0.95f);
+        }
+        return fallback;
+    }
+
     // ⭐ 在被外部强制位移(穿墙兜底 Warp 等)清掉路径后，恢复追击：
     // Warp 会设 agent.enabled=false? 不——Warp 只清路径(hasPath→False、destination 复位)。
     // 这里立即：保持 enabled、isStopped=false、重新 SetDestination 回原追击目标/玩家。
@@ -1561,7 +1596,7 @@ Vector3 center = player.transform.position;
             NotePathMutation("ResumeChaseAfterStagger → isStopped=false+ResetPath+SetDest");
             agent.isStopped = false;
             agent.ResetPath();
-            SetChaseDestination(player.transform.position);
+            SetChaseDestination(GetStandoffTarget(player.transform.position));
             // ⭐ 硬直/击退结束恢复移动：进入 stuck 宽限，避免刚恢复 velocity≈0 被误判卡住
             stuckGraceTimer = stuckGraceDuration;
         }

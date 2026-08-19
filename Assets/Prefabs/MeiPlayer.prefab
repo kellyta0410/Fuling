@@ -225,7 +225,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   healEffectPrefab: {fileID: 2260003640914203436, guid: 4fd8b863a354c4249aaa2527861dfb27,
     type: 3}
+  attackEffectPrefab: {fileID: 4309415449080115466, guid: e079a9d563b4c724daaf5f7ea86dcc1a,
+    type: 3}
+  speedEffectPrefab: {fileID: 2836988944926464193, guid: baf99939058e38b4392524f620a5f9d3,
+    type: 3}
   healEffectLifetime: 2
+  attackEffectLifetime: 2
+  speedEffectLifetime: 2
 --- !u!143 &7594280383301513217
 CharacterController:
   m_ObjectHideFlags: 0

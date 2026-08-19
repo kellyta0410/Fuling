@@ -6,8 +6,12 @@ public class BuffHandler : MonoBehaviour
     [Header("buff 特效")]
     [Tooltip("拾取任意 buff 时，在玩家脚下生成的一次性光柱特效预制体（如 HealEffect，颜色按 buff 类型在运行时设置）")]
     public GameObject healEffectPrefab;
+    public GameObject attackEffectPrefab;
+    public GameObject speedEffectPrefab;
     [Tooltip("特效存在时间（秒），结束后自动销毁")]
     public float healEffectLifetime = 2f;
+    public float attackEffectLifetime = 2f;
+    public float speedEffectLifetime = 2f;
 
     private Dictionary<BuffType, Buff> activeBuffs = new Dictionary<BuffType, Buff>();
     private PlayerController player;
@@ -36,8 +40,9 @@ public class BuffHandler : MonoBehaviour
         // ===== 持续性 Buff（SpeedUp / PowerUp） =====
         if (activeBuffs.ContainsKey(data.buffType))
         {
-            // 若已存在，刷新持续时间（可扩展叠加逻辑）
+            // 若已存在，刷新持续时间（可扩展叠加逻辑）；已生效的持续buff重拾也要重新播放光柱特效
             activeBuffs[data.buffType].Refresh(data);
+            SpawnBuffEffect(data.buffType);
         }
         else
         {
@@ -101,22 +106,34 @@ public class BuffHandler : MonoBehaviour
     // ---------- 任意 buff 生效时在玩家脚下生成一次光柱（颜色按 buff 类型） ----------
     public void SpawnBuffEffect(BuffType type)
     {
-        if (healEffectPrefab == null || player == null) return;
+        if (player == null) return;
+
+        GameObject prefab = null;
+        float lifetime = 0f;
+
+        switch (type)
+        {
+            case BuffType.Heal:
+                prefab = healEffectPrefab;
+                lifetime = healEffectLifetime;
+                break;
+            case BuffType.PowerUp:
+                prefab = attackEffectPrefab;
+                lifetime = attackEffectLifetime;
+                break;
+            case BuffType.SpeedUp:
+                prefab = speedEffectPrefab;
+                lifetime = speedEffectLifetime;
+                break;
+        }
+
+        if (prefab == null) return;
 
         Transform parent = player.transform;
-        GameObject effect = Instantiate(healEffectPrefab, parent.position, Quaternion.identity, parent);
+        GameObject effect = Instantiate(prefab, parent.position, Quaternion.identity, parent);
 
-        // 特效本体放到玩家脚下（地板位置），光柱从地面往上冲
-        //effect.transform.localPosition = Vector3.zero;
-
-        //HealEffectBuilder builder = effect.GetComponent<HealEffectBuilder>();
-        //if (builder != null)
-        //{
-            //builder.Init(ParticleFXHelper.GetBuffColor(type));
-        //}
-
-        if (healEffectLifetime > 0f)
-            Destroy(effect, healEffectLifetime);
+        if (lifetime > 0f)
+            Destroy(effect, lifetime);
     }
 
     // ---------- 移除Buff ----------
@@ -200,7 +217,7 @@ public class Buff
                 Debug.LogWarning($"未知持续Buff类型：{Data.buffType}");
                 break;
         }
-       // handler.SpawnBuffEffect(Data.buffType); // 持续buff也播对应颜色的光柱
+        handler.SpawnBuffEffect(Data.buffType); // 持续buff也播对应颜色的光柱
     }
 
     public void OnRemove()

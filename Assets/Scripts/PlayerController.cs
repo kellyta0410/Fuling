@@ -688,10 +688,12 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        // 起手先面对玩家输入方向（若有输入），否则保持当前朝向；攻击中仍可转向。
+        // 起手面向玩家输入方向；无输入时保持当前朝向（朝向完全交给玩家操控）
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
+        {
             transform.rotation = Quaternion.LookRotation(inputDir);
+        }
 
         string stateName = attackStateNames[comboIndex];
         animator.ResetTrigger("Action");
