@@ -6,6 +6,9 @@ using System.Collections;
 
 public class SceneSelectionManager : MonoBehaviour
 {
+    // ⭐ 按钮点击音播放时长：切场景前等这么久，让 AudioSource.Play 播完
+    private const float buttonClickDelay = 0.2f;
+
     [Header("===== 数据管理 =====")]
     public GameDataManager gameDataManager;
 
@@ -429,7 +432,14 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void GoToMainMenu()
     {
-        SceneManager.LoadScene("MainMenu");
+        StartCoroutine(LoadSceneAfterButtonClick("MainMenu"));
+    }
+
+    // ⭐ 等 0.2s 让按钮点击音放完再切场景
+    IEnumerator LoadSceneAfterButtonClick(string sceneName)
+    {
+        yield return new WaitForSecondsRealtime(buttonClickDelay);
+        SceneManager.LoadScene(sceneName);
     }
 
     // ==================== 难度选择 ====================
@@ -503,8 +513,9 @@ public class SceneSelectionManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(difficulty.sceneName))
         {
-            // 先进 Loading 场景，把目标关卡场景异步加载完再切换（避免切场景卡顿/白屏）
-            SceneManager.LoadScene("Loading");
+            // ⭐ 先进 Loading 场景，把目标关卡场景异步加载完再切换（避免切场景卡顿/白屏）
+            // 先等 0.2s 让按钮点击音放完再切，否则一进 Loading 点击音被掐断
+            StartCoroutine(LoadSceneAfterButtonClick("Loading"));
         }
         else
         {

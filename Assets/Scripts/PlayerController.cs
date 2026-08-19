@@ -38,7 +38,7 @@ public class PlayerController : MonoBehaviour
     public float skillDamageDelay = 0.5f;
     [Header("攻击音效（Clip 放这里，音量读 SettingsManager）")]
     [Tooltip("普通攻击音效，每次攻击随机取一个播放")]
-    public AudioClip[] attackSFX;
+    public AudioClip attackSFX;
     [Tooltip("技能攻击音效（单独一条）")]
     public AudioClip skillSFX;
     [Tooltip("玩家被敌人打中的受击音效，每次随机取一个")]
@@ -719,7 +719,7 @@ public class PlayerController : MonoBehaviour
         animator.Play(stateName, 0, 0f);
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
-        PlayRandomAttackSFX();
+        PlayAttackSFX();
         StartCoroutine(DelayedDamage());
     }
 
@@ -1448,12 +1448,11 @@ public class PlayerController : MonoBehaviour
 
     // ==================== 玩家音效（Clip 在 Inspector 上配，走 AudioManager 播放池） ====================
 
-    void PlayRandomAttackSFX()
+    void PlayAttackSFX()
     {
-        if (attackSFX == null || attackSFX.Length == 0) return;
-        AudioClip clip = attackSFX[Random.Range(0, attackSFX.Length)];
+        if (attackSFX == null) return;
         if (AudioManager.Instance != null)
-            AudioManager.Instance.PlaySFX(clip, transform.position);
+            AudioManager.Instance.PlaySFX(attackSFX, transform.position);
     }
 
     void PlaySkillSFX()

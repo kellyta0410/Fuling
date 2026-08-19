@@ -10,6 +10,8 @@ public class MainMenuManager : MonoBehaviour
     public GameObject mainMenuPanel;
     public GameObject settingsPanel;
     public GameObject creditsPanel;
+    [Tooltip("主菜单的'剧情'按钮：新玩家看完剧情后才显示/解锁（没填则不处理）")]
+    public GameObject storyButton;
 
     [Header("设置 - 音量控制")]
     public Slider musicSlider;
@@ -25,6 +27,10 @@ public class MainMenuManager : MonoBehaviour
 
     [Header("场景名称")]
     public string difficultySelectionScene = "DifficultySelection";
+    public string storySceneName = "Story";
+
+    // ⭐ 按钮点击音大概多长：切场景 / 退出前先等这么久，让 AudioSource.Play 播完再动
+    private const float buttonClickDelay = 0.2f;
 
     private void Start()
     {
@@ -36,6 +42,13 @@ public class MainMenuManager : MonoBehaviour
 
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
+
+        // ⭐ 剧情按钮：看过剧情（StoryFinished==1）才显示；新玩家隐藏，看完剧情解锁
+        if (storyButton != null)
+        {
+            bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
+            storyButton.SetActive(storyDone);
+        }
 
         // 加载音量设置
         LoadSettings();
@@ -141,8 +154,31 @@ public class MainMenuManager : MonoBehaviour
 
     public void PlayGame()
     {
-        Debug.Log("开始游戏 → 跳转到难度选择");
-        SceneManager.LoadScene(difficultySelectionScene);
+        // ⭐ 老玩家（看过剧情）直接去选关；新玩家先看剧情，剧情里点"继续"再去选关
+        bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
+        if (storyDone)
+        {
+            Debug.Log("开始游戏 → 跳转到选关");
+            StartCoroutine(LoadSceneAfterButtonClick(difficultySelectionScene));
+        }
+        else
+        {
+            Debug.Log("开始游戏 → 新玩家先看剧情");
+            StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
+        }
+    }
+
+    // ⭐ 主菜单"剧情"按钮：随时可以重看剧情（仅看完剧情后可见）
+    public void StoryButton()
+    {
+        StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
+    }
+
+    // ⭐ 等 0.2s 让按钮点击音放完再切场景，否则 AudioSource.Play 一启动就被场景卸载掐断
+    IEnumerator LoadSceneAfterButtonClick(string sceneName)
+    {
+        yield return new WaitForSecondsRealtime(buttonClickDelay);
+        SceneManager.LoadScene(sceneName);
     }
 
     public void OpenSettings()
@@ -175,6 +211,13 @@ public class MainMenuManager : MonoBehaviour
     public void QuitGame()
     {
         Debug.Log("退出游戏");
+        StartCoroutine(QuitAfterButtonClick());
+    }
+
+    // ⭐ 等 0.2s 让按钮点击音放完再退出，否则点完立刻退听不到声音
+    IEnumerator QuitAfterButtonClick()
+    {
+        yield return new WaitForSecondsRealtime(buttonClickDelay);
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else

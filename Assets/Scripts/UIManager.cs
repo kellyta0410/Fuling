@@ -6,6 +6,9 @@ using TMPro;
 
 public class UIManager : MonoBehaviour
 {
+    // ⭐ 按钮点击音播放时长：切场景前等这么久，让 AudioSource.Play 播完
+    private const float buttonClickDelay = 0.2f;
+
     [Header("UI 引用")]
     public Slider healthSlider;
     public GameObject gameOverPanel;
@@ -452,6 +455,13 @@ public class UIManager : MonoBehaviour
 
     public void RestartGame()
     {
+        StartCoroutine(ReloadSceneAfterButtonClick());
+    }
+
+    // ⭐ 等 0.2s 让按钮点击音放完再重开场景
+    IEnumerator ReloadSceneAfterButtonClick()
+    {
+        yield return new WaitForSecondsRealtime(buttonClickDelay);
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
@@ -465,7 +475,14 @@ public class UIManager : MonoBehaviour
     public void GoToSelection()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene("Selection");
+        StartCoroutine(LoadSceneAfterButtonClick("Selection"));
+    }
+
+    // ⭐ 等 0.2s 让按钮点击音放完再切场景
+    IEnumerator LoadSceneAfterButtonClick(string sceneName)
+    {
+        yield return new WaitForSecondsRealtime(buttonClickDelay);
+        SceneManager.LoadScene(sceneName);
     }
 
     public void OnPlayerDamaged() => UpdateHealthUI();
