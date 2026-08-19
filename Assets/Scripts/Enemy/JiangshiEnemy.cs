@@ -182,7 +182,7 @@ public class JiangshiEnemy : EnemyAI
                         {
                             NotePathMutation("Jiangshi.Chasing近距 → isStopped=false");
                             agent.isStopped = false;
-                            SetChaseDestination(player.transform.position);
+                            SetChaseDestination(GetStandoffTarget(player.transform.position));
                         }
                     }
                     else
@@ -207,7 +207,7 @@ public class JiangshiEnemy : EnemyAI
                         {
                             NotePathMutation("Jiangshi.blink挡线 → isStopped=false");
                             agent.isStopped = false;
-                            SetChaseDestination(player.transform.position);
+                            SetChaseDestination(GetStandoffTarget(player.transform.position));
                         }
                         return;
                     }
@@ -238,7 +238,7 @@ public class JiangshiEnemy : EnemyAI
                 {
                     NotePathMutation("Jiangshi.blink未触发 → isStopped=false");
                     agent.isStopped = false;
-                    SetChaseDestination(player.transform.position);
+                    SetChaseDestination(GetStandoffTarget(player.transform.position));
                 }
                 return;
 
@@ -335,7 +335,7 @@ public class JiangshiEnemy : EnemyAI
                     {
                         NotePathMutation("Jiangshi.冷却追击 → isStopped=false");
                         agent.isStopped = false;
-                        SetChaseDestination(player.transform.position);
+                        SetChaseDestination(GetStandoffTarget(player.transform.position));
                     }
                 }
                 else

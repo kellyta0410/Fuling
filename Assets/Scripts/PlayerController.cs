@@ -688,23 +688,11 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        // 起手先面对玩家输入方向（若有输入）；否则静止出招时自动面向最近的可攻击敌人，
-        // 保证主攻击的 120° 扇形命中正前方敌人，避免"不移动就打不中侧后敌人"。
+        // 起手面向玩家输入方向；无输入时保持当前朝向（朝向完全交给玩家操控）
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
         {
             transform.rotation = Quaternion.LookRotation(inputDir);
-        }
-        else
-        {
-            EnemyAI nearest = FindNearestAttackableEnemy();
-            if (nearest != null)
-            {
-                Vector3 toEnemy = nearest.transform.position - transform.position;
-                toEnemy.y = 0f;
-                if (toEnemy.sqrMagnitude > 0.0001f)
-                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toEnemy), 1f);
-            }
         }
 
         string stateName = attackStateNames[comboIndex];
@@ -751,30 +739,6 @@ public class PlayerController : MonoBehaviour
                 enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
             }
         }
-    }
-
-    EnemyAI FindNearestAttackableEnemy()
-    {
-        // 静止出招自动索敌的搜索半径：覆盖命中球体(中心在身前 attackRange*0.5、半径 attackRange)的最远点。
-        float searchRadius = attackRange * 0.5f + attackRange;
-        Collider[] hits = Physics.OverlapSphere(transform.position, searchRadius);
-        EnemyAI nearest = null;
-        float minSqr = float.MaxValue;
-
-        foreach (Collider hit in hits)
-        {
-            if (hit == null) continue;
-            EnemyAI enemy = hit.GetComponentInParent<EnemyAI>();
-            if (enemy == null || enemy.isDead) continue;
-
-            float sqr = (enemy.transform.position - transform.position).sqrMagnitude;
-            if (sqr < minSqr)
-            {
-                minSqr = sqr;
-                nearest = enemy;
-            }
-        }
-        return nearest;
     }
 
     // ==================== 技能攻击 ====================

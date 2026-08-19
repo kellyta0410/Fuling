@@ -77,7 +77,9 @@ public class SnakeEnemy : EnemyAI
 
         if (isAgentValid)
         {
-            Vector3 target = player.transform.position;
+            // 半就位带内把直接压向玩家的目标收拢一档（0.95×attackRange），
+            // 避免敌群贴脸时反复把根/身体怼进玩家体积 → 不再持续推挤玩家。
+            Vector3 target = GetStandoffTarget(player.transform.position);
 
             // 环形占位：有免费空位就过去绕玩家。
             // 蛇类：找不到空位也不排队堵到别的敌人身后（那样会停着不攻），直接压向玩家，
@@ -320,11 +322,12 @@ public class SnakeEnemy : EnemyAI
                 return true;
             }
             // ⭐ 头还够不着（玩家小幅走远/动画帧差）：不停死原地站桩，
-            // 保持 agent 未停并继续以玩家为目的地压近，下一帧进入攻击分支即咬。
+            // 保持 agent 未停并向站位点（半就位带收拢一档，不怼进玩家体积）继续压近，
+            // 下一帧进入攻击分支即咬。
             if (isAgentValid && agent != null && agent.isOnNavMesh)
             {
                 agent.isStopped = false;
-                SetChaseDestination(player.transform.position);
+                SetChaseDestination(GetStandoffTarget(player.transform.position));
             }
             return false;
         }
