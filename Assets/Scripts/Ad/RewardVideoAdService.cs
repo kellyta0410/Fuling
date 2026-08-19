@@ -14,10 +14,11 @@ public static class RewardVideoAdService
     // ⚠️ TODO: 微信小游戏：替换成你自己的广告位 id（测试 id 获取方法见类底部注释）
     public const string ReviveAdUnitId = "adunit-xxxxxxxxxxxxxxxx";
 
-    // AdMob 广告位 id：当前为 AdMob 后台创建的真实激励视频广告位（Fuling 游戏）；
-    // 如需临时换回官方测试位，注释掉下面一行即可。
+    // AdMob 广告位 id：
+    //  测试阶段用官方测试位（不挑账号，稳定出测试广告）；
+    //  上线前把下面 AdMobUnitId 换成真实广告位 ca-app-pub-6804806239678291/2443740599。
     public const string AdMobTestRewardedUnitId = "ca-app-pub-3940256099942544/5224354917";
-    public static string AdMobUnitId = "ca-app-pub-6804806239678291/2443740599";
+    public static string AdMobUnitId = AdMobTestRewardedUnitId;
 
     /// <summary>是否处于微信小游戏环境（WebGL 且 SDK 可解析）</summary>
     public static bool IsWeChatRewardAdAvailable
