@@ -45,6 +45,12 @@ public class PlayerController : MonoBehaviour
     public AudioClip[] hitSFX;
     [Tooltip("闪避音效（闪避开始时播放一次）")]
     public AudioClip dashSFX;
+    [Tooltip("奔跑脚步声：玩家跑步时按间隔随机取一个播放（放 4 个脚步音频，随机播）")]
+    public AudioClip[] runSFX;
+    [Tooltip("奔跑脚步间隔（秒）：越短步伐越快")]
+    public float runFootstepInterval = 0.3f;
+    [Tooltip("闪避特效存活时间（秒）：从闪避开始算总时长，闪避本体 0.2s + 残影 = 该值，到期自动隐藏")]
+    public float dashEffectLifetime = 0.6f;
 
     [Header("穿墙兜底")]
     [Tooltip("每帧检查玩家是否与环境墙(实墙/X-Ray半透明墙)重叠，重叠就从墙里水平推出，保证玩家永不穿墙")]
@@ -135,6 +141,10 @@ public class PlayerController : MonoBehaviour
     private bool isGrounded = false;
     private Vector3 lastGroundPosition = Vector3.zero;
     private bool wasGrounded = false;
+    // ⭐ 跑步脚步音计时器
+    private float runFootstepTimer = 0f;
+    // ⭐ 闪避特效延时隐藏协程（闪避太快，让残影多留一会儿更明显）
+    private Coroutine dashEffectHideCoroutine;
 
     // ==================== 攻击相关 ====================
     private static readonly string[] attackStateNames = { "Attack", "Attack2", "Attack3" };
@@ -850,9 +860,19 @@ public class PlayerController : MonoBehaviour
         dodgeCooldownTimer = 0f;
         dodgePushedEnemies.Clear();
 
-        // ⭐ 激活闪避特效
+        // ⭐ 激活闪避特效（先取消上一次还没播完的生命周期隐藏，避免上一段残影提前把新特效关掉）
+        if (dashEffectHideCoroutine != null)
+        {
+            StopCoroutine(dashEffectHideCoroutine);
+            dashEffectHideCoroutine = null;
+        }
         ResolveDashEffect();
-        if (dashEffect != null) dashEffect.SetActive(true);
+        if (dashEffect != null)
+        {
+            dashEffect.SetActive(true);
+            // ⭐ 特效存活时间：从闪避开始算总时长，到期自动隐藏（闪避就 0.2s，靠它留残影）
+            dashEffectHideCoroutine = StartCoroutine(HideDashEffectAfterLifetime());
+        }
 
         // ⭐ 闪避音效
         PlayDashSFX();
@@ -900,8 +920,15 @@ public class PlayerController : MonoBehaviour
         }
         dodgeIgnoredBlockers.Clear();
 
-        // ⭐ 隐藏闪避特效
+        // 特效隐藏由 PerformDodge 起的生命周期协程统一负责，EndDodge 不关
+    }
+
+    IEnumerator HideDashEffectAfterLifetime()
+    {
+        if (dashEffectLifetime > 0f)
+            yield return new WaitForSeconds(dashEffectLifetime);
         if (dashEffect != null) dashEffect.SetActive(false);
+        dashEffectHideCoroutine = null;
     }
 
     // ⭐ 解析闪避特效引用：字段没拖或引用失效时，按名字递归找玩家身上的 DashEffect 子物体。
@@ -1323,6 +1350,11 @@ public class PlayerController : MonoBehaviour
                 if (blocker != null) blocker.SetIgnorePlayerCollision(false);
             }
             dodgeIgnoredBlockers.Clear();
+            if (dashEffectHideCoroutine != null)
+            {
+                StopCoroutine(dashEffectHideCoroutine);
+                dashEffectHideCoroutine = null;
+            }
             if (dashEffect != null) dashEffect.SetActive(false);
         }
 
@@ -1446,6 +1478,14 @@ public class PlayerController : MonoBehaviour
             AudioManager.Instance.PlaySFX(dashSFX, transform.position);
     }
 
+    void PlayRandomRunSFX()
+    {
+        if (runSFX == null || runSFX.Length == 0) return;
+        AudioClip clip = runSFX[Random.Range(0, runSFX.Length)];
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(clip, transform.position);
+    }
+
     public void AddKill()
     {
         kills++;
@@ -1482,12 +1522,32 @@ public class PlayerController : MonoBehaviour
 
     void UpdateAnimations()
     {
-        if (isDying || isDead) return;
+        if (isDying || isDead)
+        {
+            runFootstepTimer = 0f;
+            return;
+        }
 
         Vector3 horizontalVelocity = new Vector3(velocity.x, 0, velocity.z);
         float currentSpeed = horizontalVelocity.magnitude;
 
-        animator.SetBool("IsMoving", currentSpeed > 0.05f);
+        // ⭐ 跑步脚步声：贴地且正在移动时，按间隔随机播一个脚步音（闪避另走 dashSFX，不重复播脚步）
+        bool moving = currentSpeed > 0.05f;
+        if (moving && isGrounded && !isDodging)
+        {
+            runFootstepTimer -= Time.deltaTime;
+            if (runFootstepTimer <= 0f)
+            {
+                runFootstepTimer = runFootstepInterval;
+                PlayRandomRunSFX();
+            }
+        }
+        else
+        {
+            runFootstepTimer = 0f;
+        }
+
+        animator.SetBool("IsMoving", moving);
         animator.SetBool("IsGrounded", isGrounded);
         animator.SetFloat("Speed", currentSpeed);
     }
