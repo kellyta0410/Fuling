@@ -287,7 +287,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 963d51260917c8f4cb2ff53c41c07635, type: 3}
   - {fileID: 8300000, guid: 3af6e7f13f77c6146b775e35ca283912, type: 3}
   - {fileID: 8300000, guid: b2215bb7fba93ea48b0cf8d809ef6952, type: 3}
-  skillSFX: {fileID: 8300000, guid: adc9435643ec51e43888c49a8f2e15a3, type: 3}
+  skillSFX: {fileID: 8300000, guid: 6fe6c9b2eea5c534e95b096bcb6d2760, type: 3}
   hitSFX:
   - {fileID: 8300000, guid: f609a0cdb2dbe694eb411d4721b97e23, type: 3}
   - {fileID: 8300000, guid: 819d4f3ee2cf17c489a1b67366e25cd7, type: 3}
@@ -728,7 +728,12 @@ PrefabInstance:
     - target: {fileID: 2248680551684645039, guid: b4577259e83c4624589aa3a6bcecc564,
         type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 10
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 2248680551684645039, guid: b4577259e83c4624589aa3a6bcecc564,
+        type: 3}
+      propertyPath: InitialModule.startLifetime.scalar
+      value: 0.2
       objectReference: {fileID: 0}
     - target: {fileID: 2248680551684645039, guid: b4577259e83c4624589aa3a6bcecc564,
         type: 3}
@@ -789,6 +794,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: DashEffect
+      objectReference: {fileID: 0}
+    - target: {fileID: 4564772810366825840, guid: b4577259e83c4624589aa3a6bcecc564,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
