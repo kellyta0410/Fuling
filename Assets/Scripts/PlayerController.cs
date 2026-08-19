@@ -112,6 +112,8 @@ public class PlayerController : MonoBehaviour
     public float dodgeDistance = 8f;
     [Tooltip("闪避持续时间（秒，越短闪得越快）")]
     public float dodgeDuration = 0.25f;
+    [Tooltip("玩家身上的 DashEffect 子物体（挂在玩家下），仅在闪避期间激活，其余时间隐藏")]
+    public GameObject dashEffect;
 
     // ==================== 运行时数据 ====================
     private float currentHealth;
@@ -214,6 +216,9 @@ public class PlayerController : MonoBehaviour
         // Apply Root Motion 是否生效由 Inspector 决定，脚本不参与。
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
+
+        // ⭐ 闪避特效默认隐藏，只在闪避期间激活（即使场景里某处设置成了激活，也强制关掉）
+        if (dashEffect != null) dashEffect.SetActive(false);
 
         // 受击四角先设为透明（运行时总是重建，避免场景里残留的失效引用挡住红光）
         hitCornerImages = AutoCreateCornerImages();
@@ -840,6 +845,9 @@ public class PlayerController : MonoBehaviour
         canDodge = false;
         dodgeCooldownTimer = 0f;
         dodgePushedEnemies.Clear();
+
+        // ⭐ 激活闪避特效
+        if (dashEffect != null) dashEffect.SetActive(true);
     }
 
     // ⭐ 闪避撞开敌人：以玩家为球心、闪避方向前段为探测范围，把范围内的非死亡敌人
@@ -883,6 +891,9 @@ public class PlayerController : MonoBehaviour
             if (blocker != null) blocker.SetIgnorePlayerCollision(false);
         }
         dodgeIgnoredBlockers.Clear();
+
+        // ⭐ 隐藏闪避特效
+        if (dashEffect != null) dashEffect.SetActive(false);
     }
 
     // 取消当前普通攻击：闪避触发时调用，避免攻击状态残留（仍锁位移/方向，闪避会覆盖 currentSpeed）
@@ -1275,6 +1286,7 @@ public class PlayerController : MonoBehaviour
                 if (blocker != null) blocker.SetIgnorePlayerCollision(false);
             }
             dodgeIgnoredBlockers.Clear();
+            if (dashEffect != null) dashEffect.SetActive(false);
         }
 
         PlaceOnGround();
