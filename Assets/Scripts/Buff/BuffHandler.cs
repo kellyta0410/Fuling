@@ -104,6 +104,8 @@ public class BuffHandler : MonoBehaviour
     }
 
     // ---------- 任意 buff 生效时在玩家脚下生成一次光柱（颜色按 buff 类型） ----------
+    // 使用原版 VFX Graph(.vfx) 预制体；Android 打包需强制 OpenGL ES 3.1（Player Settings 里
+    // 已开 openGLRequireES31），否则 VFX 在 GLES 下不渲染。
     public void SpawnBuffEffect(BuffType type)
     {
         if (player == null) return;
