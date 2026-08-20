@@ -13,6 +13,7 @@ public class HealEffectBuilder : MonoBehaviour
     {
         glowColor = color;
         BuildFloorFlash();   // 地板一圈亮起
+        BuildCenterGlow();   // 中心强光球（光爆主体）
         BuildRisingColumn(); // 竖线光柱往上冲
     }
 
@@ -60,6 +61,50 @@ public class HealEffectBuilder : MonoBehaviour
         var colorOverLifetime = ps.colorOverLifetime;
         colorOverLifetime.enabled = true;
         colorOverLifetime.color = BuildFadeGradient(0.05f, 0.85f);
+
+        ps.Play();
+    }
+
+    // 中心强光球：紧密的一团光点，先亮起再扩散淡出，是光爆的主体
+    void BuildCenterGlow()
+    {
+        var ps = ParticleFXHelper.CreateParticleSystem(transform, "CenterGlow", glowColor, 0.9f, 1800);
+
+        var main = ps.main;
+        main.duration = effectDuration * 0.6f;
+        main.loop = false;
+        main.startLifetime = 0.5f;
+        main.startSpeed = 0f;
+        main.startSize = 0.5f;
+        main.startColor = glowColor;
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.gravityModifier = 0f;
+        main.playOnAwake = false;
+
+        var emission = ps.emission;
+        emission.enabled = true;
+        emission.rateOverTimeMultiplier = 0f;
+        emission.SetBursts(new ParticleSystem.Burst[]
+        {
+            new ParticleSystem.Burst(0f, 40)
+        });
+
+        var shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.4f;
+
+        var sizeOverLifetime = ps.sizeOverLifetime;
+        sizeOverLifetime.enabled = true;
+        AnimationCurve glow = new AnimationCurve();
+        glow.AddKey(0f, 1f);
+        glow.AddKey(0.35f, 2.2f);
+        glow.AddKey(1f, 0.4f);
+        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, glow);
+
+        var colorOverLifetime = ps.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        colorOverLifetime.color = BuildFadeGradient(0.1f, 0.9f);
 
         ps.Play();
     }

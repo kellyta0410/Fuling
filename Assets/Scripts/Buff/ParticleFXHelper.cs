@@ -56,8 +56,7 @@ public static class ParticleFXHelper
         // 否则 APK 上 Shader.Find 落空回退到 Sprites/Default 时贴图是空的 → 粒子渲染成白色方块。
         mat.SetTexture("_BaseMap", softDot);
         mat.SetTexture("_MainTex", softDot);
-        mat.SetColor("_BaseColor", tint * brightness);
-        mat.SetColor("_Color", tint * brightness);
+        // 颜色在 MakeSoftMaterial 末尾统一 clamp（_BaseColor/_Color 一次设置），避免此处重复
 
         // ⭐ 必须完整配置透明表面：URP 粒子 shader 的 SubShader 默认 RenderType=Opaque（队列 2000）。
         // 只 SetFloat("_Surface", 1f) 不够——运行时 new Material 不会自动启用
@@ -72,7 +71,17 @@ public static class ParticleFXHelper
         if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+
+        // ⭐ 颜色钳制在 [0,1]：tint*brightness 可能 >1，Additive 过曝在部分 GPU 上会整屏抖闪
+        Color baseColor = ClampColor01(tint * brightness);
+        mat.SetColor("_BaseColor", baseColor);
+        mat.SetColor("_Color", baseColor);
         return mat;
+    }
+
+    public static Color ClampColor01(Color c)
+    {
+        return new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), Mathf.Clamp01(c.a));
     }
 
     // 新建一个空粒子系统子物体，返回已配好基础设置的 ParticleSystem
