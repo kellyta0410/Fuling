@@ -376,13 +376,13 @@ public class PlayerController : MonoBehaviour
             baseAttack = attackDamage;
 
             // ⭐ 技能伤害 = 基础攻击 × 3 + 技能升级伤害加成；技能冷却受冷却缩减影响
-            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 3f + skillBonus.skillDamageBonus);
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 2f + skillBonus.skillDamageBonus);
             skillCooldown -= skillBonus.cooldownReductionBonus;
             if (skillCooldown < 0.5f) skillCooldown = 0.5f;
         }
         else
         {
-            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 3f);
+            skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 2f);
         }
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");

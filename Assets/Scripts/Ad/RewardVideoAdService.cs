@@ -35,6 +35,7 @@ public static class RewardVideoAdService
     }
 
     private static object cachedAd;
+    private static object preloadedAd;
     private static Action<bool> pendingCallback;
     private static Action<string> pendingUnavailable;
 
@@ -164,6 +165,17 @@ public static class RewardVideoAdService
             EnsureAdMobInitialized();
             AdLog("[Ad] step1: MobileAds.Initialize done");
 
+            // ⭐ 优先用提前预加载好的广告：点完立即展示，无等待，也不会被"结束游戏"抢断
+            if (preloadedAd != null)
+            {
+                object ad = preloadedAd;
+                preloadedAd = null;
+                AdLog("[Ad] step2: using preloaded ad, show now (no wait)");
+                ArmWatchdog(WatchdogSeconds);
+                HandleAdMobLoad(ad, null);
+                return true;
+            }
+
             object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
             if (request == null)
             {
@@ -201,6 +213,45 @@ public static class RewardVideoAdService
             AdLog($"[Ad] AdMob call exception: {e.Message}");
             FailOrUnavailable("AdMob调用异常：" + e.Message);
             return true;
+        }
+    }
+
+    // 提前预加载激励广告，进游戏/复活面板出现时调用，玩家点"观看广告"即可秒出，无等待
+    public static void PreloadRewardedAd()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null) return;
+            EnsureAdMobInitialized();
+            if (preloadedAd != null) return; // 已有待命广告
+
+            object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
+            if (request == null) return;
+
+            MethodInfo load = FindStaticMethod("GoogleMobileAds.Api.RewardedAd", "Load", 3);
+            if (load == null) return;
+
+            Delegate loadCb = BuildDelegate2(load.GetParameters()[2].ParameterType, (Action<object, object>)OnPreloadLoad);
+            if (loadCb == null) return;
+
+            load.Invoke(null, new object[] { AdMobUnitId, request, loadCb });
+            AdLog("[Ad] preload: RewardedAd.Load called");
+        }
+        catch (Exception e) { AdLog($"[Ad] preload exception: {e.Message}"); }
+#endif
+    }
+
+    static void OnPreloadLoad(object adObj, object errorObj)
+    {
+        if (adObj != null && errorObj == null)
+        {
+            preloadedAd = adObj;
+            AdLog("[Ad] preload: ad ready (standby)");
+        }
+        else
+        {
+            AdLog($"[Ad] preload failed: {DescribeAdError(errorObj)}");
         }
     }
 
@@ -261,6 +312,7 @@ public static class RewardVideoAdService
         {
             show.Invoke(adObj, new object[] { rewardCb });
             AdLog("[Ad] step6: RewardedAd.Show called, waiting for user");
+            PreloadRewardedAd(); // 预拉下一条，供下次游戏复活秒出
         }
         catch (Exception e)
         {

@@ -55,6 +55,8 @@ public class GameManager : MonoBehaviour
     {
         // ⭐ 预先初始化广告 SDK（Android/AdMob 必须在展示前就绪，否则复活看广告时常"放不出来"）
         RewardVideoAdService.EnsureAdMobInitialized();
+        // ⭐ 进游戏就提前把激励广告拉好，玩家点"观看广告"可秒出，避免等待期间点"结束游戏"导致广告放不出来
+        RewardVideoAdService.PreloadRewardedAd();
 
         if (normalSpawner == null)
             normalSpawner = FindObjectOfType<EnemySpawner>();

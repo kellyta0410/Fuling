@@ -239,8 +239,8 @@ public class CharacterDetailManager : MonoBehaviour
         if (normalAttackStatText != null)
             normalAttackStatText.text = $"攻击：{totalAttack}  范围：{totalRange:F1}";
 
-        // 技能攻击区域：显示当前实际数值（基础攻击×3 + 技能伤害成长；冷却基准 15 秒）
-        int skillAttack = character.baseAttack * 3 + skillTotal.skillDamageBonus;
+        // 技能攻击区域：显示当前实际数值（基础攻击×2 + 技能伤害成长；冷却基准 15 秒）
+        int skillAttack = character.baseAttack * 2 + skillTotal.skillDamageBonus;
         float skillRange = character.baseRange * 2f + skillTotal.attackRangeBonus;
         float skillCd = Mathf.Max(0f, 15f - skillTotal.cooldownReductionBonus);
         if (skillAttackStatText != null)

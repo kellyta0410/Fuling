@@ -597,6 +597,9 @@ public class UIManager : MonoBehaviour
         revivePanel.SetActive(true);
         Time.timeScale = 0f;
 
+        // 复活面板出现时确保广告已预拉好（秒出，避免等待期间点"结束游戏"放不出广告）
+        RewardVideoAdService.PreloadRewardedAd();
+
         if (player != null)
         {
             player.SetJoystickEnabled(false);
