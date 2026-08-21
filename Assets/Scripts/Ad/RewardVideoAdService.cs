@@ -36,29 +36,36 @@ public static class RewardVideoAdService
 
     private static object cachedAd;
     private static Action<bool> pendingCallback;
+    private static Action<string> pendingUnavailable;
+
+    // 看广告流程看门狗：确保 Load/Show 回调即使永远不来也能超时兜底，避免复活面板一直暂停卡死
+    private static bool adPending = false;
+    private static float watchdogDeadline = -1f;
+    private const float WatchdogSeconds = 12f;
+
+    // ⭐ 广告流程日志对外广播：UIManager 订阅后可直接显示在手机屏幕上，免去看设备日志
+    public static Action<string> OnAdLog;
 
     // ⭐ AdMob 必须在展示前完成初始化（主线程）。
-    // 这里缓存一次初始化结果，并在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪。
-    private static bool adMobInitialized = false;
+    // 在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪；
+    // MobileAds.Initialize 本身幂等，重复调用安全，故无需额外的"已初始化"标记位。
     public static void EnsureAdMobInitialized()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (adMobInitialized) return;
         try
         {
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null) return; // 没装插件，跳过
             MethodInfo init = FindStaticMethod("GoogleMobileAds.Api.MobileAds", "Initialize", 1);
             if (init != null)
             {
-                Delegate initCb = BuildDelegate(init.GetParameters()[0].ParameterType, (Action<object>)(_ => { adMobInitialized = true; }));
+                Delegate initCb = BuildDelegate(init.GetParameters()[0].ParameterType, (Action<object>)(_ => { AdLog("[Ad] MobileAds init done"); }));
                 init.Invoke(null, new object[] { initCb });
             }
-            adMobInitialized = true;
-            AdLog("[广告] MobileAds.Initialize 已预先调用");
+            AdLog("[Ad] MobileAds.Initialize called");
         }
         catch (Exception e)
         {
-            AdLog($"[广告] 预初始化异常（不影响流程）：{e.Message}");
+            AdLog($"[Ad] pre-init exception (ignored): {e.Message}");
         }
 #endif
     }
@@ -67,6 +74,7 @@ public static class RewardVideoAdService
     static void AdLog(string msg)
     {
         UnityEngine.Debug.Log(msg);
+        try { OnAdLog?.Invoke(msg); } catch { }
         try
         {
             string path = Path.Combine(Application.persistentDataPath, "fuling_ad_log.txt");
@@ -82,9 +90,12 @@ public static class RewardVideoAdService
     ///   Android → AdMob（默认官方测试位；插件没装/加载失败/离线 → 回调 false 进入结算）；
     ///   其它平台（真机，不含编辑器）→ 回调 false 进入结算（无免费复活）。
     /// </summary>
-    public static void ShowRewardedAd(Action<bool> onResult, Action onUnavailable = null)
+    public static void ShowRewardedAd(Action<bool> onResult, Action<string> onUnavailable = null)
     {
         pendingCallback = onResult;
+        pendingUnavailable = onUnavailable;
+        adPending = true;
+        watchdogDeadline = -1f;
 
         // ⭐ 微信小游戏环境（WebGL + SDK 存在）先走：播放真实激励视频
         if (IsWeChatRewardAdAvailable)
@@ -95,7 +106,7 @@ public static class RewardVideoAdService
             }
             catch (Exception e)
             {
-                AdLog($"[广告] 微信激励视频调用失败：{e.Message}");
+                AdLog($"[Ad] WeChat rewarded ad call failed: {e.Message}");
                 SafeInvoke(false);
             }
             return;
@@ -105,29 +116,28 @@ public static class RewardVideoAdService
         // ⭐ Android 走 AdMob（反射调用）；接管成功则返回，稍后回调。
         // 返回 false = 未安装 AdMob SDK → 视为"无广告可用"，走离线/无广告提示而非直接结算。
         if (TryShowAdMobRewardedAd()) return;
-        if (onUnavailable != null)
+        if (pendingUnavailable != null)
         {
-            pendingCallback = null;
-            onUnavailable();
+            InvokeUnavailable("未安装广告SDK(AdMob)");
             return;
         }
 #endif
 
         // ⭐ 兜底：没有可用真实广告 provider（离线 / 无广告 SDK）。
         // 优先走"不可用"回调让上层弹离线提示；未提供回调时保持旧行为（编辑器免费复活 / 其它直接结算）。
-        if (onUnavailable != null)
+        if (pendingUnavailable != null)
         {
-            pendingCallback = null;
-            onUnavailable();
+            InvokeUnavailable("当前平台不支持广告");
+            return;
         }
         else
         {
 #if UNITY_EDITOR
             // 编辑器内无真实广告，保留免费复活方便测试
-            AdLog("[广告] 编辑器内无真实广告 provider，直接发放奖励（测试）");
+            AdLog("[Ad] editor: no ad provider, grant reward (test)");
             SafeInvoke(true);
 #else
-            AdLog("[广告] 无真实广告 provider，直接进入结算（不免费复活）");
+            AdLog("[Ad] no ad provider, go to settle (no free revive)");
             SafeInvoke(false);
 #endif
         }
@@ -146,49 +156,50 @@ public static class RewardVideoAdService
         {
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null)
             {
-                AdLog("[广告] 未检测到 AdMob（GoogleMobileAds.Api），跳过");
+                AdLog("[Ad] AdMob (GoogleMobileAds.Api) not found, skip");
                 return false;
             }
 
             // Next-Gen SDK 要求先在主线程初始化（静默，成败无所谓）
             EnsureAdMobInitialized();
-            AdLog("[广告] step1: MobileAds.Initialize 完成");
+            AdLog("[Ad] step1: MobileAds.Initialize done");
 
             object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
             if (request == null)
             {
-                AdLog("[广告] AdMob AdRequest 创建失败 → 进入结算");
-                SafeInvoke(false);
+                AdLog("[Ad] AdMob AdRequest create failed");
+                FailOrUnavailable("广告请求(AdRequest)创建失败");
                 return true;
             }
-            AdLog("[广告] step2: AdRequest 创建完成");
+            AdLog("[Ad] step2: AdRequest created");
 
             MethodInfo load = FindStaticMethod("GoogleMobileAds.Api.RewardedAd", "Load", 3);
             if (load == null)
             {
-                AdLog("[广告] AdMob RewardedAd.Load 不存在 → 进入结算");
-                SafeInvoke(false);
+                AdLog("[Ad] AdMob RewardedAd.Load missing");
+                FailOrUnavailable("广告Load接口缺失");
                 return true;
             }
-            AdLog("[广告] step3: RewardedAd.Load 找到");
+            AdLog("[Ad] step3: RewardedAd.Load found");
 
             Delegate loadCb = BuildDelegate2(load.GetParameters()[2].ParameterType, (Action<object, object>)HandleAdMobLoad);
             if (loadCb == null)
             {
-                AdLog("[广告] AdMob Load 回调构造失败 → 进入结算");
-                SafeInvoke(false);
+                AdLog("[Ad] AdMob Load callback build failed");
+                FailOrUnavailable("广告回调构造失败");
                 return true;
             }
-            AdLog("[广告] step4: Load 回调构造完成");
+            AdLog("[Ad] step4: Load callback built");
 
             load.Invoke(null, new object[] { AdMobUnitId, request, loadCb });
-            AdLog($"[广告] step5: RewardedAd.Load 已调用，无异常（unitId={AdMobUnitId}）");
+            AdLog($"[Ad] step5: RewardedAd.Load called, ok (unitId={AdMobUnitId})");
+            ArmWatchdog(WatchdogSeconds);
             return true;
         }
         catch (Exception e)
         {
-            AdLog($"[广告] AdMob 调用异常 → 进入结算：{e}");
-            SafeInvoke(false);
+            AdLog($"[Ad] AdMob call exception: {e.Message}");
+            FailOrUnavailable("AdMob调用异常：" + e.Message);
             return true;
         }
     }
@@ -216,30 +227,52 @@ public static class RewardVideoAdService
         if (adObj == null || errorObj != null)
         {
             string msg = DescribeAdError(errorObj);
-            AdLog($"[广告] AdMob 加载失败：{msg} → 进入结算（离线/无填充）");
-            SafeInvoke(false);
+            AdLog($"[Ad] AdMob load failed: {msg}");
+            FailOrUnavailable("网络不可用/无填充(离线)");
             return;
         }
+
+        // ⭐ 订阅关闭/失败事件：v11 中 Show(Action<Reward>) 只在"完整看完"才回调，
+        // 中途关闭/跳过/展示失败不会触发，必须靠事件兜底，否则复活面板会一直卡在暂停态。
+        SubscribeEvent(adObj, "OnAdFullScreenContentClosed", () => { AdLog("[Ad] ad fullscreen closed (incl. skip)"); SafeInvoke(false); });
+        SubscribeEvent(adObj, "OnAdFullScreenContentFailed", () => { AdLog("[Ad] ad show failed"); SafeInvoke(false); });
 
         Type adType = adObj.GetType();
         MethodInfo show = adType.GetMethod("Show");
         if (show == null)
         {
-            AdLog("[广告] AdMob Show 不存在 → 进入结算");
-            SafeInvoke(false);
+            AdLog("[Ad] AdMob Show missing");
+            FailOrUnavailable("广告Show接口缺失");
             return;
         }
 
-        Delegate rewardCb = BuildDelegate(show.GetParameters()[0].ParameterType, (Action<object>)HandleAdMobReward);
-        if (rewardCb == null) { AdLog("[广告] 激励回调构造失败 → 进入结算"); SafeInvoke(false); return; }
+        Delegate rewardCb = null;
+        try
+        {
+            rewardCb = BuildDelegate(show.GetParameters()[0].ParameterType, (Action<object>)HandleAdMobReward);
+        }
+        catch (Exception e)
+        {
+            AdLog($"[Ad] reward callback build exception: {e.Message}");
+        }
+        if (rewardCb == null) { AdLog("[Ad] reward callback build failed"); FailOrUnavailable("激励回调构造失败"); return; }
 
-        show.Invoke(adObj, new object[] { rewardCb });
+        try
+        {
+            show.Invoke(adObj, new object[] { rewardCb });
+            AdLog("[Ad] step6: RewardedAd.Show called, waiting for user");
+        }
+        catch (Exception e)
+        {
+            AdLog($"[Ad] Show call exception: {e.Message}");
+            FailOrUnavailable("广告Show调用异常：" + e.Message);
+        }
     }
 
     // Show 回调触发 = 用户看完整段再说（v11 在 Android 主线程回调）
     static void HandleAdMobReward(object rewardObj)
     {
-        AdLog("[广告] AdMob 激励视频完整看完，发放奖励");
+        AdLog("[Ad] AdMob rewarded ad fully watched, grant reward");
         SafeInvoke(true);
     }
 
@@ -284,7 +317,7 @@ public static class RewardVideoAdService
         // 4. 先 Load 再 Show（官方推荐：避免 show() 在未拉取到时 reject）
         MethodInfo load = adType.GetMethod("Load");
         try { if (load != null) load.Invoke(ad, null); }
-        catch (Exception e) { AdLog($"[广告] Load 失败：{e.Message}"); }
+        catch (Exception e) { AdLog($"[Ad] Load failed: {e.Message}"); }
 
         MethodInfo show = adType.GetMethod("Show");
         if (show == null) show = adType.GetMethod("ShowAsync");
@@ -293,7 +326,7 @@ public static class RewardVideoAdService
         try { show.Invoke(ad, null); }
         catch (Exception e)
         {
-            AdLog($"[广告] Show 失败：{e.Message}");
+            AdLog($"[Ad] Show failed: {e.Message}");
             SafeInvoke(false);
         }
     }
@@ -315,22 +348,93 @@ public static class RewardVideoAdService
             watched = v is bool b && b;
         }
 
-        AdLog($"[广告] 激励视频关闭，isEnded={watched}");
+        AdLog($"[Ad] rewarded ad closed, isEnded={watched}");
         SafeInvoke(watched);
     }
 
     static void HandleOnError(object err)
     {
         if (pendingCallback == null) return;
-        AdLog($"[广告] 激励视频错误：{err}");
+        AdLog($"[Ad] rewarded ad error: {err}");
         SafeInvoke(false);
     }
 
     static void SafeInvoke(bool result)
     {
+        adPending = false;
+        watchdogDeadline = -1f;
         var cb = pendingCallback;
         pendingCallback = null;
         cb?.Invoke(result);
+    }
+
+    // 广告确实无法播放（无 SDK / 离线 / 平台不支持）：若上层提供了 unavailable 回调则弹提示，否则按旧逻辑结算/免费复活
+    static void InvokeUnavailable(string reason)
+    {
+        adPending = false;
+        watchdogDeadline = -1f;
+        var cb = pendingUnavailable;
+        pendingCallback = null;
+        pendingUnavailable = null;
+        cb?.Invoke(reason);
+    }
+
+    // 在 AdMob 内部失败时使用：有 unavailable 回调则弹提示，否则退化为旧行为（SafeInvoke(false) → 结算）
+    static void FailOrUnavailable(string reason)
+    {
+        if (pendingUnavailable != null) InvokeUnavailable(reason);
+        else SafeInvoke(false);
+    }
+
+    // ==================== 看门狗（防卡死） ====================
+    static void ArmWatchdog(float seconds)
+    {
+        if (!adPending) return;
+        watchdogDeadline = Time.realtimeSinceStartup + seconds;
+            AdLog($"[Ad] watchdog armed, {seconds}s timeout");
+    }
+
+    // 由 GameManager.Update 每帧调用；超时仍未结算则兜底弹提示，避免复活面板永久暂停
+    public static void TickWatchdog()
+    {
+        if (!adPending || watchdogDeadline < 0f) return;
+        if (Time.realtimeSinceStartup >= watchdogDeadline)
+        {
+            watchdogDeadline = -1f;
+            AdLog("[Ad] watchdog triggered: ad load/show timeout");
+            FailOrUnavailable("广告加载/展示超时");
+        }
+    }
+
+    // 用反射订阅 AdMob 事件（兼容 0 参 Action 与 1 参 Action<T>）
+    static void SubscribeEvent(object target, string eventName, Action onInvoke)
+    {
+        try
+        {
+            EventInfo ev = target.GetType().GetEvent(eventName);
+            if (ev == null) { AdLog($"[Ad] event {eventName} missing, skip subscribe"); return; }
+            Type handlerType = ev.EventHandlerType;
+            ParameterInfo[] ps = handlerType.GetMethod("Invoke").GetParameters();
+            Delegate d;
+            if (ps.Length == 0)
+            {
+                d = Delegate.CreateDelegate(handlerType, onInvoke.Target, onInvoke.Method);
+            }
+            else
+            {
+                // 事件带参数（如 Action<AdError>），但我们的处理是无参 Action，忽略事件参数直接调用
+                ParameterExpression p = Expression.Parameter(ps[0].ParameterType, "a");
+                Expression call = (onInvoke.Target == null)
+                    ? Expression.Call(onInvoke.Method)
+                    : Expression.Call(Expression.Constant(onInvoke.Target), onInvoke.Method);
+                d = Expression.Lambda(handlerType, call, p).Compile();
+            }
+            ev.AddEventHandler(target, d);
+        }
+        catch (Exception e)
+        {
+            AdLog($"[Ad] subscribe {eventName} failed: {e.Message}");
+        }
     }
 
     // ==================== 反射工具 ====================
@@ -349,7 +453,7 @@ public static class RewardVideoAdService
         }
         catch (Exception e)
         {
-            AdLog($"[广告] 解析 WX 类型失败：{e.Message}");
+            AdLog($"[Ad] resolve WX type failed: {e.Message}");
         }
         return null;
     }
@@ -390,7 +494,7 @@ public static class RewardVideoAdService
         Type t = ResolveType(typeName);
         if (t == null) return null;
         try { return Activator.CreateInstance(t); }
-        catch (Exception e) { AdLog($"[广告] 创建 {typeName} 失败：{e.Message}"); return null; }
+        catch (Exception e) { AdLog($"[Ad] create {typeName} failed: {e.Message}"); return null; }
     }
 
     static void SetField(Type type, object obj, string name, object value)
@@ -421,10 +525,9 @@ public static class RewardVideoAdService
         if (ps.Length != 1) return null;
 
         ParameterExpression p = Expression.Parameter(ps[0].ParameterType, "arg");
-        Expression body = Expression.Call(
-            Expression.Constant(handler.Target),
-            handler.Method,
-            Expression.Convert(p, typeof(object)));
+        Expression body = (handler.Target == null)
+            ? Expression.Call(handler.Method, Expression.Convert(p, typeof(object)))
+            : Expression.Call(Expression.Constant(handler.Target), handler.Method, Expression.Convert(p, typeof(object)));
         return Expression.Lambda(delegateType, body, p).Compile();
     }
 
@@ -437,11 +540,9 @@ public static class RewardVideoAdService
 
         ParameterExpression p0 = Expression.Parameter(ps[0].ParameterType, "a");
         ParameterExpression p1 = Expression.Parameter(ps[1].ParameterType, "b");
-        Expression body = Expression.Call(
-            Expression.Constant(handler.Target),
-            handler.Method,
-            Expression.Convert(p0, typeof(object)),
-            Expression.Convert(p1, typeof(object)));
+        Expression body = (handler.Target == null)
+            ? Expression.Call(handler.Method, Expression.Convert(p0, typeof(object)), Expression.Convert(p1, typeof(object)))
+            : Expression.Call(Expression.Constant(handler.Target), handler.Method, Expression.Convert(p0, typeof(object)), Expression.Convert(p1, typeof(object)));
         return Expression.Lambda(delegateType, body, p0, p1).Compile();
     }
 }

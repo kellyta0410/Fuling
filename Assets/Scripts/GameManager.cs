@@ -196,6 +196,7 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
+        RewardVideoAdService.TickWatchdog();
         if (!isGameRunning || isGameOver) return;
 
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
