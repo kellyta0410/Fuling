@@ -700,6 +700,25 @@ public class PlayerController : MonoBehaviour
         BeginAttack();
     }
 
+    // 攻击起手自动锁定：返回射程内最近的存活敌人（无则 null，保持当前朝向）
+    EnemyAI FindNearestEnemy(float maxDist)
+    {
+        EnemyAI best = null;
+        float bestSq = maxDist * maxDist;
+        EnemyAI[] all = FindObjectsOfType<EnemyAI>();
+        Vector3 p = transform.position;
+        for (int i = 0; i < all.Length; i++)
+        {
+            EnemyAI e = all[i];
+            if (e == null || e.isDead) continue;
+            Vector3 d = e.transform.position - p;
+            d.y = 0f;
+            float sq = d.sqrMagnitude;
+            if (sq < bestSq) { bestSq = sq; best = e; }
+        }
+        return best;
+    }
+
     void BeginAttack()
     {
         isAttacking = true;
@@ -707,11 +726,25 @@ public class PlayerController : MonoBehaviour
         attackTimer = 0f;
         attackCooldownTimer = 0f;
         animator.SetBool("IsAttacking", true);
-        // 起手面向玩家输入方向；无输入时保持当前朝向（朝向完全交给玩家操控）
+        // 起手朝向：有移动输入则朝输入方向（跟手）；
+        // 无输入时自动面向最近敌人——否则玩家站着只按攻击，transform.forward 不会更新，
+        // 命中判定(DelayedDamage 用 transform.forward 的 150° 扇形)会打空，
+        // 出现"明明屏幕看着面向敌人却打不到 / 站桩完全打不到敌人"的情况。
         Vector3 inputDir = GetMoveDirection(inputVector);
         if (inputDir.magnitude > 0.1f)
         {
             transform.rotation = Quaternion.LookRotation(inputDir);
+        }
+        else
+        {
+            EnemyAI nearest = FindNearestEnemy(attackRange * 1.5f + 2f);
+            if (nearest != null)
+            {
+                Vector3 toEnemy = nearest.transform.position - transform.position;
+                toEnemy.y = 0f;
+                if (toEnemy.sqrMagnitude > 0.0001f)
+                    transform.rotation = Quaternion.LookRotation(toEnemy.normalized);
+            }
         }
 
         string stateName = attackStateNames[comboIndex];
