@@ -106,30 +106,23 @@ public class BuffHandler : MonoBehaviour
         }
     }
 
-    // ---------- 任意 buff 生效时在玩家脚下生成一次光柱（颜色按 buff 类型） ----------
-    // 原版用 VFX Graph(.vfx)。VFX 在 Android OpenGL ES 下不渲染，这里做运行时兜底：
-    //   - GLES 设备直接放纯粒子版（ParticleFXHelper/HealEffectBuilder），保证有特效；
-    //   - 其它 API（Vulkan/Metal/DX11）放原版 VFX，若仍 0 粒子（个别驱动问题）也自动切回粒子版。
+    // ---------- 任意 buff 生效时在玩家脚下生成特效（颜色按 buff 类型） ----------
+    // 原版用 VFX Graph(.vfx)。VFX 在 Android OpenGL ES 下不渲染；原先的运行时叠加粒子兜底版
+    // 在 GLES + HDR 的部分移动 GPU 上会整屏抖闪，已整段移除，GLES 设备直接无脚下特效。
     public void SpawnBuffEffect(BuffType type)
     {
         if (player == null) return;
 
         GameObject prefab = GetEffectPrefab(type);
-        float lifetime = GetEffectLifetime(type);
+        if (prefab == null) return;
 
         bool vfxUnsupported = SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3
                            || SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES2;
+        if (vfxUnsupported) return; // GLES 下 VFX 不渲染，且不再用叠加粒子兜底
 
-        if (prefab == null || vfxUnsupported)
-        {
-            SpawnParticleFallback(type, lifetime);
-            return;
-        }
-
+        float lifetime = GetEffectLifetime(type);
         GameObject effect = Instantiate(prefab, player.transform.position, Quaternion.identity, player.transform);
         if (lifetime > 0f) Destroy(effect, lifetime);
-
-        StartCoroutine(FallbackIfVfxInvisible(effect, type, lifetime));
     }
 
     GameObject GetEffectPrefab(BuffType type)
@@ -152,35 +145,6 @@ public class BuffHandler : MonoBehaviour
             case BuffType.SpeedUp: return speedEffectLifetime;
             default: return 0f;
         }
-    }
-
-    // 纯 ParticleSystem 版光柱（HealEffectBuilder），颜色按 buff 类型
-    void SpawnParticleFallback(BuffType type, float lifetime)
-    {
-        GameObject effect = new GameObject($"BuffEffectFallback_{type}");
-        effect.transform.SetParent(player.transform, false);
-        effect.transform.localPosition = Vector3.zero;
-
-        HealEffectBuilder builder = effect.AddComponent<HealEffectBuilder>();
-        builder.Init(ParticleFXHelper.GetBuffColor(type));
-
-        if (lifetime > 0f) Destroy(effect, lifetime);
-    }
-
-    // VFX 放了但一直 0 粒子 = 没渲染出来（驱动/API 兼容问题），删掉换成粒子版
-    IEnumerator FallbackIfVfxInvisible(GameObject vfxObj, BuffType type, float lifetime)
-    {
-        VisualEffect vfx = vfxObj != null ? vfxObj.GetComponent<VisualEffect>() : null;
-        if (vfx == null) yield break;
-
-        float wait = lifetime > 0.1f ? Mathf.Clamp(lifetime * 0.7f, 0.4f, 1.6f) : 1.2f;
-        yield return new WaitForSeconds(wait);
-
-        if (vfxObj == null) yield break;
-        if (vfx.aliveParticleCount > 0) yield break;
-
-        if (vfxObj != null) Destroy(vfxObj);
-        SpawnParticleFallback(type, lifetime);
     }
 
     // ---------- 移除Buff ----------

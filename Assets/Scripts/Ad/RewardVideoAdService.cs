@@ -41,6 +41,7 @@ public static class RewardVideoAdService
 
     // 看广告流程看门狗：确保 Load/Show 回调即使永远不来也能超时兜底，避免复活面板一直暂停卡死
     private static bool adPending = false;
+    private static bool rewardEarned = false; // 用户是否完整看完（拿到激励），用于"关闭"事件兜底，避免复活被误取消
     private static float watchdogDeadline = -1f;
     private const float WatchdogSeconds = 12f;
 
@@ -96,6 +97,7 @@ public static class RewardVideoAdService
         pendingCallback = onResult;
         pendingUnavailable = onUnavailable;
         adPending = true;
+        rewardEarned = false;
         watchdogDeadline = -1f;
 
         // ⭐ 微信小游戏环境（WebGL + SDK 存在）先走：播放真实激励视频
@@ -285,7 +287,13 @@ public static class RewardVideoAdService
 
         // ⭐ 订阅关闭/失败事件：v11 中 Show(Action<Reward>) 只在"完整看完"才回调，
         // 中途关闭/跳过/展示失败不会触发，必须靠事件兜底，否则复活面板会一直卡在暂停态。
-        SubscribeEvent(adObj, "OnAdFullScreenContentClosed", () => { AdLog("[Ad] ad fullscreen closed (incl. skip)"); SafeInvoke(false); });
+        // 注意：看完后 AdMob 会先发奖励回调、再发关闭事件；用 rewardEarned 防止"关闭"把已到手的复活误取消。
+        SubscribeEvent(adObj, "OnAdFullScreenContentClosed", () =>
+        {
+            AdLog("[Ad] ad fullscreen closed (incl. skip)");
+            if (rewardEarned) { AdLog("[Ad] reward already granted, ignore close"); return; }
+            SafeInvoke(false); // 真·中途关闭/跳过：不复活
+        });
         SubscribeEvent(adObj, "OnAdFullScreenContentFailed", () => { AdLog("[Ad] ad show failed"); SafeInvoke(false); });
 
         Type adType = adObj.GetType();
@@ -325,7 +333,8 @@ public static class RewardVideoAdService
     static void HandleAdMobReward(object rewardObj)
     {
         AdLog("[Ad] AdMob rewarded ad fully watched, grant reward");
-        SafeInvoke(true);
+        rewardEarned = true;
+        SafeInvoke(true); // 看完立刻复活，不等用户点关闭
     }
 
     // ==================== 微信 SDK 调用（反射） ====================
