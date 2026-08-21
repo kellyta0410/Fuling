@@ -53,6 +53,9 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
+        // ⭐ 预先初始化广告 SDK（Android/AdMob 必须在展示前就绪，否则复活看广告时常"放不出来"）
+        RewardVideoAdService.EnsureAdMobInitialized();
+
         if (normalSpawner == null)
             normalSpawner = FindObjectOfType<EnemySpawner>();
 

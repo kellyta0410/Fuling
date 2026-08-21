@@ -196,6 +196,7 @@ public class PlayerController : MonoBehaviour
     public int GetCoins() => coins;
     public int GetKills() => kills;
     public bool IsDead() => isDead;
+
     public CharacterData GetCharacterData() => currentCharacterData;
 
     public float GetHealthPercent()
@@ -328,6 +329,8 @@ public class PlayerController : MonoBehaviour
         attackDamage = currentCharacterData.baseAttack;
         attackRange = currentCharacterData.baseRange;
         attackCooldown = currentCharacterData.baseCooldown;
+        // ⭐ 技能范围先按基础值给个初值；真正的技能范围在"普攻升级加成"应用后（见下方）按
+        // 升级后的 attackRange 重新计算，保证 360° AoE 半径始终 ≥ 普攻触及距离。
         skillRange = currentCharacterData.baseRange * 2f;   // 初始技能范围 = 4（普攻2 × 2）
 
         baseSpeed = speed;
@@ -351,6 +354,12 @@ public class PlayerController : MonoBehaviour
             baseSpeed = speed;
             baseAttack = attackDamage;
         }
+
+        // ⭐ 技能范围随（含升级后的）普攻距离放大：skillRange = 升级后 attackRange × 2。
+        // 这样 360° AoE 半径始终 ≥ 普攻触及距离，背后敌人也能稳定覆盖，
+        // 避免"普攻打得到、技能打不到 / 技能能打到的反而更少"的问题。
+        // ⚠ 兜底：用绝对下限 8m，防止 attackRange 在某些角色/加成下异常偏小导致技能只打到 1 个敌人。
+        skillRange = Mathf.Max(attackRange * 2f, 8f);
 
         // ===== 应用技能攻击升级加成 =====
         var skillConfig = currentCharacterData.skillAttackConfig;
@@ -762,6 +771,7 @@ public class PlayerController : MonoBehaviour
     {
         yield return new WaitForSeconds(attackDamageDelay);
 
+        bool hitAny = false;
         Collider[] hitColliders = Physics.OverlapSphere(
             transform.position + transform.forward * attackRange * 0.5f,
             attackRange
@@ -789,6 +799,23 @@ public class PlayerController : MonoBehaviour
 
                 enemy.TakeDamageImmediate(attackDamage);
                 enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
+                hitAny = true;
+            }
+        }
+
+        // ⭐ 兜底：若正前方扇形没命中任何敌人，再补一次"贴脸周身"判定（半径 1.6m，不限制朝向）。
+        // 解决挥砍动画播放期间敌人绕到背后/侧后方、或起手朝向被移动输入覆盖导致"动画在播却完全打空"的情况。
+        if (!hitAny)
+        {
+            Collider[] close = Physics.OverlapSphere(transform.position, 1.6f);
+            foreach (Collider hit in close)
+            {
+                EnemyAI enemy = hit.GetComponent<EnemyAI>();
+                if (enemy != null && !enemy.isDead)
+                {
+                    enemy.TakeDamageImmediate(attackDamage);
+                    enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
+                }
             }
         }
     }
@@ -819,32 +846,24 @@ public class PlayerController : MonoBehaviour
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
-        StartCoroutine(DelayedSkillDamage(finalDamage));
+        // 在技能起手瞬间、以当时玩家位置为球心锁定范围内的敌人，
+        // 避免 0.5s 延迟期间玩家移动 / 敌人被击退导致"有时只打到部分"。
+        StartCoroutine(DelayedSkillDamage(finalDamage, Physics.OverlapSphere(transform.position, skillRange)));
     }
 
-    IEnumerator DelayedSkillDamage(int damage)
+    IEnumerator DelayedSkillDamage(int damage, Collider[] hitColliders)
     {
         yield return new WaitForSeconds(skillDamageDelay);
 
-        // 以角色为中心的全方位球形判定（360° 旋转技能，前后左右对称）
-        Collider[] hitColliders = Physics.OverlapSphere(transform.position, skillRange);
-
+        // 命中所捕获（技能起手瞬间、以当时位置为球心）半径内的所有敌人，
+        // 实现稳定的 360° 范围技：不再因延迟期间的移动/击退而漏掉部分敌人。
         foreach (Collider hit in hitColliders)
         {
             EnemyAI enemy = hit.GetComponent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
-                // ⭐ 近身/贴脸（≤ skillRange*0.6）豁免墙挡判定：近身必然命中，
-                // 避免敌人贴墙/玩家贴墙时射线先撞墙误判"隔墙打不到"。
-                // 超过该阈值仍查真墙(IsBlockedBetween)，真隔墙时宁可不中也不穿墙攻击。
-                Vector3 toEnemy = enemy.transform.position - transform.position;
-                toEnemy.y = 0f;
-                if (toEnemy.magnitude > skillRange * 0.6f &&
-                    WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
-                    continue;
-
                 enemy.TakeDamageImmediate(damage);
-                enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 1.5f);
+                enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 3f);
             }
         }
     }

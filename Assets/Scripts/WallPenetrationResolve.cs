@@ -141,7 +141,7 @@ public static class WallPenetrationResolve
     /// 即使 ≤1.2m 也认真 raycast，被实墙隔开就判"被挡"，避免敌人贴薄墙时
     /// 误以为已就位、停下并面向墙后玩家而不绕行。
     /// </summary>
-    private const float CloseCombatDistance = 1.2f;
+    private const float CloseCombatDistance = 1.5f;
 
     public static bool IsBlockedBetween(Vector3 from, Vector3 to, bool applyCloseCombatExemption = true)
     {

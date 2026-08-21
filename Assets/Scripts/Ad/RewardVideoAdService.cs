@@ -6,7 +6,7 @@ using UnityEngine;
 
 /// <summary>
 /// 激励视频广告服务。
-/// 平台路由：微信小游戏 / Android AdMob / 其它平台兜底免费发放（便于测试）。
+    /// 平台路由：微信小游戏 / Android AdMob / 其它平台兜底直接结算（离线/无广告不复活）。
 /// 全部通过反射调用 SDK（微信 WX、GoogleMobileAds.Api），
 /// 因此即使当前工程还没导入对应 SDK，本代码也可以正常编译运行。
 /// </summary>
@@ -37,6 +37,32 @@ public static class RewardVideoAdService
     private static object cachedAd;
     private static Action<bool> pendingCallback;
 
+    // ⭐ AdMob 必须在展示前完成初始化（主线程）。
+    // 这里缓存一次初始化结果，并在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪。
+    private static bool adMobInitialized = false;
+    public static void EnsureAdMobInitialized()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (adMobInitialized) return;
+        try
+        {
+            if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null) return; // 没装插件，跳过
+            MethodInfo init = FindStaticMethod("GoogleMobileAds.Api.MobileAds", "Initialize", 1);
+            if (init != null)
+            {
+                Delegate initCb = BuildDelegate(init.GetParameters()[0].ParameterType, (Action<object>)(_ => { adMobInitialized = true; }));
+                init.Invoke(null, new object[] { initCb });
+            }
+            adMobInitialized = true;
+            AdLog("[广告] MobileAds.Initialize 已预先调用");
+        }
+        catch (Exception e)
+        {
+            AdLog($"[广告] 预初始化异常（不影响流程）：{e.Message}");
+        }
+#endif
+    }
+
     // 广告日志：同时打到 Unity 日志和文件（真机无 Device Logs 时也能看）
     static void AdLog(string msg)
     {
@@ -53,8 +79,8 @@ public static class RewardVideoAdService
     /// 展示激励视频。onResult(true) = 完整看完，可发奖励；onResult(false) = 中途关闭/加载失败。
     /// 平台路由：
     ///   微信小游戏 → 真激励视频（isEnded 才给奖励）；
-    ///   Android → AdMob（默认官方测试位；插件没装/加载失败会自动免费发放）；
-    ///   其它平台 → 直接回调 true（免费复活，方便测试）。
+    ///   Android → AdMob（默认官方测试位；插件没装/加载失败/离线 → 回调 false 进入结算）；
+    ///   其它平台（真机，不含编辑器）→ 回调 false 进入结算（无免费复活）。
     /// </summary>
     public static void ShowRewardedAd(Action<bool> onResult)
     {
@@ -76,13 +102,19 @@ public static class RewardVideoAdService
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-        // ⭐ Android 走 AdMob（反射调用；插件不在 / 加载失败会自己免费发放，流程不断）
+        // ⭐ Android 走 AdMob（反射调用；失败后由内部回调 false 进入结算，流程不断）
         if (TryShowAdMobRewardedAd()) return;
 #endif
 
-        // ⭐ 兜底：没有可用真实广告 provider → 直接发放奖励（免费复活/测试）
-        AdLog("[广告] 无真实广告 provider，直接发放奖励（免费复活）");
+        // ⭐ 兜底：没有可用真实广告 provider → 离线/无广告时直接进入结算（不再免费复活）
+#if UNITY_EDITOR
+        // 编辑器内无真实广告，保留免费复活方便测试
+        AdLog("[广告] 编辑器内无真实广告 provider，直接发放奖励（测试）");
         SafeInvoke(true);
+#else
+        AdLog("[广告] 无真实广告 provider，直接进入结算（不免费复活）");
+        SafeInvoke(false);
+#endif
     }
 
     // ==================== AdMob（Google Mobile Ads Unity v11 Next-Gen API，反射调用） ====================
@@ -103,19 +135,14 @@ public static class RewardVideoAdService
             }
 
             // Next-Gen SDK 要求先在主线程初始化（静默，成败无所谓）
-            MethodInfo init = FindStaticMethod("GoogleMobileAds.Api.MobileAds", "Initialize", 1);
-            if (init != null)
-            {
-                Delegate initCb = BuildDelegate(init.GetParameters()[0].ParameterType, (Action<object>)(_ => { }));
-                init.Invoke(null, new object[] { initCb });
-            }
+            EnsureAdMobInitialized();
             AdLog("[广告] step1: MobileAds.Initialize 完成");
 
             object request = CreateInstance("GoogleMobileAds.Api.AdRequest");
             if (request == null)
             {
-                AdLog("[广告] AdMob AdRequest 创建失败，免费发放");
-                SafeInvoke(true);
+                AdLog("[广告] AdMob AdRequest 创建失败 → 进入结算");
+                SafeInvoke(false);
                 return true;
             }
             AdLog("[广告] step2: AdRequest 创建完成");
@@ -123,8 +150,8 @@ public static class RewardVideoAdService
             MethodInfo load = FindStaticMethod("GoogleMobileAds.Api.RewardedAd", "Load", 3);
             if (load == null)
             {
-                AdLog("[广告] AdMob RewardedAd.Load 不存在，免费发放");
-                SafeInvoke(true);
+                AdLog("[广告] AdMob RewardedAd.Load 不存在 → 进入结算");
+                SafeInvoke(false);
                 return true;
             }
             AdLog("[广告] step3: RewardedAd.Load 找到");
@@ -132,8 +159,8 @@ public static class RewardVideoAdService
             Delegate loadCb = BuildDelegate2(load.GetParameters()[2].ParameterType, (Action<object, object>)HandleAdMobLoad);
             if (loadCb == null)
             {
-                AdLog("[广告] AdMob Load 回调构造失败，免费发放");
-                SafeInvoke(true);
+                AdLog("[广告] AdMob Load 回调构造失败 → 进入结算");
+                SafeInvoke(false);
                 return true;
             }
             AdLog("[广告] step4: Load 回调构造完成");
@@ -144,8 +171,8 @@ public static class RewardVideoAdService
         }
         catch (Exception e)
         {
-            AdLog($"[广告] AdMob 调用异常，免费发放：{e}");
-            SafeInvoke(true);
+            AdLog($"[广告] AdMob 调用异常 → 进入结算：{e}");
+            SafeInvoke(false);
             return true;
         }
     }
@@ -173,8 +200,8 @@ public static class RewardVideoAdService
         if (adObj == null || errorObj != null)
         {
             string msg = DescribeAdError(errorObj);
-            AdLog($"[广告] AdMob 加载失败：{msg} → 免费发放（测试/无填充）");
-            SafeInvoke(true);
+            AdLog($"[广告] AdMob 加载失败：{msg} → 进入结算（离线/无填充）");
+            SafeInvoke(false);
             return;
         }
 
@@ -182,13 +209,13 @@ public static class RewardVideoAdService
         MethodInfo show = adType.GetMethod("Show");
         if (show == null)
         {
-            AdLog("[广告] AdMob Show 不存在，免费发放");
-            SafeInvoke(true);
+            AdLog("[广告] AdMob Show 不存在 → 进入结算");
+            SafeInvoke(false);
             return;
         }
 
         Delegate rewardCb = BuildDelegate(show.GetParameters()[0].ParameterType, (Action<object>)HandleAdMobReward);
-        if (rewardCb == null) { SafeInvoke(true); return; }
+        if (rewardCb == null) { AdLog("[广告] 激励回调构造失败 → 进入结算"); SafeInvoke(false); return; }
 
         show.Invoke(adObj, new object[] { rewardCb });
     }

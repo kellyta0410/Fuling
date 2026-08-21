@@ -15,9 +15,9 @@ public class JiangshiEnemy : EnemyAI
     [Tooltip("大于此距离才会瞬移（远距离用瞬移接近；近距离直接走过去打）")]
     public float prepareDistance = 6f;
     [Tooltip("每次瞬移前进的距离(米)：一小步跳跃接近，而不是一次跳到玩家面前")]
-    public float blinkStepDistance = 3f;
+    public float blinkStepDistance = 5f;
     [Tooltip("蓄力停顿时间（秒）")]
-    public float prepareDuration = 3.0f;
+    public float prepareDuration = 2.0f;
     [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移")]
     public float prepareDurationJitter = 0.8f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
@@ -221,7 +221,7 @@ public class JiangshiEnemy : EnemyAI
                     lockedFacingDir = GetLockedFacingDir();
                     // ⭐ 锁定瞬移落点基准：沿锁定方向前进 blinkStepDistance(3m) 一小步，之后不跟随玩家
                     lockedIndicatorTarget = player != null
-                        ? GetGroundPosition(transform.position + lockedFacingDir * blinkStepDistance)
+                        ? GetGroundPosition(transform.position + lockedFacingDir * blinkStepDistance) // blinkStepDistance=5m
                         : GetGroundPosition(transform.position);
                     StopAgent();
 
@@ -445,7 +445,7 @@ public class JiangshiEnemy : EnemyAI
     }
 
     /// <summary>
-    /// ⭐ 每次瞬移只沿"蓄力开始时锁定的朝向"前进 blinkStepDistance(3m) 一小步，
+    /// ⭐ 每次瞬移只沿"蓄力开始时锁定的朝向"前进 blinkStepDistance(5m) 一小步，
     /// 锁定方向不跟随玩家；落点与指示条终点一致。
     /// 成功瞬移返回 true；落点路径被墙挡则返回 false（不瞬移，由调用方回到追击）。
     /// </summary>

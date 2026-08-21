@@ -22,6 +22,9 @@ public class EnemyCollisionBlocker : MonoBehaviour
     [Tooltip("敌人互相重叠时，各自往反方向推一半距离，避免互相穿模/顶堆")]
     public bool resolveEnemyOverlap = true;
 
+    [Tooltip("敌人互相重叠时，穿透深度小于该值(米)的浅接触忽略。密集人群(多批次敌人)贴在一起时，每帧把几毫米的重叠推开会造成持续小幅抖动，留一点容差让它们能安静地挤在一起")]
+    public float enemyOverlapResolveThreshold = 0.06f;
+
     [Header("穿墙兜底")]
     [Tooltip("敌人被击退/冲锋/瞬移/分离挪到与墙重叠时，把它水平推出墙外（实墙与 X-Ray 半透明墙都保证不穿）")]
     public bool resolveWallOverlap = true;
@@ -241,7 +244,12 @@ public class EnemyCollisionBlocker : MonoBehaviour
 
         // 敌人水平半宽（用包围盒水平 extents 近似，覆盖椭圆体/长盒）
         Bounds b = myCollider.bounds;
-        float enemyHalf = Mathf.Max(b.extents.x, b.extents.z);
+        // ⭐ 用"较小的"水平半径(宽/深取小)，而不是较大的：
+        // 敌人朝向玩家时，其长度轴指向玩家，真正需要避开玩家的只有"体宽"那一侧；
+        // 若按全长(最大半径)做分离，像蛇这种长盒会被迫停在离玩家很远的地方、
+        // 永远够不到攻击距离，表现成"一直被碰撞解决器往外顶、推挤却不攻击"。
+        // 对近正方体的人形敌人(min≈max)无影响；对蛇(长 3.78 / 宽 1)则把站位距离从 ~2.7m 降到 ~1.3m，能正常贴身咬。
+        float enemyHalf = Mathf.Max(0.3f, Mathf.Min(b.extents.x, b.extents.z));
 
         Vector3 myPos = transform.position;
         Vector3 pcPos = playerController.transform.position;
@@ -258,11 +266,11 @@ public class EnemyCollisionBlocker : MonoBehaviour
             float push = needDist - distToPlayer;
 
             lastPlayerOverlap = true;
-            lastPlayerDir = -dir;                 // 敌人被推的方向 = 远离玩家
+            lastPlayerDir = -dir;                 // 敌人被推的方向 = 远离玩家（仅作分离参考，不再实际位移）
             lastPlayerDist = push;
 
-            // 只移动敌人；玩家保持原位（解决"推挤玩家"的根因）
-            MoveEnemy(-dir * push);
+            // 按需求：玩家不把敌人顶开（无论是否移动/闪避），让敌人自由贴身攻击。
+            // 接触状态仍照常上报，供分离/动画使用，但不再移动敌人。
             RaisePlayerContact(true);
         }
         else
@@ -302,7 +310,7 @@ public class EnemyCollisionBlocker : MonoBehaviour
                 c, c.transform.position, c.transform.rotation,
                 out dir, out dist);
 
-            if (overlapping && dist > 0.001f)
+            if (overlapping && dist > enemyOverlapResolveThreshold)
             {
                 // 各承担一半；对方敌人每帧也会执行本逻辑，双方各推 0.5 恰好分离
                 MoveEnemy(dir * dist * 0.5f);

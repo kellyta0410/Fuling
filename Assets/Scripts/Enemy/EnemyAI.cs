@@ -101,6 +101,10 @@ public abstract class EnemyAI : MonoBehaviour
     public float separationRadius = 2f;
     public float separationForce = 5f;
     public float separationSmoothSpeed = 10f;
+    // ⭐ 分离力低于该阈值(单位：力)时视为已就位，不再施加位移：多批次敌人挤在攻击圈外时，
+    // 各敌人之间的排斥力会相互抵消成很小的净力，若每帧都照常推动就会造成持续小幅抖动。
+    // 留一点容差让它们安静地保持间距，而不是永远在微调位置。
+    public float separationDeadzone = 0.5f;
     [Header("前方拥挤检测")]
     [Tooltip("追击时前方此距离内有敌人（朝玩家方向）则先停下，避免把前面敌人一路推挤到玩家")]
     public float frontEnemyStopRange = 1.5f;
@@ -501,7 +505,7 @@ public abstract class EnemyAI : MonoBehaviour
         // 中间有实墙(如 XRay 薄墙)就不算"已就位"，继续走 NavMesh steering 绕墙，
         // 不再出现"停下转身面向墙后玩家、却不去绕墙"的卡位。
         if (distance <= attackRange &&
-            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: true))
         {
             if (TryPerformInRangeAttack())
                 return;
@@ -513,7 +517,7 @@ public abstract class EnemyAI : MonoBehaviour
         // 不算"攻击圈外"（否则 separation 会把敌群在攻击边界反复推挤、贴脸却不出手），
         // 但也不停死攻击——先原地转向玩家，再继续走上面的追击/压近流程，进入严格距离后才出手。
         if (distance <= attackRange * attackRangeSlackMultiplier &&
-            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: false))
+            !WallPenetrationResolve.IsBlockedBetween(transform.position, player.transform.position, applyCloseCombatExemption: true))
         {
             RotateTowardsPlayer(Time.deltaTime);
         }
@@ -817,6 +821,13 @@ Vector3 center = player.transform.position;
 
         if (count > 0)
         {
+            // 净分离力很小（敌人已基本均匀散开）→ 视为已就位，衰减速度并不再位移，避免密集人群持续微抖
+            if (force.sqrMagnitude < separationDeadzone * separationDeadzone)
+            {
+                separationVelocity = Vector3.Lerp(separationVelocity, Vector3.zero, Time.deltaTime * separationSmoothSpeed);
+                return;
+            }
+
             separationVelocity = Vector3.Lerp(separationVelocity, force, Time.deltaTime * separationSmoothSpeed);
 
             // 关键修复：分离位移不允许把敌人推向玩家。

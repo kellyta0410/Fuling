@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -48,7 +49,8 @@ public class UIManager : MonoBehaviour
     [Header("Buff 提示")]
     [Tooltip("获得 Buff 时的提示文字（可不拖，运行时自动创建）")]
     public TextMeshProUGUI buffToastText;
-    private Coroutine buffToastCoroutine;
+    private Queue<string> buffToastQueue = new Queue<string>();
+    private bool buffToastShowing = false;
 
     [Header("GameOver 复活")]
     [Tooltip("看广告复活面板（在场景里摆好，含两个按钮）")]
@@ -609,26 +611,30 @@ public class UIManager : MonoBehaviour
 
     public void ShowBuffToast(string message)
     {
-        TextMeshProUGUI toast = GetBuffToast();
-        if (toast == null) return;
+        if (string.IsNullOrEmpty(message)) return;
 
-        toast.gameObject.SetActive(true);
-        toast.text = message;
-        toast.color = Color.white;
-
-        if (buffToastCoroutine != null) StopCoroutine(buffToastCoroutine);
-        buffToastCoroutine = StartCoroutine(HideBuffToast(2f));
+        // 多条提示排队，按顺序逐条显示，避免同时捡到多个 buff 时只显示最后一条
+        buffToastQueue.Enqueue(message);
+        if (!buffToastShowing) StartCoroutine(ProcessBuffToastQueue());
     }
 
-    IEnumerator HideBuffToast(float delay)
+    IEnumerator ProcessBuffToastQueue()
     {
-        yield return new WaitForSeconds(delay);
-
-        if (buffToastText != null)
+        buffToastShowing = true;
+        while (buffToastQueue.Count > 0)
         {
-            buffToastText.gameObject.SetActive(false);
+            string message = buffToastQueue.Dequeue();
+            TextMeshProUGUI toast = GetBuffToast();
+            if (toast != null)
+            {
+                toast.gameObject.SetActive(true);
+                toast.text = message;
+                toast.color = Color.white;
+            }
+            yield return new WaitForSeconds(1f);
         }
-        buffToastCoroutine = null;
+        if (buffToastText != null) buffToastText.gameObject.SetActive(false);
+        buffToastShowing = false;
     }
 
     TextMeshProUGUI GetBuffToast()
