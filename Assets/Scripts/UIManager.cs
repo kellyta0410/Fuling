@@ -553,18 +553,24 @@ public class UIManager : MonoBehaviour
     /// <summary>「观看广告」按钮</summary>
     public void OnReviveWatchAd()
     {
-        RewardVideoAdService.ShowRewardedAd((watchedFull) =>
-        {
-            if (watchedFull)
+        RewardVideoAdService.ShowRewardedAd(
+            (watchedFull) =>
             {
-                DoRevive();
-            }
-            else
+                if (watchedFull)
+                {
+                    DoRevive();
+                }
+                else
+                {
+                    // 广告未看完/中途关闭：不复活，直接结算
+                    HandleReviveDecline();
+                }
+            },
+            () =>
             {
-                // 广告未看完/失败：不复活，直接结算
-                HandleReviveDecline();
-            }
-        });
+                // 离线 / 无广告可用：弹提示并留在复活面板，不直接结算
+                ShowBuffToast("离线 / 无广告：暂时无法复活");
+            });
     }
 
     /// <summary>「结束游戏」按钮（进入 GameOver 结算）</summary>

@@ -82,7 +82,7 @@ public static class RewardVideoAdService
     ///   Android → AdMob（默认官方测试位；插件没装/加载失败/离线 → 回调 false 进入结算）；
     ///   其它平台（真机，不含编辑器）→ 回调 false 进入结算（无免费复活）。
     /// </summary>
-    public static void ShowRewardedAd(Action<bool> onResult)
+    public static void ShowRewardedAd(Action<bool> onResult, Action onUnavailable = null)
     {
         pendingCallback = onResult;
 
@@ -102,19 +102,35 @@ public static class RewardVideoAdService
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-        // ⭐ Android 走 AdMob（反射调用；失败后由内部回调 false 进入结算，流程不断）
+        // ⭐ Android 走 AdMob（反射调用）；接管成功则返回，稍后回调。
+        // 返回 false = 未安装 AdMob SDK → 视为"无广告可用"，走离线/无广告提示而非直接结算。
         if (TryShowAdMobRewardedAd()) return;
+        if (onUnavailable != null)
+        {
+            pendingCallback = null;
+            onUnavailable();
+            return;
+        }
 #endif
 
-        // ⭐ 兜底：没有可用真实广告 provider → 离线/无广告时直接进入结算（不再免费复活）
+        // ⭐ 兜底：没有可用真实广告 provider（离线 / 无广告 SDK）。
+        // 优先走"不可用"回调让上层弹离线提示；未提供回调时保持旧行为（编辑器免费复活 / 其它直接结算）。
+        if (onUnavailable != null)
+        {
+            pendingCallback = null;
+            onUnavailable();
+        }
+        else
+        {
 #if UNITY_EDITOR
-        // 编辑器内无真实广告，保留免费复活方便测试
-        AdLog("[广告] 编辑器内无真实广告 provider，直接发放奖励（测试）");
-        SafeInvoke(true);
+            // 编辑器内无真实广告，保留免费复活方便测试
+            AdLog("[广告] 编辑器内无真实广告 provider，直接发放奖励（测试）");
+            SafeInvoke(true);
 #else
-        AdLog("[广告] 无真实广告 provider，直接进入结算（不免费复活）");
-        SafeInvoke(false);
+            AdLog("[广告] 无真实广告 provider，直接进入结算（不免费复活）");
+            SafeInvoke(false);
 #endif
+        }
     }
 
     // ==================== AdMob（Google Mobile Ads Unity v11 Next-Gen API，反射调用） ====================
