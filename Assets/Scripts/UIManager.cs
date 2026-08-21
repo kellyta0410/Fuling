@@ -52,10 +52,6 @@ public class UIManager : MonoBehaviour
     private Queue<string> buffToastQueue = new Queue<string>();
     private bool buffToastShowing = false;
 
-    [Header("广告流程屏幕调试（免设备日志）")]
-    private TextMeshProUGUI adDebugText;
-    private string adDebugBuffer = "";
-
     [Header("GameOver 复活")]
     [Tooltip("看广告复活面板（在场景里摆好，含两个按钮）")]
     public GameObject revivePanel;
@@ -131,65 +127,9 @@ public class UIManager : MonoBehaviour
             StartCoroutine(DelayedUIUpdate());
         }
 
-        // ⭐ 广告流程屏幕调试：把 [广告] 日志直接显示在手机上，免去看设备日志
-        SetupAdDebugOverlay();
-        RewardVideoAdService.OnAdLog += AppendAdDebug;
     }
 
-    // ==================== 广告流程屏幕调试 ====================
-    void SetupAdDebugOverlay()
-    {
-        // ⭐ 专用顶层 Canvas：sortingOrder 拉到最高并 overrideSorting，确保压在复活面板/结算面板等所有 UI 之上
-        GameObject cgo = new GameObject("AdDebugCanvas");
-        Canvas canvas = cgo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 9999;
-        cgo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-        // 容器铺满整个 Canvas，子物体才能正确按屏幕四角定位
-        GameObject go = new GameObject("AdDebugOverlay");
-        go.transform.SetParent(canvas.transform, false);
-        RectTransform goRt = go.AddComponent<RectTransform>();
-        goRt.anchorMin = Vector2.zero;
-        goRt.anchorMax = Vector2.one;
-        goRt.offsetMin = Vector2.zero;
-        goRt.offsetMax = Vector2.zero;
-
-        // 半透明黑底，保证任何背景下都看得清
-        GameObject bg = new GameObject("AdDebugBg");
-        bg.transform.SetParent(go.transform, false);
-        Image img = bg.AddComponent<Image>();
-        img.color = new Color(0f, 0f, 0f, 0.78f);
-        img.raycastTarget = false;
-        RectTransform bgRt = bg.GetComponent<RectTransform>();
-        bgRt.anchorMin = new Vector2(0, 1); bgRt.anchorMax = new Vector2(0, 1);
-        bgRt.pivot = new Vector2(0, 1); bgRt.anchoredPosition = new Vector2(0, 0);
-        bgRt.sizeDelta = new Vector2(460, 300);
-
-        adDebugText = go.AddComponent<TextMeshProUGUI>();
-        // 用 TMP 默认字体（含英文/ASCII），调试文字一律用英文，避免中文字形缺失导致空白
-        adDebugText.alignment = TextAlignmentOptions.TopLeft;
-        adDebugText.fontSize = 24;
-        adDebugText.color = Color.white;
-        adDebugText.outlineWidth = 0f;   // 不加描边，避免黑边把白字吞成黑色
-        adDebugText.raycastTarget = false;
-        adDebugText.text = "[AdDebug v6 ONLINE]\n(overlay active)";
-        RectTransform rt = adDebugText.rectTransform;
-        rt.anchorMin = new Vector2(0, 1); rt.anchorMax = new Vector2(0, 1);
-        rt.pivot = new Vector2(0, 1); rt.anchoredPosition = new Vector2(8, -8);
-        rt.sizeDelta = new Vector2(444, 284);
-    }
-
-    void AppendAdDebug(string line)
-    {
-        if (adDebugText == null) return;
-        adDebugBuffer = (adDebugBuffer + "\n" + line).Trim('\n');
-        string[] lines = adDebugBuffer.Split('\n');
-        if (lines.Length > 11)
-            adDebugBuffer = string.Join("\n", lines, lines.Length - 11, 11);
-        adDebugText.text = adDebugBuffer;
-    }
 
     void Update()
     {
@@ -227,7 +167,6 @@ public class UIManager : MonoBehaviour
             gameManager.OnTimerVisibilityChanged -= SetTimerVisibility;
             gameManager.OnGameOver -= OnGameOver;
         }
-        RewardVideoAdService.OnAdLog -= AppendAdDebug;
     }
 
     public void SetTimerMode(bool isInfinite)
@@ -574,6 +513,15 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void HandlePlayerDied(PlayerController diedPlayer)
     {
+        // PC 版（导出的 Windows 构建）不提供复活界面，死亡直接进结算；
+        // 编辑器内仍保留复活流程，方便测试。
+        if (!Application.isEditor && Application.platform == RuntimePlatform.WindowsPlayer)
+        {
+            ShowGameOver();
+            if (gameManager != null) gameManager.GameOver(false);
+            return;
+        }
+
         if (gameManager != null && gameManager.CanRevive())
         {
             ShowRevivePanel();

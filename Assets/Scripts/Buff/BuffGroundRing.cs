@@ -12,7 +12,7 @@ public class BuffGroundRing : MonoBehaviour
 
     // 与 BuffHandler 的光柱同理：该运行时叠加粒子在 GLES + HDR/Bloom 的部分移动 GPU
     // 上会整屏抖闪，故默认关闭。需要恢复地面光圈时把下面开关改为 true 即可。
-    const bool EnableBuffGroundRing = true;
+    const bool EnableBuffGroundRing = false;
 
     private ParticleSystem ring;
     private BuffPickupItem pickup;

@@ -45,9 +45,6 @@ public static class RewardVideoAdService
     private static float watchdogDeadline = -1f;
     private const float WatchdogSeconds = 12f;
 
-    // ⭐ 广告流程日志对外广播：UIManager 订阅后可直接显示在手机屏幕上，免去看设备日志
-    public static Action<string> OnAdLog;
-
     // ⭐ AdMob 必须在展示前完成初始化（主线程）。
     // 在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪；
     // MobileAds.Initialize 本身幂等，重复调用安全，故无需额外的"已初始化"标记位。
@@ -76,7 +73,6 @@ public static class RewardVideoAdService
     static void AdLog(string msg)
     {
         UnityEngine.Debug.Log(msg);
-        try { OnAdLog?.Invoke(msg); } catch { }
         try
         {
             string path = Path.Combine(Application.persistentDataPath, "fuling_ad_log.txt");
