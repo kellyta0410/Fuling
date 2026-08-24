@@ -584,7 +584,7 @@ public class UIManager : MonoBehaviour
             (reason) =>
             {
                 // 离线 / 无广告可用：弹提示（带具体原因）并留在复活面板，不直接结算
-                ShowBuffToast("无法播放复活广告：" + reason);
+                HintToast.Show("无法播放复活广告：" + reason);
             });
     }
 

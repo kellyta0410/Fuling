@@ -54,10 +54,12 @@ public class GameManager : MonoBehaviour
     void Start()
     {
         Debug.Log("[Boot] GameManager.Start begin");
-        // ⚠️ 临时诊断：注释掉 AdMob 启动初始化，用于排查"闪屏即退"是否由 AdMob 引起。
-        // 若注释后游戏能正常进，说明是 AdMob 启动初始化导致原生崩溃，届时改为"懒初始化"保留广告功能。
-        // RewardVideoAdService.EnsureAdMobInitialized();
-        // RewardVideoAdService.PreloadRewardedAd();
+        // ⭐ 开局即初始化 AdMob 并预拉取激励广告：把首条广告的 SDK 初始化成本挪到开局，
+        // 玩家死亡点「观看广告」时 preloadedAd 已就绪 → 秒出，不再走联网 Load 等待。
+        // （原"闪屏即退"崩溃在更早的开屏阶段，AdMob 初始化只在本玩法场景 Start 才跑，与之无关；
+        //   该崩溃已确认是增量构建缓存坏档所致，故此处恢复早初始化是安全的。）
+        RewardVideoAdService.EnsureAdMobInitialized();
+        RewardVideoAdService.PreloadRewardedAd();
 
         if (normalSpawner == null)
             normalSpawner = FindObjectOfType<EnemySpawner>();

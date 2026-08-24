@@ -1189,7 +1189,7 @@ public class PlayerController : MonoBehaviour
         float t = 0f;
         while (t < 1f)
         {
-            t += Time.deltaTime / Mathf.Max(hitRedDuration, 0.001f);
+            t += Time.unscaledDeltaTime / Mathf.Max(hitRedDuration, 0.001f);
             float a = hitRedAlpha * Mathf.Sin(t * Mathf.PI); // 0→红→0
             for (int i = 0; i < hitCornerImages.Length; i++)
             {

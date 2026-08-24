@@ -44,6 +44,9 @@ public static class RewardVideoAdService
     private static bool rewardEarned = false; // 用户是否完整看完（拿到激励），用于"关闭"事件兜底，避免复活被误取消
     private static float watchdogDeadline = -1f;
     private const float WatchdogSeconds = 12f;
+    // 广告成功展示后改用较长兜底计时：既不误杀 15~30s 的长广告，又能在"关闭事件丢失"时兜底，
+    // 避免复活面板永久卡在暂停态（比原来的 12s 全程计时更合理）。
+    private const float WatchdogAfterShowSeconds = 60f;
 
     // 设备是否具备 Google 移动服务（GMS）。无 GMS 时 AdMob 初始化会原生崩溃
     // （C# 的 try/catch 拦不住原生崩溃），且广告也无法展示，因此直接跳过整个 AdMob 流程。
@@ -127,6 +130,13 @@ public static class RewardVideoAdService
     /// </summary>
     public static void ShowRewardedAd(Action<bool> onResult, Action<string> onUnavailable = null)
     {
+        // ⭐ 防重入：广告加载/展示期间按钮仍可点（全屏广告尚未弹出时面板可见），
+        // 重复点击会并发多次 Load / Show，导致弹多次广告、SafeInvoke 重入。已在处理中则直接忽略。
+        if (adPending)
+        {
+            AdLog("[Ad] ignore duplicate ShowRewardedAd (ad already pending)");
+            return;
+        }
         pendingCallback = onResult;
         pendingUnavailable = onUnavailable;
         adPending = true;
@@ -355,6 +365,7 @@ public static class RewardVideoAdService
         {
             show.Invoke(adObj, new object[] { rewardCb });
             AdLog("[Ad] step6: RewardedAd.Show called, waiting for user");
+            ArmWatchdog(WatchdogAfterShowSeconds); // 展示成功后挂较长兜底：不误杀长广告，关闭事件丢失时也不永久卡死
             PreloadRewardedAd(); // 预拉下一条，供下次游戏复活秒出
         }
         catch (Exception e)

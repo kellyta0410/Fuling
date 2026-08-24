@@ -121,9 +121,8 @@ public class BuffHandler : MonoBehaviour
         GameObject prefab = GetEffectPrefab(type);
         if (prefab == null) return;
 
-        bool vfxUnsupported = SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3
-                           || SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES2;
-        if (vfxUnsupported) return; // GLES 下 VFX 不渲染，且不再用叠加粒子兜底
+        // VFX Graph 在 Vulkan 下正常渲染（Android 已设 Vulkan 优先、GLES3 兜底）。
+        // GLES3 设备该特效不可见但无害，故不再在此早退。
 
         float lifetime = GetEffectLifetime(type);
         GameObject effect = Instantiate(prefab, player.transform.position, Quaternion.identity, player.transform);
