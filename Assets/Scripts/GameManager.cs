@@ -53,10 +53,11 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // ⭐ 预先初始化广告 SDK（Android/AdMob 必须在展示前就绪，否则复活看广告时常"放不出来"）
-        RewardVideoAdService.EnsureAdMobInitialized();
-        // ⭐ 进游戏就提前把激励广告拉好，玩家点"观看广告"可秒出，避免等待期间点"结束游戏"导致广告放不出来
-        RewardVideoAdService.PreloadRewardedAd();
+        Debug.Log("[Boot] GameManager.Start begin");
+        // ⚠️ 临时诊断：注释掉 AdMob 启动初始化，用于排查"闪屏即退"是否由 AdMob 引起。
+        // 若注释后游戏能正常进，说明是 AdMob 启动初始化导致原生崩溃，届时改为"懒初始化"保留广告功能。
+        // RewardVideoAdService.EnsureAdMobInitialized();
+        // RewardVideoAdService.PreloadRewardedAd();
 
         if (normalSpawner == null)
             normalSpawner = FindObjectOfType<EnemySpawner>();
@@ -117,6 +118,7 @@ public class GameManager : MonoBehaviour
         {
             Debug.LogError($"❌ 场景 '{SceneManager.GetActiveScene().name}' 配置错误！请在 Inspector 中拖拽 currentDifficulty");
         }
+        Debug.Log("[Boot] GameManager.Start end");
     }
 
     public void StartGame()
