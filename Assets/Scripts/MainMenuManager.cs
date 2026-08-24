@@ -43,12 +43,11 @@ public class MainMenuManager : MonoBehaviour
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
 
-        // ⭐ 剧情按钮：看过剧情（StoryFinished==1）才显示；新玩家隐藏，看完剧情解锁
+        // ⭐ 剧情按钮：新手看完剧情(StoryFinished==1)后才在主菜单显示；点击进剧情、看完回主菜单
         if (storyButton != null)
         {
             bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
             storyButton.gameObject.SetActive(storyDone);
-            // 自动绑定点击：进剧情并把 returnSceneName 设为 MainMenu（看完回主菜单）
             storyButton.onClick.AddListener(StoryButton);
         }
 
