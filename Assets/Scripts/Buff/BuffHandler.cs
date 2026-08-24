@@ -113,6 +113,11 @@ public class BuffHandler : MonoBehaviour
     {
         if (player == null) return;
 
+        // ⚠️ 诊断用开关：临时关闭所有 buff 特效生成，用于定位屏幕闪烁是否由 buff VFX 引起。
+        //    真机拾取 buff 后若闪消失 → 确认是它；验证完把此处改回 true 即可恢复。
+        const bool buffVfxEnabled = true;
+        if (!buffVfxEnabled) return;
+
         GameObject prefab = GetEffectPrefab(type);
         if (prefab == null) return;
 

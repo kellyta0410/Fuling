@@ -11,7 +11,7 @@ public class MainMenuManager : MonoBehaviour
     public GameObject settingsPanel;
     public GameObject creditsPanel;
     [Tooltip("主菜单的'剧情'按钮：新玩家看完剧情后才显示/解锁（没填则不处理）")]
-    public GameObject storyButton;
+    public Button storyButton;
 
     [Header("设置 - 音量控制")]
     public Slider musicSlider;
@@ -47,7 +47,9 @@ public class MainMenuManager : MonoBehaviour
         if (storyButton != null)
         {
             bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
-            storyButton.SetActive(storyDone);
+            storyButton.gameObject.SetActive(storyDone);
+            // 自动绑定点击：进剧情并把 returnSceneName 设为 MainMenu（看完回主菜单）
+            storyButton.onClick.AddListener(StoryButton);
         }
 
         // 加载音量设置
@@ -164,13 +166,15 @@ public class MainMenuManager : MonoBehaviour
         else
         {
             Debug.Log("开始游戏 → 新玩家先看剧情");
+            StorySceneManager.returnSceneName = "Selection"; // 新手自动看剧情 → 看完去选关
             StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
         }
     }
 
-    // ⭐ 主菜单"剧情"按钮：随时可以重看剧情（仅看完剧情后可见）
+    // ⭐ 主菜单"剧情"按钮：随时可以重看剧情（仅看完剧情后可见），看完回主菜单
     public void StoryButton()
     {
+        StorySceneManager.returnSceneName = "MainMenu"; // 手动重看剧情 → 看完回主菜单
         StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
     }
 
