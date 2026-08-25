@@ -366,42 +366,112 @@ public class DungeonManager : MonoBehaviour
         doorBlockers.Add(blocker);
     }
 
+    private Coroutine[] doorAnimCoroutines = new Coroutine[4];
+
     void SetDoorBlocker(int dirIndex, bool block)
     {
         if (dirIndex < 0 || dirIndex >= doorBlockers.Count) return;
         GameObject b = doorBlockers[dirIndex];
         if (b == null) return;
 
-        // 物理阻挡：关门时启用碰撞体，开门时关闭（这样玩家/敌人能穿过去）
         var col = b.GetComponent<Collider>();
-        if (col != null) col.enabled = block;
-
-        // 视觉：优先用 DoorBlocker（及其子物体）上的 Animator 播放开/关动画；
-        // 支持双开门——两侧门扇各自挂 Animator 也能同时驱动；
-        // 没有任何 Animator 才退回原来的显隐方式（用于程序化兜底方块）
         var anims = b.GetComponentsInChildren<Animator>();
-        if (anims != null && anims.Length > 0)
+
+        if (block)
         {
-            bool matchedAny = false;
-            foreach (var anim in anims)
+            // 关门 / 保持关闭：立即启用碰撞体，并停止可能还在播放的开门协程。
+            // 不需要关门动画 —— 直接回到闭合姿态（默认状态无 clip 即瞬切）。
+            StopDoorAnim(dirIndex);
+            if (col != null) col.enabled = true;
+
+            bool matched = false;
+            if (anims != null)
             {
-                foreach (var p in anim.parameters)
+                foreach (var anim in anims)
                 {
-                    if (p.name != doorOpenAnimParam) continue;
-                    matchedAny = true;
-                    if (p.type == AnimatorControllerParameterType.Bool)
-                        anim.SetBool(doorOpenAnimParam, !block);          // !block：开门=true
-                    else if (p.type == AnimatorControllerParameterType.Trigger && !block)
-                        anim.SetTrigger(doorOpenAnimParam);               // 仅开门时触发
-                    break;
+                    foreach (var p in anim.parameters)
+                    {
+                        if (p.name != doorOpenAnimParam) continue;
+                        matched = true;
+                        if (p.type == AnimatorControllerParameterType.Bool)
+                            anim.SetBool(doorOpenAnimParam, false);   // 回到关闭姿态（无关门动画）
+                        break;
+                    }
                 }
             }
-            if (!matchedAny) b.SetActive(block);
+            if (!matched) b.SetActive(true);   // 兜底（无动画方块）：保持显示 + 阻挡
         }
         else
         {
-            b.SetActive(block);
+            // 开门：门还在往内转时先保持碰撞体开启（挡住玩家），
+            // 等动画播完再关碰撞体放行，避免“门没开完人就穿过去”。
+            if (col != null) col.enabled = true;
+
+            bool matched = false;
+            if (anims != null)
+            {
+                foreach (var anim in anims)
+                {
+                    foreach (var p in anim.parameters)
+                    {
+                        if (p.name != doorOpenAnimParam) continue;
+                        matched = true;
+                        if (p.type == AnimatorControllerParameterType.Bool)
+                            anim.SetBool(doorOpenAnimParam, true);
+                        else if (p.type == AnimatorControllerParameterType.Trigger)
+                            anim.SetTrigger(doorOpenAnimParam);
+                        break;
+                    }
+                }
+            }
+
+            if (matched)
+            {
+                StopDoorAnim(dirIndex);
+                doorAnimCoroutines[dirIndex] = StartCoroutine(WaitDoorOpenThenDisable(dirIndex, b));
+            }
+            else
+            {
+                // 无动画兜底：直接放行
+                if (col != null) col.enabled = false;
+                b.SetActive(false);
+            }
         }
+    }
+
+    void StopDoorAnim(int dirIndex)
+    {
+        if (dirIndex >= 0 && dirIndex < doorAnimCoroutines.Length && doorAnimCoroutines[dirIndex] != null)
+        {
+            StopCoroutine(doorAnimCoroutines[dirIndex]);
+            doorAnimCoroutines[dirIndex] = null;
+        }
+    }
+
+    IEnumerator WaitDoorOpenThenDisable(int dirIndex, GameObject b)
+    {
+        yield return null;                                   // 等一帧，让状态机切到 Open 状态
+        if (b == null) { doorAnimCoroutines[dirIndex] = null; yield break; }
+
+        var anims = b.GetComponentsInChildren<Animator>();
+        float openLen = 0f;
+        if (anims != null)
+        {
+            foreach (var anim in anims)
+            {
+                // 取 Open 状态（过渡目标）的 clip 时长，双开门取较长的一个
+                var next = anim.GetNextAnimatorStateInfo(0);
+                float len = next.length > 0f ? next.length : anim.GetCurrentAnimatorStateInfo(0).length;
+                if (len > openLen) openLen = len;
+            }
+        }
+        if (openLen <= 0f) openLen = 0.5f;                   // 兜底时长
+        yield return new WaitForSeconds(openLen + 0.05f);     // 等开门动画播完
+
+        if (b == null) { doorAnimCoroutines[dirIndex] = null; yield break; }
+        var col = b.GetComponent<Collider>();
+        if (col != null) col.enabled = false;                 // 动画结束才放行
+        doorAnimCoroutines[dirIndex] = null;
     }
 
     // ============================================================
