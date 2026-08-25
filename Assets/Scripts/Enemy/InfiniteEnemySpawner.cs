@@ -63,10 +63,10 @@ public class InfiniteEnemySpawner : MonoBehaviour
     private int difficultyLevel = 0;
 
     private CountdownManager countdownManager;
-    private InfiniteWorldManager worldManager;
+
     private float cleanupTimer = 0f;
 
-    private NavMeshSurface navMeshSurface;
+
     private bool pendingRebuild = false;
     private Coroutine rebuildCoroutine = null;
 
@@ -107,7 +107,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
     void Start()
     {
         countdownManager = FindObjectOfType<CountdownManager>();
-        worldManager = FindObjectOfType<InfiniteWorldManager>();
         InitializeSpawner();
     }
 
@@ -329,58 +328,11 @@ public class InfiniteEnemySpawner : MonoBehaviour
 
     public void RegisterEnemyToTile(GameObject enemy, Vector3 spawnPos)
     {
-        if (worldManager == null)
-        {
-            worldManager = FindObjectOfType<InfiniteWorldManager>();
-            if (worldManager == null) return;
-        }
-
-        Vector2Int gridPos = worldManager.WorldToGrid(spawnPos);
-        Tile targetTile = worldManager.GetTileAtPosition(gridPos);
-        if (targetTile != null)
-        {
-            targetTile.RegisterEnemy(enemy);
-            if (showDebugLogs) Debug.Log($"✅ 敌人已注册到 Tile {gridPos}");
-        }
-        else
-        {
-            // 如果找不到Tile，尝试通过EnemyAI的ownerTile注册
-            EnemyAI ai = enemy.GetComponent<EnemyAI>();
-            if (ai != null && ai.ownerTile != null)
-            {
-                ai.ownerTile.RegisterEnemy(enemy);
-            }
-        }
+        // 无限世界模式已移除：地牢模式由 DungeonManager 直接生成敌人，不再需要 Tile 注册
     }
 
     // ---------- NavMesh ----------
-    void EnsureNavMeshSurfaceExists()
-    {
-        if (navMeshSurface == null)
-        {
-            navMeshSurface = FindObjectOfType<NavMeshSurface>();
-            if (navMeshSurface == null)
-            {
-                Debug.Log("未找到 NavMeshSurface，正在创建...");
-                GameObject surfaceObj = new GameObject("NavMeshSurface (Runtime)");
-                navMeshSurface = surfaceObj.AddComponent<NavMeshSurface>();
-                navMeshSurface.layerMask = ~0;
-                navMeshSurface.collectObjects = CollectObjects.All;
-                navMeshSurface.defaultArea = 0;
-            }
-        }
-    }
 
-    public void BuildNavMeshImmediate()
-    {
-        EnsureNavMeshSurfaceExists();
-        if (navMeshSurface != null)
-        {
-            Debug.Log("🔄 立即烘焙 NavMesh...");
-            navMeshSurface.BuildNavMesh();
-            Debug.Log("✅ NavMesh 烘焙完成！");
-        }
-    }
 
     public void RequestNavMeshRebuild()
     {
@@ -395,13 +347,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
         yield return new WaitForSeconds(rebuildDelay);
         pendingRebuild = false;
         rebuildCoroutine = null;
-        EnsureNavMeshSurfaceExists();
-        if (navMeshSurface != null)
-        {
-            Debug.Log("🔄 延迟烘焙 NavMesh...");
-            navMeshSurface.BuildNavMesh();
-            Debug.Log("✅ NavMesh 烘焙完成！");
-        }
     }
 
     public void OnTileGenerated()
@@ -420,10 +365,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
     // ---------- 公共控制 ----------
     public void EnableSpawning()
     {
-        EnsureNavMeshSurfaceExists();
-        if (navMeshSurface != null && !navMeshSurface.navMeshData)
-            BuildNavMeshImmediate();
-
         canSpawn = true;
         if (showDebugLogs) Debug.Log("♾️ 无限模式敌人生成已启用！");
 
@@ -741,7 +682,6 @@ public class InfiniteEnemySpawner : MonoBehaviour
             Debug.LogError("没有敌人预制体！");
         }
 
-        EnsureNavMeshSurfaceExists();
         ApplyTileSizeToSpawnPoints();
     }
 

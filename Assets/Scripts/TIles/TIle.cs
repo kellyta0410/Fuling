@@ -69,11 +69,7 @@ public class Tile : MonoBehaviour
         {
             activeEnemies.Add(enemy);
 
-            EnemyAI enemyAI = enemy.GetComponent<EnemyAI>();
-            if (enemyAI != null)
-            {
-                enemyAI.ownerTile = this;
-            }
+
         }
     }
 

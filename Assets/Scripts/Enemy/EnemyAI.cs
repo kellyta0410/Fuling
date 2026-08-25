@@ -237,7 +237,7 @@ public abstract class EnemyAI : MonoBehaviour
 
     // 所属Tile
     [Header("所属Tile")]
-    public Tile ownerTile;
+
 
     // Animator 是否有 IsChasing 参数（仅 JiangShiMovement.controller 有，蛇等 controller 无此参数）
     private bool hasIsChasingParam = false;
@@ -1655,11 +1655,6 @@ Vector3 center = player.transform.position;
             agent.enabled = false;
         }
 
-        if (ownerTile != null)
-        {
-            ownerTile.UnregisterEnemy(gameObject);
-        }
-
         int baseCoin = enemyData != null ? enemyData.coinReward : 10;
         SpawnCoin(baseCoin);
 
@@ -1729,10 +1724,6 @@ Vector3 center = player.transform.position;
 
     protected virtual void OnDestroy()
     {
-        if (ownerTile != null && !isDead)
-        {
-            ownerTile.UnregisterEnemy(gameObject);
-        }
     }
 
     protected virtual void OnDrawGizmosSelected()

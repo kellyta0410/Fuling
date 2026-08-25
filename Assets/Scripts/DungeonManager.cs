@@ -30,14 +30,12 @@ public class DungeonManager : MonoBehaviour
     [Header("敌人生成")]
     public int roomEnemyCap = 30;       // 每间房敌人上限（打完这 30 只门才开）
     public float spawnInterval = 1f;    // 每隔多少秒生成一只（每秒一只）
-    public int baseEnemyCount = 4;
-    public int enemyCountPerRoom = 1;
-    public int maxEnemyCount = 40;
+
     public float playerClearRadius = 4f;
 
     [Header("装饰随机摆放")]
-    public int decorationMin = 4;
-    public int decorationMax = 10;
+    public int decorationMin = 3;
+    public int decorationMax = 8;
     public float decorationClearRadius = 3f;
 
     [Header("玩家进入房间的落点偏移（房间中心朝入口方向退后）")]
@@ -63,19 +61,27 @@ public class DungeonManager : MonoBehaviour
     public GameObject wallPrefab;          // 不带门的墙（用作墙段）
     public GameObject wallWithDoorPrefab;  // 带门洞的墙（含可开关的门挡）
     public string doorBlockerChildName = "DoorBlocker";
+    public string doorOpenAnimParam = "Open";     // DoorBlocker 上 Animator 的开/关参数（bool；也可用 trigger）
+
+    [Header("墙体/门等级（蛇=lvl1，僵尸=lvl2，混合=随机）")]
+    public GameObject wallPrefabLvl1;
+    public GameObject wallWithDoorPrefabLvl1;
+    public GameObject wallPrefabLvl2;
+    public GameObject wallWithDoorPrefabLvl2;
 
     // ---------- 运行时状态 ----------
     private int roomIndex = 0;
     private DungeonRoomType currentType;
     private GameObject roomRoot;
     private List<GameObject> aliveEnemies = new List<GameObject>();
-    private List<Collider> decorationColliders = new List<Collider>();
+
     private List<GameObject> doorBlockers = new List<GameObject>();
     private bool[] doorOpen = new bool[4];
     private bool roomCleared = false;
     private bool spawningDone = false;
     private int spawnedCount = 0;
     private bool advancing = false;
+    private int entryDir = -1;
 
     private List<GameObject> snakeEnemyPrefabs = new List<GameObject>();
     private List<GameObject> zombieEnemyPrefabs = new List<GameObject>();
@@ -161,10 +167,10 @@ public class DungeonManager : MonoBehaviour
     IEnumerator GenerateRoomRoutine(Vector3 center, int entryDir)
     {
         advancing = true;
+        this.entryDir = entryDir;
 
         if (roomRoot != null) Destroy(roomRoot);
         aliveEnemies.Clear();
-        decorationColliders.Clear();
         doorBlockers.Clear();
         roomCleared = false;
 
@@ -213,7 +219,11 @@ public class DungeonManager : MonoBehaviour
         }
         else
         {
-            for (int i = 0; i < 4; i++) { doorOpen[i] = true; SetDoorBlocker(i, false); }
+            for (int i = 0; i < 4; i++)
+            {
+                if (i == entryDir) { doorOpen[i] = false; SetDoorBlocker(i, true); } // 不开启玩家背后的入口门
+                else { doorOpen[i] = true; SetDoorBlocker(i, false); }
+            }
         }
 
         advancing = false;
@@ -269,33 +279,51 @@ public class DungeonManager : MonoBehaviour
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 优先：使用“带门墙”预制体
-        if (wallWithDoorPrefab != null)
+        // 按房间类型选择墙/门等级：蛇=lvl1，僵尸=lvl2，混合=随机
+        GameObject wwd = wallWithDoorPrefab;
+        GameObject w = wallPrefab;
+        bool useLvl2;
+        if (currentType == DungeonRoomType.Snake) useLvl2 = false;
+        else if (currentType == DungeonRoomType.Zombie) useLvl2 = true;
+        else useLvl2 = Random.value < 0.5f; // 混合房间：随机选 lvl1 / lvl2
+        if (useLvl2)
         {
-            GameObject wall = Instantiate(wallWithDoorPrefab, wallParent.transform);
+            if (wallWithDoorPrefabLvl2 != null) wwd = wallWithDoorPrefabLvl2;
+            if (wallPrefabLvl2 != null) w = wallPrefabLvl2;
+        }
+        else
+        {
+            if (wallWithDoorPrefabLvl1 != null) wwd = wallWithDoorPrefabLvl1;
+            if (wallPrefabLvl1 != null) w = wallPrefabLvl1;
+        }
+
+        // 优先：使用“带门墙”预制体
+        if (wwd != null)
+        {
+            GameObject wall = Instantiate(wwd, wallParent.transform);
             wall.name = "WallMesh";
             Transform blockerT = wall.transform.Find(doorBlockerChildName);
-            GameObject blocker = blockerT != null ? blockerT.gameObject : null;
-            if (blocker == null)
+            GameObject blockerObj = blockerT != null ? blockerT.gameObject : null;
+            if (blockerObj == null)
             {
-                blocker = new GameObject("DoorBlocker");
-                blocker.transform.SetParent(wallParent.transform);
-                blocker.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
-                var bc = blocker.AddComponent<BoxCollider>();
-                bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
-                bc.isTrigger = false;
+                blockerObj = new GameObject("DoorBlocker");
+                blockerObj.transform.SetParent(wallParent.transform);
+                blockerObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
+                var bcInner = blockerObj.AddComponent<BoxCollider>();
+                bcInner.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                bcInner.isTrigger = false;
             }
-            doorBlockers.Add(blocker);
+            doorBlockers.Add(blockerObj);
             return;
         }
 
         // 次选：用“不带门墙”预制体当两段墙段 + 程序化门挡
-        if (wallPrefab != null)
+        if (w != null)
         {
             for (int s = 0; s < 2; s++)
             {
                 float sign = (s == 0) ? -1f : 1f;
-                GameObject seg = Instantiate(wallPrefab, wallParent.transform);
+                GameObject seg = Instantiate(w, wallParent.transform);
                 seg.name = "WallSeg";
                 seg.transform.localPosition = new Vector3(sign * segCenter, wallHeight * 0.5f, 0);
                 seg.transform.localRotation = Quaternion.identity;
@@ -343,9 +371,37 @@ public class DungeonManager : MonoBehaviour
         if (dirIndex < 0 || dirIndex >= doorBlockers.Count) return;
         GameObject b = doorBlockers[dirIndex];
         if (b == null) return;
+
+        // 物理阻挡：关门时启用碰撞体，开门时关闭（这样玩家/敌人能穿过去）
         var col = b.GetComponent<Collider>();
         if (col != null) col.enabled = block;
-        b.SetActive(block);
+
+        // 视觉：优先用 DoorBlocker（及其子物体）上的 Animator 播放开/关动画；
+        // 支持双开门——两侧门扇各自挂 Animator 也能同时驱动；
+        // 没有任何 Animator 才退回原来的显隐方式（用于程序化兜底方块）
+        var anims = b.GetComponentsInChildren<Animator>();
+        if (anims != null && anims.Length > 0)
+        {
+            bool matchedAny = false;
+            foreach (var anim in anims)
+            {
+                foreach (var p in anim.parameters)
+                {
+                    if (p.name != doorOpenAnimParam) continue;
+                    matchedAny = true;
+                    if (p.type == AnimatorControllerParameterType.Bool)
+                        anim.SetBool(doorOpenAnimParam, !block);          // !block：开门=true
+                    else if (p.type == AnimatorControllerParameterType.Trigger && !block)
+                        anim.SetTrigger(doorOpenAnimParam);               // 仅开门时触发
+                    break;
+                }
+            }
+            if (!matchedAny) b.SetActive(block);
+        }
+        else
+        {
+            b.SetActive(block);
+        }
     }
 
     // ============================================================
@@ -358,7 +414,7 @@ public class DungeonManager : MonoBehaviour
 
         int count = Random.Range(decorationMin, decorationMax + 1);
         float half = roomSize * 0.5f;
-        float limit = half - decorationClearRadius - wallThickness;
+        float limit = half - wallThickness; // 仅避开墙体；中心留白由下面的 magnitude 判断处理
 
         int placed = 0;
         int tries = 0;
@@ -386,13 +442,11 @@ public class DungeonManager : MonoBehaviour
             deco.transform.localPosition = pos;
             deco.transform.localRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
-            Collider dc = deco.GetComponent<Collider>();
-            if (dc == null) dc = deco.AddComponent<BoxCollider>();
+            if (deco.GetComponent<Collider>() == null) deco.AddComponent<BoxCollider>();
             NavMeshObstacle obs = deco.GetComponent<NavMeshObstacle>();
             if (obs == null) obs = deco.AddComponent<NavMeshObstacle>();
             obs.carving = true;
 
-            decorationColliders.Add(dc);
             placed++;
         }
         if (showDebugLogs) Debug.Log("[Dungeon] 摆放装饰 " + placed + " 个");
@@ -401,15 +455,28 @@ public class DungeonManager : MonoBehaviour
     List<GameObject> GetDecorationPool(DungeonRoomType type)
     {
         List<GameObject> pool = new List<GameObject>();
-        if (type == DungeonRoomType.Snake) pool.AddRange(snakeDecorations);
-        else if (type == DungeonRoomType.Zombie) pool.AddRange(zombieDecorations);
+        if (type == DungeonRoomType.Shop) return pool; // 商店房间不放装饰
+
+        if (type == DungeonRoomType.Snake)
+        {
+            pool.AddRange(snakeDecorations);    // 仅蛇房出现的特定装饰
+            pool.AddRange(neutralDecorations);  // 其余随机布置
+        }
+        else if (type == DungeonRoomType.Zombie)
+        {
+            pool.AddRange(zombieDecorations);   // 仅僵尸房出现的特定装饰
+            pool.AddRange(neutralDecorations);
+        }
         else if (type == DungeonRoomType.Mixed)
         {
             pool.AddRange(snakeDecorations);
             pool.AddRange(zombieDecorations);
+            pool.AddRange(neutralDecorations);  // 混合房间：全部随机混合
         }
-        // 至少给一点中性装饰，避免房间太空
-        if (pool.Count == 0) pool.AddRange(neutralDecorations);
+        else
+        {
+            pool.AddRange(neutralDecorations);
+        }
         return pool;
     }
 
@@ -566,15 +633,17 @@ public class DungeonManager : MonoBehaviour
     {
         roomCleared = true;
 
-        // 开启全部 4 个出口，由玩家自行选择下一间房的方向
+        // 开启除入口方向以外的所有出口（入口门在玩家背后，保持关闭）
+        // 这样保证每个房间至少有 3 个门可走，且不会出现“背后就是出口”的情况
         for (int i = 0; i < 4; i++)
         {
+            if (i == entryDir) continue;
             doorOpen[i] = true;
             SetDoorBlocker(i, false);
         }
 
         if (uiManager != null) uiManager.ShowBuffToast("房间已清空！走向任意发光的出口前往下一间");
-        if (showDebugLogs) Debug.Log("[Dungeon] 房间 #" + roomIndex + " 已清空，开启全部出口");
+        if (showDebugLogs) Debug.Log("[Dungeon] 房间 #" + roomIndex + " 已清空，开启出口（不含入口方向 " + entryDir + "）");
     }
 
     void CheckExit()

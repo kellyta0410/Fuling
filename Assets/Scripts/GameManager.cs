@@ -22,8 +22,6 @@ public class GameManager : MonoBehaviour
     public float currentDamageMultiplier;
     public int currentMaxEnemyCount;
 
-    [Header("无限世界（可选）")]
-    public InfiniteWorldManager worldManager;
 
     [Header("地牢模式（改造 Infinite 场景）")]
     public bool isDungeon = false;
@@ -66,9 +64,6 @@ public class GameManager : MonoBehaviour
         if (infiniteSpawner == null)
             infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
 
-        if (worldManager == null)
-            worldManager = FindObjectOfType<InfiniteWorldManager>();
-
         if (dungeonManager != null && !isDungeon)
             dungeonManager.gameObject.SetActive(false);
 
@@ -92,7 +87,6 @@ public class GameManager : MonoBehaviour
                 if (isDungeon)
                 {
                     // 地牢模式：禁用开放世界与无限生成器，改由 DungeonManager 接管
-                    if (worldManager != null) worldManager.gameObject.SetActive(false);
                     if (infiniteSpawner != null)
                     {
                         infiniteSpawner.gameObject.SetActive(false);
@@ -195,12 +189,6 @@ public class GameManager : MonoBehaviour
                     Debug.Log($"   基础生成间隔: {currentSpawnInterval}秒");
                     Debug.Log($"   基础敌人上限: {currentMaxEnemyCount}");
 
-                    if (worldManager != null)
-                    {
-                        worldManager.gameObject.SetActive(true);
-                        Debug.Log("✅ 无限世界管理器已激活");
-                    }
-
                     if (infiniteSpawner != null)
                     {
                         infiniteSpawner.EnableSpawning();
@@ -214,14 +202,9 @@ public class GameManager : MonoBehaviour
                     }
                 }
             }
-            else
-            {
-                if (worldManager != null)
+                else
                 {
-                    worldManager.gameObject.SetActive(false);
-                }
-
-                if (normalSpawner != null)
+                    if (normalSpawner != null)
                 {
                     normalSpawner.EnableSpawning();
                     Debug.Log("✅ EnemySpawner 生成已启用（普通模式）");

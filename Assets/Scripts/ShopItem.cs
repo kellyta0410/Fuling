@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // 商店房间的购买型 Buff：玩家靠近后点击，弹出随机 3 个 Buff 供选择购买。
