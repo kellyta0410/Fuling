@@ -15,7 +15,6 @@ public class SceneSelectionManager : MonoBehaviour
     [Header("===== 难度配置（未开发的可以留空，不会报错）=====")]
     public DifficultySettings easyConfig;
     public DifficultySettings normalConfig;
-    public DifficultySettings hardConfig;
     public DifficultySettings infiniteConfig;
     [Tooltip("普通模式按钮（未开放，启动时置灰但仍可点击弹提示）")]
     public Button normalModeButton;
@@ -41,9 +40,6 @@ public class SceneSelectionManager : MonoBehaviour
     public TextMeshProUGUI normalCoinsText;
     public TextMeshProUGUI normalKillsText;
     public TextMeshProUGUI normalTimeText;
-    public TextMeshProUGUI hardCoinsText;
-    public TextMeshProUGUI hardKillsText;
-    public TextMeshProUGUI hardTimeText;
     public TextMeshProUGUI infiniteCoinsText;
     public TextMeshProUGUI infiniteKillsText;
     public TextMeshProUGUI infiniteTimeText;
@@ -252,7 +248,6 @@ public class SceneSelectionManager : MonoBehaviour
 
         UpdateRecordUI("简单", easyCoinsText, easyKillsText, easyTimeText);
         UpdateRecordUI("普通", normalCoinsText, normalKillsText, normalTimeText);
-        UpdateRecordUI("困难", hardCoinsText, hardKillsText, hardTimeText);
         UpdateRecordUI("无限", infiniteCoinsText, infiniteKillsText, infiniteTimeText);
     }
 
@@ -460,11 +455,6 @@ public class SceneSelectionManager : MonoBehaviour
         }
 
         SelectDifficulty(normalConfig, "普通");
-    }
-
-    public void SelectHard()
-    {
-        SelectDifficulty(hardConfig, "困难");
     }
 
     public void SelectInfinite()

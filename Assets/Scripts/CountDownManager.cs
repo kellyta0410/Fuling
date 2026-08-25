@@ -127,6 +127,12 @@ public class CountdownManager : MonoBehaviour
 
     private void EnableAllSpawners()
     {
+        // 地牢模式：房间生成与敌人刷新完全由 DungeonManager 接管，不要启用旧生成器
+        if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
+        {
+            return;
+        }
+
         // 根据 GameManager 的模式启用对应的生成器
         if (GameManager.Instance != null)
         {

@@ -49,6 +49,14 @@ public class UIManager : MonoBehaviour
     [Header("Buff 提示")]
     [Tooltip("获得 Buff 时的提示文字（可不拖，运行时自动创建）")]
     public TextMeshProUGUI buffToastText;
+
+    [Header("商店面板")]
+    public GameObject shopPanel;
+    public GameObject shopButtonPrefab;
+    public Transform shopButtonContainer;
+    [Header("Buff 图标")]
+    public Transform buffIconContainer;
+    public GameObject buffIconPrefab;
     private Queue<string> buffToastQueue = new Queue<string>();
     private bool buffToastShowing = false;
 
@@ -111,8 +119,18 @@ public class UIManager : MonoBehaviour
         UpdateCoinUI();
         UpdateKillUI();
 
-        // 检测是否为无限模式
-        if (gameManager != null && gameManager.IsInfiniteMode())
+        // 检测模式：地牢模式显示房间数；无限模式显示计时
+        if (gameManager != null && gameManager.IsDungeonMode())
+        {
+            isTimerMode = false;
+            if (timerText != null)
+            {
+                timerText.gameObject.SetActive(true);
+                timerText.text = "房间 1";
+                timerText.color = Color.white;
+            }
+        }
+        else if (gameManager != null && gameManager.IsInfiniteMode())
         {
             isTimerMode = true;
             elapsedTime = 0f;
@@ -192,6 +210,15 @@ public class UIManager : MonoBehaviour
                 timerText.color = Color.white;
             }
         }
+    }
+
+    // 地牢模式：把计时器文本改为“房间 N”
+    public void SetRoomDisplay(int room)
+    {
+        if (timerText == null) return;
+        timerText.gameObject.SetActive(true);
+        timerText.text = "房间 " + room;
+        timerText.color = Color.white;
     }
 
     void LoadSettings()
@@ -367,6 +394,13 @@ public class UIManager : MonoBehaviour
     {
         if (timerText == null) return;
 
+        // 地牢模式：计时器位置被用来显示房间数，始终可见
+        if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
+        {
+            timerText.gameObject.SetActive(true);
+            return;
+        }
+
         // 无限模式：始终显示计时器
         if (isTimerMode)
         {
@@ -443,7 +477,11 @@ public class UIManager : MonoBehaviour
         int kills = player != null ? player.GetKills() : 0;
 
         string timeText = "";
-        if (isTimerMode)
+        if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
+        {
+            timeText = $"\n房间: {GameManager.Instance.GetDungeonRoom()}";
+        }
+        else if (isTimerMode)
         {
             int min = Mathf.FloorToInt(elapsedTime / 60);
             int sec = Mathf.FloorToInt(elapsedTime % 60);
@@ -651,6 +689,88 @@ public class UIManager : MonoBehaviour
         // 多条提示排队，按顺序逐条显示，避免同时捡到多个 buff 时只显示最后一条
         buffToastQueue.Enqueue(message);
         if (!buffToastShowing) StartCoroutine(ProcessBuffToastQueue());
+    }
+
+    // ==================== 商店 ====================
+    private List<BuffDataSO> shopOffer = new List<BuffDataSO>();
+    private int shopCost = 0;
+
+    public void OpenShop(List<BuffDataSO> offer, int cost)
+    {
+        if (shopPanel == null || shopButtonPrefab == null || shopButtonContainer == null)
+        {
+            Debug.LogWarning("UIManager: 商店面板未配置（shopPanel / shopButtonPrefab / shopButtonContainer）");
+            return;
+        }
+        shopOffer = offer;
+        shopCost = cost;
+        foreach (Transform c in shopButtonContainer) Destroy(c.gameObject);
+        for (int i = 0; i < shopOffer.Count; i++)
+        {
+            GameObject btn = Instantiate(shopButtonPrefab, shopButtonContainer);
+            var icon = btn.transform.Find("Icon");
+            if (icon != null && shopOffer[i].icon != null) icon.GetComponent<UnityEngine.UI.Image>().sprite = shopOffer[i].icon;
+            var nameT = btn.transform.Find("Name");
+            if (nameT != null) nameT.GetComponent<TextMeshProUGUI>().text = shopOffer[i].buffName;
+            var costT = btn.transform.Find("Cost");
+            if (costT != null) costT.GetComponent<TextMeshProUGUI>().text = shopCost.ToString();
+            int index = i;
+            var button = btn.GetComponent<UnityEngine.UI.Button>();
+            if (button != null) button.onClick.AddListener(() => BuyBuff(index));
+        }
+        shopPanel.SetActive(true);
+    }
+
+    public void BuyBuff(int index)
+    {
+        if (index < 0 || index >= shopOffer.Count) return;
+        BuffDataSO buff = shopOffer[index];
+        PlayerController pc = FindObjectOfType<PlayerController>();
+        if (pc == null) return;
+        if (pc.GetCoins() < shopCost)
+        {
+            ShowBuffToast("金币不足，需要 " + shopCost + " 金币");
+            return;
+        }
+        pc.AddCoin(-shopCost);
+        BuffHandler bh = pc.GetComponent<BuffHandler>();
+        if (bh != null)
+        {
+            if (buff.isInstantEffect) bh.ApplyBuff(buff);
+            else bh.ApplyBuff(buff, true);
+        }
+        CloseShop();
+    }
+
+    public void CloseShop()
+    {
+        if (shopPanel != null) shopPanel.SetActive(false);
+        shopOffer.Clear();
+    }
+
+    public void RefreshBuffIcons()
+    {
+        if (buffIconContainer == null || buffIconPrefab == null) return;
+        BuffHandler bh = FindObjectOfType<BuffHandler>();
+        if (bh == null) return;
+        foreach (Transform c in buffIconContainer) Destroy(c.gameObject);
+        foreach (BuffType t in System.Enum.GetValues(typeof(BuffType)))
+        {
+            int n = bh.GetStack(t);
+            if (n <= 0) continue;
+            GameObject icon = Instantiate(buffIconPrefab, buffIconContainer);
+            var img = icon.transform.Find("Icon");
+            if (img != null) img.GetComponent<UnityEngine.UI.Image>().sprite = IconFor(t);
+            var cnt = icon.transform.Find("Count");
+            if (cnt != null) cnt.GetComponent<TextMeshProUGUI>().text = "x" + n;
+        }
+    }
+
+    Sprite IconFor(BuffType t)
+    {
+        string name = t == BuffType.Heal ? "Heal" : (t == BuffType.SpeedUp ? "SpeedUp" : "PowerUp");
+        BuffDataSO data = Resources.Load<BuffDataSO>("Buffs/" + name);
+        return data != null ? data.icon : null;
     }
 
     IEnumerator ProcessBuffToastQueue()

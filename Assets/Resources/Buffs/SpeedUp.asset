@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 20d2d14a15a027a478b4c3156d6e1514, type: 3}
-  m_Name: PowerUp
+  m_Name: SpeedUp
   m_EditorClassIdentifier: 
-  buffType: 1
-  buffName: "\u653B\u51FB\u529B\u63D0\u53475\u79D2"
+  buffType: 0
+  buffName: "\u901F\u5EA6\u63D0\u53475\u79D2"
   icon: {fileID: 0}
   isInstantEffect: 0
   duration: 5
-  maxStack: 1
+  maxStack: 5
   isFullRestore: 0
-  effectValue: 10
-  pickupPrefab: {fileID: 4403053903349146177, guid: b85a1d48e83964d49b831f8d78070fe7,
+  effectValue: 0.5
+  pickupPrefab: {fileID: 7222474840412068682, guid: f901de1c8bea2a94383979fde3e64926,
     type: 3}

@@ -28,7 +28,7 @@ public class BuffHandler : MonoBehaviour
     }
 
     // ---------- 外部接口：应用Buff或即时效果 ----------
-    public void ApplyBuff(BuffDataSO data)
+    public void ApplyBuff(BuffDataSO data, bool permanent = false)
     {
         if (data == null || player == null) return;
 
@@ -40,10 +40,16 @@ public class BuffHandler : MonoBehaviour
             return;
         }
 
-        // ===== 持续性 Buff（SpeedUp / PowerUp） =====
+        // ===== 永久叠加 Buff（商店购买；SpeedUp / PowerUp） =====
+        if (permanent)
+        {
+            ApplyPermanent(data);
+            return;
+        }
+
+        // ===== 限时 Buff（地图上拾取等） =====
         if (activeBuffs.ContainsKey(data.buffType))
         {
-            // 若已存在，刷新持续时间（可扩展叠加逻辑）；已生效的持续buff重拾也要重新播放光柱特效
             activeBuffs[data.buffType].Refresh(data);
             SpawnBuffEffect(data.buffType);
         }
@@ -55,6 +61,43 @@ public class BuffHandler : MonoBehaviour
         }
 
         ShowBuffToast(GetBuffMessage(data));
+    }
+
+    // ---------- 永久叠加 Buff（每种最多 maxStack 层，除 Heal 外） ----------
+    private Dictionary<BuffType, int> permanentStacks = new Dictionary<BuffType, int>();
+    private Dictionary<BuffType, BuffDataSO> permanentData = new Dictionary<BuffType, BuffDataSO>();
+
+    void ApplyPermanent(BuffDataSO data)
+    {
+        if (!permanentStacks.ContainsKey(data.buffType)) permanentStacks[data.buffType] = 0;
+        int max = data.maxStack > 0 ? data.maxStack : 1;
+        if (permanentStacks[data.buffType] >= max)
+        {
+            ShowBuffToast(data.buffName + " 已达上限 (" + max + "层)");
+            return;
+        }
+        permanentStacks[data.buffType]++;
+        permanentData[data.buffType] = data;
+        ReapplyPermanent(data.buffType);
+        ShowBuffToast(GetBuffMessage(data) + " [" + permanentStacks[data.buffType] + "/" + max + "层]");
+        UIManager ui = FindObjectOfType<UIManager>();
+        if (ui != null) ui.RefreshBuffIcons();
+    }
+
+    void ReapplyPermanent(BuffType type)
+    {
+        if (!permanentData.ContainsKey(type)) return;
+        int n = permanentStacks[type];
+        BuffDataSO data = permanentData[type];
+        if (type == BuffType.SpeedUp)
+            player.ApplySpeedMultiplier(1f + n * data.effectValue);
+        else if (type == BuffType.PowerUp)
+            player.ApplyAttackAdditive(Mathf.RoundToInt(n * data.effectValue));
+    }
+
+    public int GetStack(BuffType type)
+    {
+        return permanentStacks.ContainsKey(type) ? permanentStacks[type] : 0;
     }
 
     // ---------- Buff 获取提示 ----------

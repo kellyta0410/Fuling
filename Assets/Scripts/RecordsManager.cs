@@ -10,9 +10,6 @@ public class RecordsManager : MonoBehaviour
     public TextMeshProUGUI normalCoinsText;
     public TextMeshProUGUI normalKillsText;
     public TextMeshProUGUI normalTimeText;
-    public TextMeshProUGUI hardCoinsText;
-    public TextMeshProUGUI hardKillsText;
-    public TextMeshProUGUI hardTimeText;
     public TextMeshProUGUI infiniteCoinsText;
     public TextMeshProUGUI infiniteKillsText;
     public TextMeshProUGUI infiniteTimeText;
@@ -53,7 +50,6 @@ public class RecordsManager : MonoBehaviour
 
         UpdateRecordUI("简单", easyCoinsText, easyKillsText, easyTimeText);
         UpdateRecordUI("普通", normalCoinsText, normalKillsText, normalTimeText);
-        UpdateRecordUI("困难", hardCoinsText, hardKillsText, hardTimeText);
         UpdateRecordUI("无限", infiniteCoinsText, infiniteKillsText, infiniteTimeText);
     }
 
@@ -86,7 +82,7 @@ public class RecordsManager : MonoBehaviour
     {
         if (dataManager == null) return;
 
-        string[] difficulties = { "简单", "普通", "困难", "无限" };
+        string[] difficulties = { "简单", "普通", "无限" };
         foreach (string diff in difficulties)
         {
             PlayerPrefs.DeleteKey(diff + "_BestCoins");
