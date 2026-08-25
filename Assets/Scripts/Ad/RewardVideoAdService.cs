@@ -47,43 +47,7 @@ public static class RewardVideoAdService
     // 广告成功展示后改用较长兜底计时：既不误杀 15~30s 的长广告，又能在"关闭事件丢失"时兜底，
     // 避免复活面板永久卡在暂停态（比原来的 12s 全程计时更合理）。
     private const float WatchdogAfterShowSeconds = 60f;
-    private static string adMobUnavailableReason; // 区分"无GMS"与"插件类被裁剪"
-
-    // 设备是否具备 Google 移动服务（GMS）。无 GMS 时 AdMob 初始化会原生崩溃
-    // （C# 的 try/catch 拦不住原生崩溃），且广告也无法展示，因此直接跳过整个 AdMob 流程。
-    // 用可空缓存避免重复检测。
-    private static bool? gmsAvailable;
-
-    // 检测当前 Android 设备是否可用 Google Play 服务。
-    // 依赖 com.google.android.gms.common.GoogleApiAvailability：
-    //   - 类存在且 isGooglePlayServicesAvailable 返回 0(SUCCESS) → 可用；
-    //   - 类不存在（依赖未打进包）/任何异常 → 视为不可用，安全跳过 AdMob，避免原生崩溃。
-    static bool IsGmsAvailable()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        if (gmsAvailable.HasValue) return gmsAvailable.Value;
-        try
-        {
-            using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-            using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-            using (AndroidJavaClass availability = new AndroidJavaClass("com.google.android.gms.common.GoogleApiAvailability"))
-            using (AndroidJavaObject instance = availability.CallStatic<AndroidJavaObject>("getInstance", activity))
-            {
-                int result = instance.Call<int>("isGooglePlayServicesAvailable", activity);
-                gmsAvailable = result == 0; // ConnectionResult.SUCCESS == 0
-            }
-        }
-        catch (Exception e)
-        {
-            AdLog($"[Ad] GMS check failed (treat as unavailable): {e.Message}");
-            gmsAvailable = false;
-        }
-        AdLog($"[Ad] GMS available = {gmsAvailable.Value}");
-        return gmsAvailable.Value;
-#else
-        return false; // 非 Android 平台不需要 AdMob
-#endif
-    }
+    private static string adMobUnavailableReason; // 广告不可用原因（如 AdMob 类被裁剪/未打包）
 
     // ⭐ AdMob 必须在展示前完成初始化（主线程）。
     // 在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪；
@@ -93,7 +57,6 @@ public static class RewardVideoAdService
 #if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
-            if (!IsGmsAvailable()) { AdLog("[Ad] skip AdMob init (GMS unavailable)"); return; }
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null) return; // 没装插件，跳过
             MethodInfo init = FindStaticMethod("GoogleMobileAds.Api.MobileAds", "Initialize", 1);
             if (init != null)
@@ -166,7 +129,7 @@ public static class RewardVideoAdService
         if (TryShowAdMobRewardedAd()) return;
         if (pendingUnavailable != null)
         {
-            InvokeUnavailable(string.IsNullOrEmpty(adMobUnavailableReason) ? "未安装广告SDK(AdMob)" : adMobUnavailableReason);
+            InvokeUnavailable(string.IsNullOrEmpty(adMobUnavailableReason) ? "广告暂时不可用" : adMobUnavailableReason);
             return;
         }
 #endif
@@ -202,7 +165,6 @@ public static class RewardVideoAdService
     {
         try
         {
-            if (!IsGmsAvailable()) { AdLog("[Ad] skip AdMob show (GMS unavailable)"); adMobUnavailableReason = "设备无Google服务(GMS)，AdMob不可用"; return false; }
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null)
             {
                 AdLog("[Ad] AdMob (GoogleMobileAds.Api) not found, skip");
@@ -271,7 +233,6 @@ public static class RewardVideoAdService
 #if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
-            if (!IsGmsAvailable()) { AdLog("[Ad] skip AdMob preload (GMS unavailable)"); return; }
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null) return;
             EnsureAdMobInitialized();
             if (preloadedAd != null) return; // 已有待命广告
