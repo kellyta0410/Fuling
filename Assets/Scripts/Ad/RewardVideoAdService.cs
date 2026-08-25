@@ -47,6 +47,7 @@ public static class RewardVideoAdService
     // 广告成功展示后改用较长兜底计时：既不误杀 15~30s 的长广告，又能在"关闭事件丢失"时兜底，
     // 避免复活面板永久卡在暂停态（比原来的 12s 全程计时更合理）。
     private const float WatchdogAfterShowSeconds = 60f;
+    private static string adMobUnavailableReason; // 区分"无GMS"与"插件类被裁剪"
 
     // 设备是否具备 Google 移动服务（GMS）。无 GMS 时 AdMob 初始化会原生崩溃
     // （C# 的 try/catch 拦不住原生崩溃），且广告也无法展示，因此直接跳过整个 AdMob 流程。
@@ -161,10 +162,11 @@ public static class RewardVideoAdService
 #if UNITY_ANDROID && !UNITY_EDITOR
         // ⭐ Android 走 AdMob（反射调用）；接管成功则返回，稍后回调。
         // 返回 false = 未安装 AdMob SDK → 视为"无广告可用"，走离线/无广告提示而非直接结算。
+        adMobUnavailableReason = null;
         if (TryShowAdMobRewardedAd()) return;
         if (pendingUnavailable != null)
         {
-            InvokeUnavailable("未安装广告SDK(AdMob)");
+            InvokeUnavailable(string.IsNullOrEmpty(adMobUnavailableReason) ? "未安装广告SDK(AdMob)" : adMobUnavailableReason);
             return;
         }
 #endif
@@ -200,10 +202,11 @@ public static class RewardVideoAdService
     {
         try
         {
-            if (!IsGmsAvailable()) { AdLog("[Ad] skip AdMob show (GMS unavailable)"); return false; }
+            if (!IsGmsAvailable()) { AdLog("[Ad] skip AdMob show (GMS unavailable)"); adMobUnavailableReason = "设备无Google服务(GMS)，AdMob不可用"; return false; }
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null)
             {
                 AdLog("[Ad] AdMob (GoogleMobileAds.Api) not found, skip");
+                adMobUnavailableReason = "AdMob插件类缺失(可能被裁剪/未打包)";
                 return false;
             }
 

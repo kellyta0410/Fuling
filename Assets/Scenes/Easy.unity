@@ -13139,11 +13139,6 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1018603857376937694, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
-      propertyPath: m_SizeDelta.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1018603857376937694, guid: df1b8993df715424faf8912ca9f10098,
-        type: 3}
       propertyPath: m_LocalScale.x
       value: 0
       objectReference: {fileID: 0}
@@ -13155,11 +13150,6 @@ PrefabInstance:
     - target: {fileID: 1018603857376937694, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_LocalScale.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1018603857376937694, guid: df1b8993df715424faf8912ca9f10098,
-        type: 3}
-      propertyPath: m_AnchoredPosition.x
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1040730707432967027, guid: df1b8993df715424faf8912ca9f10098,
@@ -13332,6 +13322,11 @@ PrefabInstance:
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_Target
       value: 
       objectReference: {fileID: 839814767}
+    - target: {fileID: 8344131997185983632, guid: df1b8993df715424faf8912ca9f10098,
+        type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 57.037354
+      objectReference: {fileID: 0}
     - target: {fileID: 8690450996152774102, guid: df1b8993df715424faf8912ca9f10098,
         type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
@@ -16403,6 +16398,7 @@ MonoBehaviour:
   gameManager: {fileID: 1673762878305393417}
   buffToastText: {fileID: 8501159831358509469}
   revivePanel: {fileID: 1034811413516316707}
+  reviveHint: {fileID: 0}
   reviveButton: {fileID: 1034811413516316706}
   reviveEndButton: {fileID: 1034811413516316705}
 --- !u!23 &8498299488319272728

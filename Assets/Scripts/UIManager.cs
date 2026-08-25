@@ -55,6 +55,8 @@ public class UIManager : MonoBehaviour
     [Header("GameOver 复活")]
     [Tooltip("看广告复活面板（在场景里摆好，含两个按钮）")]
     public GameObject revivePanel;
+    [Tooltip("复活面板下手动摆放的提示子物体（背景 Image + TextMeshProUGUI），做在 hierarchy 里而非代码自动生成；不拖则回退到自动居中 Toast")]
+    public GameObject reviveHint;
     [Tooltip("「观看广告」按钮")]
     public Button reviveButton;
     [Tooltip("「结束游戏」按钮（进入 GameOver 结算）")]
@@ -583,7 +585,19 @@ public class UIManager : MonoBehaviour
             },
             (reason) =>
             {
-                // 离线 / 无广告可用：弹提示（带具体原因）并留在复活面板，不直接结算
+                // 离线 / 无广告可用：弹提示（带具体原因）并留在复活面板，不直接结算。
+                // 优先用 RevivePanel 下挂的提示子物体 ReviveHint（hierarchy 配置，复制自选择场景 hint），否则回退自动居中 Toast。
+                if (reviveHint == null && revivePanel != null)
+                    reviveHint = revivePanel.transform.Find("ReviveHint")?.gameObject;
+                if (reviveHint != null)
+                {
+                    var hintText = reviveHint.GetComponentInChildren<TextMeshProUGUI>(true);
+                    if (hintText != null)
+                    {
+                        HintToast.Show("无法播放复活广告：" + reason, textOverride: hintText, panelOverride: reviveHint);
+                        return;
+                    }
+                }
                 HintToast.Show("无法播放复活广告：" + reason);
             });
     }

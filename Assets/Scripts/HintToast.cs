@@ -117,7 +117,7 @@ public static class HintToast
         panel = new GameObject("HintPanel", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(canvasGO.transform, false);
         RectTransform prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.25f);
+        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
         prt.pivot = new Vector2(0.5f, 0.5f);
         prt.anchoredPosition = Vector2.zero;
         prt.sizeDelta = new Vector2(520f, 64f);

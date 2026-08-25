@@ -15,4 +15,17 @@
     <namespace fullname="GoogleMobileAds" preserve="all" />
     <namespace fullname="GoogleMobileAds.Ump.iOS" preserve="all" />
   </assembly>
+  <!-- 关键：GoogleMobileAds 主程序集（含 GoogleMobileAds.Api.RewardedAd / AdRequest / MobileAds
+       这些反射调用目标）必须整体保留。否则 Release/IL2CPP 托管裁剪会剪掉它们，导致运行时
+       ResolveType 返回 null、Build&Run(不裁剪)能播而正式包报"未安装广告SDK(AdMob)"。 -->
+  <assembly fullname="GoogleMobileAds" ignoreIfMissing="1">
+    <namespace fullname="GoogleMobileAds" preserve="all" />
+    <namespace fullname="GoogleMobileAds.Api" preserve="all" />
+  </assembly>
+  <assembly fullname="GoogleMobileAds.Common" ignoreIfMissing="1">
+    <namespace fullname="GoogleMobileAds" preserve="all" />
+  </assembly>
+  <assembly fullname="GoogleMobileAds.Core" ignoreIfMissing="1">
+    <namespace fullname="GoogleMobileAds" preserve="all" />
+  </assembly>
 </linker>
