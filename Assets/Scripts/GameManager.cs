@@ -13,12 +13,6 @@ public class GameManager : MonoBehaviour
     public EnemySpawner normalSpawner;
     public InfiniteEnemySpawner infiniteSpawner;
 
-    [Header("所有难度配置")]
-    public DifficultySettings easyConfig;
-    public DifficultySettings normalConfig;
-    public DifficultySettings hardConfig;
-    public DifficultySettings infiniteConfig;
-
     [Header("无限模式 - 当前成长值")]
     public int scalingLevel = 0;
     public float currentSpawnInterval;
@@ -30,6 +24,11 @@ public class GameManager : MonoBehaviour
 
     [Header("无限世界（可选）")]
     public InfiniteWorldManager worldManager;
+
+    [Header("地牢模式（改造 Infinite 场景）")]
+    public bool isDungeon = false;
+    public DungeonManager dungeonManager;
+    private int dungeonRoom = 0;
 
     private float timeLimit;
     private float remainingTime;
@@ -70,9 +69,19 @@ public class GameManager : MonoBehaviour
         if (worldManager == null)
             worldManager = FindObjectOfType<InfiniteWorldManager>();
 
+        if (dungeonManager != null && !isDungeon)
+            dungeonManager.gameObject.SetActive(false);
+
         // 根据模式启用对应的生成器
         if (currentDifficulty != null)
         {
+            // 地牢模式：在 Infinite 场景（且为无限难度）时自动启用，把开放世界替换为房间制地牢
+            if (!isDungeon && currentDifficulty.IsInfiniteMode()
+                && UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Infinite")
+            {
+                isDungeon = true;
+            }
+
             if (currentDifficulty.IsInfiniteMode())
             {
                 if (normalSpawner != null)
@@ -80,18 +89,37 @@ public class GameManager : MonoBehaviour
                     normalSpawner.gameObject.SetActive(false);
                     normalSpawner.enabled = false;
                 }
-                if (infiniteSpawner != null)
+                if (isDungeon)
                 {
+                    // 地牢模式：禁用开放世界与无限生成器，改由 DungeonManager 接管
+                    if (worldManager != null) worldManager.gameObject.SetActive(false);
+                    if (infiniteSpawner != null)
+                    {
+                        infiniteSpawner.gameObject.SetActive(false);
+                        infiniteSpawner.enabled = false;
+                    }
+                    if (dungeonManager != null)
+                    {
+                        dungeonManager.gameObject.SetActive(true);
+                        Debug.Log($"🏰 地牢模式激活（改造 Infinite 场景）");
+                    }
+                    else
+                    {
+                        Debug.LogError("🏰 地牢模式已启用，但 GameManager.dungeonManager 未赋值（请在 Manager 预制体上拖入 DungeonManager）");
+                    }
+                }
+                else if (infiniteSpawner != null)
+                {
+                    if (dungeonManager != null) dungeonManager.gameObject.SetActive(false);
                     infiniteSpawner.gameObject.SetActive(true);
                     infiniteSpawner.enabled = true;
-                    // 传递引用
                     if (infiniteSpawner.playerTarget == null)
                     {
                         GameObject player = GameObject.FindGameObjectWithTag("Player");
                         if (player != null) infiniteSpawner.playerTarget = player.transform;
                     }
+                    Debug.Log($"♾️ 无限模式激活，使用 InfiniteEnemySpawner");
                 }
-                Debug.Log($"♾️ 无限模式激活，使用 InfiniteEnemySpawner");
             }
             else
             {
@@ -150,25 +178,40 @@ public class GameManager : MonoBehaviour
             if (isInfinite)
             {
                 Debug.Log($"✅ 无限模式启动，场景: {SceneManager.GetActiveScene().name}");
-                Debug.Log($"   基础生成间隔: {currentSpawnInterval}秒");
-                Debug.Log($"   基础敌人上限: {currentMaxEnemyCount}");
 
-                if (worldManager != null)
+                if (isDungeon)
                 {
-                    worldManager.gameObject.SetActive(true);
-                    Debug.Log("✅ 无限世界管理器已激活");
+                    // 地牢模式：世界/生成器由 DungeonManager 管理，UI 显示房间数而非计时
+                    UIManager uiManager = FindObjectOfType<UIManager>();
+                    if (uiManager != null)
+                    {
+                        uiManager.SetTimerMode(false);
+                        uiManager.SetRoomDisplay(1);
+                    }
+                    Debug.Log("🏰 地牢模式：DungeonManager 接管房间生成");
                 }
-
-                if (infiniteSpawner != null)
+                else
                 {
-                    infiniteSpawner.EnableSpawning();
-                    Debug.Log("✅ InfiniteEnemySpawner 生成已启用");
-                }
+                    Debug.Log($"   基础生成间隔: {currentSpawnInterval}秒");
+                    Debug.Log($"   基础敌人上限: {currentMaxEnemyCount}");
 
-                UIManager uiManager = FindObjectOfType<UIManager>();
-                if (uiManager != null)
-                {
-                    uiManager.SetTimerMode(true);
+                    if (worldManager != null)
+                    {
+                        worldManager.gameObject.SetActive(true);
+                        Debug.Log("✅ 无限世界管理器已激活");
+                    }
+
+                    if (infiniteSpawner != null)
+                    {
+                        infiniteSpawner.EnableSpawning();
+                        Debug.Log("✅ InfiniteEnemySpawner 生成已启用");
+                    }
+
+                    UIManager uiManager = FindObjectOfType<UIManager>();
+                    if (uiManager != null)
+                    {
+                        uiManager.SetTimerMode(true);
+                    }
                 }
             }
             else
@@ -207,6 +250,7 @@ public class GameManager : MonoBehaviour
 
         if (currentDifficulty != null && currentDifficulty.IsInfiniteMode())
         {
+            if (isDungeon) return; // 地牢模式：难度按房间序号递增，由 DungeonManager 驱动，不按时间
             if (currentDifficulty.enableScaling)
             {
                 HandleScaling();
@@ -481,6 +525,13 @@ public class GameManager : MonoBehaviour
     public float GetRemainingTime() => remainingTime;
     public float GetTimePercent() => remainingTime / timeLimit;
     public bool IsInfiniteMode() => currentDifficulty != null && currentDifficulty.IsInfiniteMode();
+    public bool IsDungeonMode() => isDungeon;
+    public int GetDungeonRoom() => dungeonRoom;
+
+    public void SetDungeonRoom(int n)
+    {
+        dungeonRoom = n;
+    }
 
     public float GetElapsedTime()
     {
