@@ -772,46 +772,47 @@ public class PlayerController : MonoBehaviour
         yield return new WaitForSeconds(attackDamageDelay);
 
         bool hitAny = false;
-        Collider[] hitColliders = Physics.OverlapSphere(
-            transform.position + transform.forward * attackRange * 0.5f,
-            attackRange
-        );
-
-        foreach (Collider hit in hitColliders)
+        // ⭐ 用敌人根节点(贴地)的水平距离收集候选，而非贴地的 3D 球形：
+        // 僵尸"跳着走"时碰撞盒会随跳动抬升，贴地球形会漏掉升空瞬间导致打不到；
+        // 改用 enemy.transform.position 的水平距离判定，彻底免疫垂直偏移。
+        EnemyAI[] enemies = FindObjectsOfType<EnemyAI>();
+        foreach (EnemyAI enemy in enemies)
         {
-            EnemyAI enemy = hit.GetComponent<EnemyAI>();
-            if (enemy != null && !enemy.isDead)
-            {
-                // ⭐ 普通攻击只打正前方扇形：判定命中点在玩家前方，背后的敌人即使进了球形范围也不掉血。
-                // 技能(isUsingSkill 走 DelayedSkillDamage)始终保持全方位，不受此限制。
-                Vector3 toEnemy = enemy.transform.position - transform.position;
-                toEnemy.y = 0f;
-                if (Vector3.Angle(transform.forward, toEnemy) > attackFacingAngle)
-                    continue;
+            if (enemy == null || enemy.isDead) continue;
 
-                // ⭐ 近身/贴脸（≤ attackRange*0.75）豁免墙挡判定：墙角/贴墙肉搏距离内必然命中，
-                // 避免玩家贴墙或敌人被击退贴墙时，中心连线的射线先撞到墙角障碍误判"隔墙打不到"。
-                // 超过该阈值仍查真墙(IsBlockedBetween)，真隔墙时宁可不中也不穿墙攻击。
-                float distToEnemy = toEnemy.magnitude;
-                if (distToEnemy > attackRange * 0.75f &&
-                    WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
-                    continue;
+            Vector3 toEnemy = enemy.transform.position - transform.position;
+            toEnemy.y = 0f;
+            float distToEnemy = toEnemy.magnitude;
+            // 保留原球形前向触及范围（球心前移 attackRange*0.5 + 半径 attackRange = 最大 attackRange*1.5）
+            if (distToEnemy > attackRange * 1.5f) continue;
 
-                enemy.TakeDamageImmediate(attackDamage);
-                enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
-                hitAny = true;
-            }
+            // ⭐ 普通攻击只打正前方扇形：判定命中点在玩家前方，背后的敌人即使进了范围也不掉血。
+            // 技能(isUsingSkill 走 DelayedSkillDamage)始终保持全方位，不受此限制。
+            if (Vector3.Angle(transform.forward, toEnemy) > attackFacingAngle)
+                continue;
+
+            // ⭐ 近身/贴脸（≤ attackRange*0.75）豁免墙挡判定：墙角/贴墙肉搏距离内必然命中，
+            // 避免玩家贴墙或敌人被击退贴墙时，中心连线的射线先撞到墙角障碍误判"隔墙打不到"。
+            // 超过该阈值仍查真墙(IsBlockedBetween)，真隔墙时宁可不中也不穿墙攻击。
+            if (distToEnemy > attackRange * 0.75f &&
+                WallPenetrationResolve.IsBlockedBetween(transform.position, enemy.transform.position))
+                continue;
+
+            enemy.TakeDamageImmediate(attackDamage);
+            enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
+            hitAny = true;
         }
 
         // ⭐ 兜底：若正前方扇形没命中任何敌人，再补一次"贴脸周身"判定（半径 1.6m，不限制朝向）。
         // 解决挥砍动画播放期间敌人绕到背后/侧后方、或起手朝向被移动输入覆盖导致"动画在播却完全打空"的情况。
         if (!hitAny)
         {
-            Collider[] close = Physics.OverlapSphere(transform.position, 1.6f);
-            foreach (Collider hit in close)
+            foreach (EnemyAI enemy in FindObjectsOfType<EnemyAI>())
             {
-                EnemyAI enemy = hit.GetComponent<EnemyAI>();
-                if (enemy != null && !enemy.isDead)
+                if (enemy == null || enemy.isDead) continue;
+                Vector3 toEnemy = enemy.transform.position - transform.position;
+                toEnemy.y = 0f;
+                if (toEnemy.magnitude <= 1.6f)
                 {
                     enemy.TakeDamageImmediate(attackDamage);
                     enemy.AddKnockback(transform.forward, normalAttackKnockbackDistance);
@@ -1188,7 +1189,7 @@ public class PlayerController : MonoBehaviour
         float t = 0f;
         while (t < 1f)
         {
-            t += Time.deltaTime / Mathf.Max(hitRedDuration, 0.001f);
+            t += Time.unscaledDeltaTime / Mathf.Max(hitRedDuration, 0.001f);
             float a = hitRedAlpha * Mathf.Sin(t * Mathf.PI); // 0→红→0
             for (int i = 0; i < hitCornerImages.Length; i++)
             {

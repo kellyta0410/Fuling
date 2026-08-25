@@ -41,11 +41,13 @@ public static class RewardVideoAdService
 
     // 看广告流程看门狗：确保 Load/Show 回调即使永远不来也能超时兜底，避免复活面板一直暂停卡死
     private static bool adPending = false;
+    private static bool rewardEarned = false; // 用户是否完整看完（拿到激励），用于"关闭"事件兜底，避免复活被误取消
     private static float watchdogDeadline = -1f;
     private const float WatchdogSeconds = 12f;
-
-    // ⭐ 广告流程日志对外广播：UIManager 订阅后可直接显示在手机屏幕上，免去看设备日志
-    public static Action<string> OnAdLog;
+    // 广告成功展示后改用较长兜底计时：既不误杀 15~30s 的长广告，又能在"关闭事件丢失"时兜底，
+    // 避免复活面板永久卡在暂停态（比原来的 12s 全程计时更合理）。
+    private const float WatchdogAfterShowSeconds = 60f;
+    private static string adMobUnavailableReason; // 广告不可用原因（如 AdMob 类被裁剪/未打包）
 
     // ⭐ AdMob 必须在展示前完成初始化（主线程）。
     // 在游戏启动(GameManager.Start)就预先调用，保证首次复活看广告时 SDK 已就绪；
@@ -75,7 +77,6 @@ public static class RewardVideoAdService
     static void AdLog(string msg)
     {
         UnityEngine.Debug.Log(msg);
-        try { OnAdLog?.Invoke(msg); } catch { }
         try
         {
             string path = Path.Combine(Application.persistentDataPath, "fuling_ad_log.txt");
@@ -93,9 +94,17 @@ public static class RewardVideoAdService
     /// </summary>
     public static void ShowRewardedAd(Action<bool> onResult, Action<string> onUnavailable = null)
     {
+        // ⭐ 防重入：广告加载/展示期间按钮仍可点（全屏广告尚未弹出时面板可见），
+        // 重复点击会并发多次 Load / Show，导致弹多次广告、SafeInvoke 重入。已在处理中则直接忽略。
+        if (adPending)
+        {
+            AdLog("[Ad] ignore duplicate ShowRewardedAd (ad already pending)");
+            return;
+        }
         pendingCallback = onResult;
         pendingUnavailable = onUnavailable;
         adPending = true;
+        rewardEarned = false;
         watchdogDeadline = -1f;
 
         // ⭐ 微信小游戏环境（WebGL + SDK 存在）先走：播放真实激励视频
@@ -116,10 +125,11 @@ public static class RewardVideoAdService
 #if UNITY_ANDROID && !UNITY_EDITOR
         // ⭐ Android 走 AdMob（反射调用）；接管成功则返回，稍后回调。
         // 返回 false = 未安装 AdMob SDK → 视为"无广告可用"，走离线/无广告提示而非直接结算。
+        adMobUnavailableReason = null;
         if (TryShowAdMobRewardedAd()) return;
         if (pendingUnavailable != null)
         {
-            InvokeUnavailable("未安装广告SDK(AdMob)");
+            InvokeUnavailable(string.IsNullOrEmpty(adMobUnavailableReason) ? "广告暂时不可用" : adMobUnavailableReason);
             return;
         }
 #endif
@@ -158,6 +168,7 @@ public static class RewardVideoAdService
             if (ResolveType("GoogleMobileAds.Api.RewardedAd") == null)
             {
                 AdLog("[Ad] AdMob (GoogleMobileAds.Api) not found, skip");
+                adMobUnavailableReason = "AdMob插件类缺失(可能被裁剪/未打包)";
                 return false;
             }
 
@@ -285,7 +296,13 @@ public static class RewardVideoAdService
 
         // ⭐ 订阅关闭/失败事件：v11 中 Show(Action<Reward>) 只在"完整看完"才回调，
         // 中途关闭/跳过/展示失败不会触发，必须靠事件兜底，否则复活面板会一直卡在暂停态。
-        SubscribeEvent(adObj, "OnAdFullScreenContentClosed", () => { AdLog("[Ad] ad fullscreen closed (incl. skip)"); SafeInvoke(false); });
+        // 注意：看完后 AdMob 会先发奖励回调、再发关闭事件；用 rewardEarned 防止"关闭"把已到手的复活误取消。
+        SubscribeEvent(adObj, "OnAdFullScreenContentClosed", () =>
+        {
+            AdLog("[Ad] ad fullscreen closed (incl. skip)");
+            if (rewardEarned) { AdLog("[Ad] reward already granted, ignore close"); return; }
+            SafeInvoke(false); // 真·中途关闭/跳过：不复活
+        });
         SubscribeEvent(adObj, "OnAdFullScreenContentFailed", () => { AdLog("[Ad] ad show failed"); SafeInvoke(false); });
 
         Type adType = adObj.GetType();
@@ -312,6 +329,7 @@ public static class RewardVideoAdService
         {
             show.Invoke(adObj, new object[] { rewardCb });
             AdLog("[Ad] step6: RewardedAd.Show called, waiting for user");
+            ArmWatchdog(WatchdogAfterShowSeconds); // 展示成功后挂较长兜底：不误杀长广告，关闭事件丢失时也不永久卡死
             PreloadRewardedAd(); // 预拉下一条，供下次游戏复活秒出
         }
         catch (Exception e)
@@ -325,7 +343,8 @@ public static class RewardVideoAdService
     static void HandleAdMobReward(object rewardObj)
     {
         AdLog("[Ad] AdMob rewarded ad fully watched, grant reward");
-        SafeInvoke(true);
+        rewardEarned = true;
+        SafeInvoke(true); // 看完立刻复活，不等用户点关闭
     }
 
     // ==================== 微信 SDK 调用（反射） ====================

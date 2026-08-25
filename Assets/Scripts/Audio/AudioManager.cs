@@ -58,6 +58,7 @@ public class AudioManager : MonoBehaviour
 
     void Awake()
     {
+        Debug.Log("[Boot] AudioManager.Awake begin");
         if (Instance != null && Instance != this)
         {
             // 只销毁重复的 AudioManager 组件，保留 GameObject 及其上的点击音 AudioSource：
@@ -104,7 +105,9 @@ public class AudioManager : MonoBehaviour
 
     void Start()
     {
+        Debug.Log("[Boot] AudioManager.Start begin");
         PlayBGMForScene(SceneManager.GetActiveScene().name);
+        Debug.Log("[Boot] AudioManager.Start end");
     }
 
     void Update()

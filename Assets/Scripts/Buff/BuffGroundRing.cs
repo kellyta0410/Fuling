@@ -10,6 +10,10 @@ public class BuffGroundRing : MonoBehaviour
     public bool followGround = true;
     public float yOffset = 0.06f;
 
+    // 与 BuffHandler 的光柱同理：该运行时叠加粒子在 GLES + HDR/Bloom 的部分移动 GPU
+    // 上会整屏抖闪，故默认关闭。需要恢复地面光圈时把下面开关改为 true 即可。
+    const bool EnableBuffGroundRing = false;
+
     private ParticleSystem ring;
     private BuffPickupItem pickup;
     private float groundY = 0f;   // 记录贴地高度，不与 buff 漂浮高度混淆
@@ -28,6 +32,8 @@ public class BuffGroundRing : MonoBehaviour
 
     void BuildRing()
     {
+        if (!EnableBuffGroundRing) return;
+
         Color color = GetRingColor();
         ring = ParticleFXHelper.CreateParticleSystem(transform, "GroundRing", color, glowBrightness, 0);
 

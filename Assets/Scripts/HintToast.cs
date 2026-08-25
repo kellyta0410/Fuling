@@ -12,8 +12,11 @@ public static class HintToast
     private static TextMeshProUGUI text;
     private static GameObject panel;
     private static bool built;
-    private static Coroutine anim;
+    private static Coroutine showCoroutine;
     private static Runner runner;
+    private static bool isVisible;            // 当前是否有提示在显示中
+    private static float hideAt;             // 实际隐藏时刻（重复点击可刷新）
+    private const float HoldSeconds = 1.6f;  // 提示停留时长（与场景选择 hint 一致）
 
     private class Runner : MonoBehaviour { }
 
@@ -37,7 +40,7 @@ public static class HintToast
         if (textOverride != null) text = textOverride;
         if (panelOverride != null) panel = panelOverride;
 
-        if (text == null && panel == null) Build();
+        if (text == null || panel == null) { built = false; Build(); }
 
         // 确保提示文字居中在 panel 正中间
         if (text != null && panel != null)
@@ -62,11 +65,18 @@ public static class HintToast
         text.gameObject.SetActive(true);
         text.text = message;
 
-        if (anim != null) RunnerInstance.StopCoroutine(anim);
-        anim = RunnerInstance.StartCoroutine(Animate());
+        // 已在显示中：仅刷新隐藏计时（延长停留），不重播滑入动画，避免"每次点击都跳一下"
+        if (isVisible)
+        {
+            hideAt = Time.realtimeSinceStartup + HoldSeconds;
+            return;
+        }
+        isVisible = true;
+        if (showCoroutine != null) RunnerInstance.StopCoroutine(showCoroutine);
+        showCoroutine = RunnerInstance.StartCoroutine(AnimateInAndHold());
     }
 
-    private static IEnumerator Animate()
+    private static IEnumerator AnimateInAndHold()
     {
         RectTransform rt = text != null ? text.rectTransform : null;
         Vector2 basePos = rt != null ? rt.anchoredPosition : Vector2.zero;
@@ -82,10 +92,15 @@ public static class HintToast
         }
         if (rt != null) rt.anchoredPosition = basePos;
 
-        yield return new WaitForSeconds(1.6f);
+        // 停留 HoldSeconds；期间重复点击只刷新 hideAt（见 Show），不会重播滑入动画
+        hideAt = Time.realtimeSinceStartup + HoldSeconds;
+        while (Time.realtimeSinceStartup < hideAt)
+            yield return null;
+
         if (text != null) text.gameObject.SetActive(false);
         if (panel != null) panel.SetActive(false);
-        anim = null;
+        isVisible = false;
+        showCoroutine = null;
     }
 
     private static void Build()
@@ -97,11 +112,12 @@ public static class HintToast
         Canvas cv = canvasGO.GetComponent<Canvas>();
         cv.renderMode = RenderMode.ScreenSpaceOverlay;
         cv.sortingOrder = 20000;
+        Object.DontDestroyOnLoad(canvasGO); // 跨场景常驻，避免切场景后内置 text/panel 被销毁导致提示不显示
 
         panel = new GameObject("HintPanel", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(canvasGO.transform, false);
         RectTransform prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.25f);
+        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
         prt.pivot = new Vector2(0.5f, 0.5f);
         prt.anchoredPosition = Vector2.zero;
         prt.sizeDelta = new Vector2(520f, 64f);

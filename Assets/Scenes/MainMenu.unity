@@ -236,7 +236,6 @@ MonoBehaviour:
   mainMenuPanel: {fileID: 484659443}
   settingsPanel: {fileID: 464270329103613414}
   creditsPanel: {fileID: 1083539278}
-  storyButton: {fileID: 1935691873}
   musicSlider: {fileID: 6209536276710272738}
   sfxSlider: {fileID: 2286156953071484791}
   musicValueText: {fileID: 2140146766772190438}
@@ -1956,7 +1955,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1935691874
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1973,8 +1972,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 1888, y: -514}
-  m_SizeDelta: {x: 160, y: 180}
+  m_AnchoredPosition: {x: 1893, y: -524}
+  m_SizeDelta: {x: 150, y: 180}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1935691875
 MonoBehaviour:
@@ -2022,7 +2021,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 35903965}
         m_TargetAssemblyTypeName: MainMenuManager, Assembly-CSharp
-        m_MethodName: OpenCredits
+        m_MethodName: StoryButton
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -2064,7 +2063,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 774a85d113c24e34787008429b6aa9bc, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 70f937d2aa9be1a4285d297b5ff9d280, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1

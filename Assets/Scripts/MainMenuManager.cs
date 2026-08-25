@@ -10,8 +10,7 @@ public class MainMenuManager : MonoBehaviour
     public GameObject mainMenuPanel;
     public GameObject settingsPanel;
     public GameObject creditsPanel;
-    [Tooltip("主菜单的'剧情'按钮：新玩家看完剧情后才显示/解锁（没填则不处理）")]
-    public GameObject storyButton;
+    [Tooltip("主菜单的'剧情'按钮：点击逻辑改在 Inspector 里把 Button.onClick 绑定到 StoryButton()；显隐由下方按存档控制（不再用序列化字段直接引用，避免类型不匹配）")]
 
     [Header("设置 - 音量控制")]
     public Slider musicSlider;
@@ -34,6 +33,7 @@ public class MainMenuManager : MonoBehaviour
 
     private void Start()
     {
+        Debug.Log("[Boot] MainMenuManager.Start begin");
         if (mainMenuPanel != null)
             mainMenuPanel.SetActive(true);
 
@@ -43,12 +43,11 @@ public class MainMenuManager : MonoBehaviour
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
 
-        // ⭐ 剧情按钮：看过剧情（StoryFinished==1）才显示；新玩家隐藏，看完剧情解锁
-        if (storyButton != null)
-        {
-            bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
-            storyButton.SetActive(storyDone);
-        }
+        // ⭐ 剧情按钮：新手看完剧情(StoryFinished==1)后才在主菜单显示；点击进剧情、看完回主菜单。
+        // 点击已通过 Inspector 把 Button.onClick 绑定到 StoryButton()；这里只按存档控制显隐。
+        bool storyDone = PlayerPrefs.GetInt(StorySceneManager.StoryFinishedKey, 0) == 1;
+        GameObject storyBtn = GameObject.Find("Storybutton");
+        if (storyBtn != null) storyBtn.SetActive(storyDone);
 
         // 加载音量设置
         LoadSettings();
@@ -59,6 +58,15 @@ public class MainMenuManager : MonoBehaviour
 
         if (sfxSlider != null)
             sfxSlider.onValueChanged.AddListener(OnSFXSliderChanged);
+
+        Debug.Log("[Boot] MainMenuManager.Start end");
+        StartCoroutine(LogFirstFrame());
+    }
+
+    IEnumerator LogFirstFrame()
+    {
+        yield return new WaitForEndOfFrame();
+        Debug.Log("[Boot] MainMenu first frame rendered OK");
     }
 
     // ==================== 加载/保存设置 ====================
@@ -164,13 +172,15 @@ public class MainMenuManager : MonoBehaviour
         else
         {
             Debug.Log("开始游戏 → 新玩家先看剧情");
+            StorySceneManager.returnSceneName = "Selection"; // 新手自动看剧情 → 看完去选关
             StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
         }
     }
 
-    // ⭐ 主菜单"剧情"按钮：随时可以重看剧情（仅看完剧情后可见）
+    // ⭐ 主菜单"剧情"按钮：随时可以重看剧情（仅看完剧情后可见），看完回主菜单
     public void StoryButton()
     {
+        StorySceneManager.returnSceneName = "MainMenu"; // 手动重看剧情 → 看完回主菜单
         StartCoroutine(LoadSceneAfterButtonClick(storySceneName));
     }
 
