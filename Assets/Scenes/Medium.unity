@@ -12825,10 +12825,6 @@ MonoBehaviour:
   currentDifficulty: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
   normalSpawner: {fileID: 6270854919426408856}
   infiniteSpawner: {fileID: 0}
-  easyConfig: {fileID: 11400000, guid: 38f5a6e0622ad5649a62883b3db80b8a, type: 2}
-  normalConfig: {fileID: 11400000, guid: 90c55cfd20b8d0b45a7d511619684b7b, type: 2}
-  hardConfig: {fileID: 11400000, guid: e4769ee8dacc85243a7a48ab19bd35d0, type: 2}
-  infiniteConfig: {fileID: 11400000, guid: d5105edb7b30cd940a7d3bad358a3c47, type: 2}
   scalingLevel: 0
   currentSpawnInterval: 0
   currentSpawnPerInterval: 0
@@ -12836,8 +12832,8 @@ MonoBehaviour:
   currentHealthMultiplier: 0
   currentDamageMultiplier: 0
   currentMaxEnemyCount: 0
-  worldManager: {fileID: 0}
   isDungeon: 0
+  dungeonManager: {fileID: 0}
 --- !u!1 &1704762510694306996
 GameObject:
   m_ObjectHideFlags: 0
@@ -16232,6 +16228,11 @@ MonoBehaviour:
   infiniteSpawner: {fileID: 0}
   gameManager: {fileID: 1673762878305393417}
   buffToastText: {fileID: 1812330831}
+  shopPanel: {fileID: 0}
+  shopButtonPrefab: {fileID: 0}
+  shopButtonContainer: {fileID: 0}
+  buffIconContainer: {fileID: 0}
+  buffIconPrefab: {fileID: 0}
   revivePanel: {fileID: 1812330830}
   reviveHint: {fileID: 1812330829}
   reviveButton: {fileID: 1812330828}

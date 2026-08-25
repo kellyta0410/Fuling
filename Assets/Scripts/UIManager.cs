@@ -43,7 +43,6 @@ public class UIManager : MonoBehaviour
     [Header("游戏引用")]
     public PlayerController player;
     public EnemySpawner enemySpawner;
-    public InfiniteEnemySpawner infiniteSpawner;
     public GameManager gameManager;
 
     [Header("Buff 提示")]
@@ -84,7 +83,6 @@ public class UIManager : MonoBehaviour
     {
         if (player == null) player = FindObjectOfType<PlayerController>();
         if (enemySpawner == null) enemySpawner = FindObjectOfType<EnemySpawner>();
-        if (infiniteSpawner == null) infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
         if (gameManager == null) gameManager = GameManager.Instance;
 
         if (restartButton != null) restartButton.onClick.AddListener(RestartGame);
@@ -212,13 +210,30 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // 地牢模式：把计时器文本改为“房间 N”
+    // 地牢模式：把计时器文本改为“第 N 关”（如 第一关 / 第十关 / 第二十一关）
     public void SetRoomDisplay(int room)
     {
         if (timerText == null) return;
         timerText.gameObject.SetActive(true);
-        timerText.text = "房间 " + room;
+        timerText.text = "第" + ToChineseNumber(room) + "关";
         timerText.color = Color.white;
+    }
+
+    // 整数转中文（1-99 正常中文，≥100 用阿拉伯数字兜底，避免无限地牢数字过长）
+    private string ToChineseNumber(int n)
+    {
+        if (n <= 0) return n.ToString();
+        string[] d = { "零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十" };
+        if (n < 10) return d[n];
+        if (n == 10) return "十";
+        if (n < 20) return "十" + d[n - 10];
+        if (n < 100)
+        {
+            int tens = n / 10;
+            int ones = n % 10;
+            return ones == 0 ? d[tens] + "十" : d[tens] + "十" + d[ones];
+        }
+        return n.ToString();
     }
 
     void LoadSettings()
@@ -479,7 +494,7 @@ public class UIManager : MonoBehaviour
         string timeText = "";
         if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
         {
-            timeText = $"\n房间: {GameManager.Instance.GetDungeonRoom()}";
+            timeText = $"\n房间: 第{ToChineseNumber(GameManager.Instance.GetDungeonRoom())}关";
         }
         else if (isTimerMode)
         {

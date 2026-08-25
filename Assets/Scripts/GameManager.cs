@@ -11,7 +11,6 @@ public class GameManager : MonoBehaviour
 
     [Header("生成器（两种模式）")]
     public EnemySpawner normalSpawner;
-    public InfiniteEnemySpawner infiniteSpawner;
 
     [Header("无限模式 - 当前成长值")]
     public int scalingLevel = 0;
@@ -61,9 +60,6 @@ public class GameManager : MonoBehaviour
         if (normalSpawner == null)
             normalSpawner = FindObjectOfType<EnemySpawner>();
 
-        if (infiniteSpawner == null)
-            infiniteSpawner = FindObjectOfType<InfiniteEnemySpawner>();
-
         if (dungeonManager != null && !isDungeon)
             dungeonManager.gameObject.SetActive(false);
 
@@ -86,12 +82,7 @@ public class GameManager : MonoBehaviour
                 }
                 if (isDungeon)
                 {
-                    // 地牢模式：禁用开放世界与无限生成器，改由 DungeonManager 接管
-                    if (infiniteSpawner != null)
-                    {
-                        infiniteSpawner.gameObject.SetActive(false);
-                        infiniteSpawner.enabled = false;
-                    }
+                    // 地牢模式：由 DungeonManager 接管房间与刷怪
                     if (dungeonManager != null)
                     {
                         dungeonManager.gameObject.SetActive(true);
@@ -102,26 +93,10 @@ public class GameManager : MonoBehaviour
                         Debug.LogError("🏰 地牢模式已启用，但 GameManager.dungeonManager 未赋值（请在 Manager 预制体上拖入 DungeonManager）");
                     }
                 }
-                else if (infiniteSpawner != null)
-                {
-                    if (dungeonManager != null) dungeonManager.gameObject.SetActive(false);
-                    infiniteSpawner.gameObject.SetActive(true);
-                    infiniteSpawner.enabled = true;
-                    if (infiniteSpawner.playerTarget == null)
-                    {
-                        GameObject player = GameObject.FindGameObjectWithTag("Player");
-                        if (player != null) infiniteSpawner.playerTarget = player.transform;
-                    }
-                    Debug.Log($"♾️ 无限模式激活，使用 InfiniteEnemySpawner");
-                }
+                // 开放世界无限模式已移除：无限难度统一进入地牢（DungeonManager 接管），此处不再启用旧生成器
             }
             else
             {
-                if (infiniteSpawner != null)
-                {
-                    infiniteSpawner.gameObject.SetActive(false);
-                    infiniteSpawner.enabled = false;
-                }
                 if (normalSpawner != null)
                 {
                     normalSpawner.gameObject.SetActive(true);
@@ -186,20 +161,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Debug.Log($"   基础生成间隔: {currentSpawnInterval}秒");
-                    Debug.Log($"   基础敌人上限: {currentMaxEnemyCount}");
-
-                    if (infiniteSpawner != null)
-                    {
-                        infiniteSpawner.EnableSpawning();
-                        Debug.Log("✅ InfiniteEnemySpawner 生成已启用");
-                    }
-
-                    UIManager uiManager = FindObjectOfType<UIManager>();
-                    if (uiManager != null)
-                    {
-                        uiManager.SetTimerMode(true);
-                    }
+                    // 开放世界无限模式已移除：无限难度现统一进入地牢（DungeonManager 接管），此处不再启用旧生成器
                 }
             }
                 else
@@ -324,31 +286,7 @@ public class GameManager : MonoBehaviour
     {
         if (currentDifficulty == null) return;
 
-        bool isInfinite = currentDifficulty.IsInfiniteMode();
-
-        if (isInfinite)
-        {
-            if (infiniteSpawner != null)
-            {
-                infiniteSpawner.ApplyScalingParameters(
-                    currentSpawnInterval,
-                    currentSpawnPerInterval,
-                    currentSpeedMultiplier,
-                    currentHealthMultiplier,
-                    currentDamageMultiplier,
-                    currentDifficulty.enableMaxLimit,
-                    currentMaxEnemyCount,
-                    currentDifficulty.enableCooldown,
-                    currentDifficulty.cooldownTime,
-                    currentDifficulty.allowedEnemyPrefabs
-                );
-            }
-        }
-        else
-        {
-            // 普通模式：生成节奏与属性倍率由 EnemySpawner.difficultyTiers 统一管理，
-            // 参数已在 InitializeSpawner→ApplyDifficultySettings 设置，此处无需下发。
-        }
+        // 无限模式生成器已移除；普通/地牢模式各自管理刷怪参数，此处无需下发。
     }
 
     // 按当前难度把 Buff 生产数量与时间下发到场景中的 Buff Manager。
@@ -396,10 +334,6 @@ public class GameManager : MonoBehaviour
         if (normalSpawner != null)
         {
             normalSpawner.DisableSpawning();
-        }
-        if (infiniteSpawner != null)
-        {
-            infiniteSpawner.DisableSpawning();
         }
 
         int coins = 0;
@@ -560,11 +494,6 @@ public class GameManager : MonoBehaviour
         {
             normalSpawner.DisableSpawning();
             normalSpawner.ResetSpawner();
-        }
-        if (infiniteSpawner != null)
-        {
-            infiniteSpawner.DisableSpawning();
-            infiniteSpawner.ResetSpawner();
         }
 
         Debug.Log("🔄 游戏状态已重置");
