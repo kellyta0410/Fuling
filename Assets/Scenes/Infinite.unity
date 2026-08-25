@@ -375,11 +375,14 @@ MonoBehaviour:
   wallWithDoorPrefab: {fileID: 0}
   doorBlockerChildName: DoorBlocker
   doorOpenAnimParam: Open
-  wallPrefabLvl1: {fileID: 919132149155446097, guid: 3563d17d4e596484e94683fafd6f29f4,
+  wallPrefabLvl1: {fileID: 7692100882094079684, guid: 91d9f02267d7f6a4680e8719c08f4cad,
     type: 3}
-  wallWithDoorPrefabLvl1: {fileID: 0}
-  wallPrefabLvl2: {fileID: 0}
-  wallWithDoorPrefabLvl2: {fileID: 0}
+  wallWithDoorPrefabLvl1: {fileID: 6373214921952214671, guid: 7d98bb3ca48997444892829e92ef828f,
+    type: 3}
+  wallPrefabLvl2: {fileID: 4174379925819882714, guid: 1a84674a16463454981c2bf943ac1f12,
+    type: 3}
+  wallWithDoorPrefabLvl2: {fileID: 8804418509386184056, guid: 87a9dc65de3595a46a8e249014a558da,
+    type: 3}
 --- !u!1 &667670078
 GameObject:
   m_ObjectHideFlags: 0
@@ -582,7 +585,7 @@ Transform:
   m_GameObject: {fileID: 961739749}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 50.19, y: 12, z: 9.5}
+  m_LocalPosition: {x: 0, y: 12, z: -12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6891,23 +6894,6 @@ Transform:
   - {fileID: 8573879196629931974}
   m_Father: {fileID: 6849792415209724804}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1537989624386329863
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6499689505091206563}
-  - component: {fileID: 6308004455766763772}
-  m_Layer: 0
-  m_Name: WorldManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
 --- !u!4 &1542379904162616754
 Transform:
   m_ObjectHideFlags: 0
@@ -15704,40 +15690,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &6308004455766763772
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1537989624386329863}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d77d6d712c563804bb5e9f1f223ef26e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  tilePrefabs:
-  - {fileID: -2840132633865601791, guid: 948972026ca6f6b4f9ff839edc18c8e9, type: 3}
-  - {fileID: -8890256521134695696, guid: 2c3688470566eec408c95728fb578121, type: 3}
-  - {fileID: -1827694153214402951, guid: 69987084dabf68e448948039410fcc52, type: 3}
-  playerTarget: {fileID: 6886525407605860346}
-  tileSize: 10
-  spawnRadius: 3
-  destroyRadius: 5
-  tileWeights:
-  - 1
-  - 1
-  - 1
-  minSpawnDistance: 1
-  showDebugLogs: 1
-  showGizmos: 1
-  lastPlayerGridPos: {x: 0, y: 0}
-  isInitialized: 0
-  toRemoveCache: []
-  normalSpawner: {fileID: 0}
-  infiniteSpawner: {fileID: 0}
-  navUpdater: {fileID: 0}
-  previousPlayerPos: {x: 0, y: 0, z: 0}
 --- !u!222 &6331148541865932860
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -15889,21 +15841,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &6499689505091206563
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1537989624386329863}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7421121859857493202}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6500083972641839265
 GameObject:
   m_ObjectHideFlags: 0
@@ -16298,7 +16235,7 @@ Transform:
   m_GameObject: {fileID: 6337212771473367493}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 50.19, y: 0, z: 21.5}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -17040,7 +16977,6 @@ Transform:
   - {fileID: 2412070481754076445}
   - {fileID: 5254368155062799955}
   - {fileID: 3960337231167649840}
-  - {fileID: 6499689505091206563}
   - {fileID: 2543949849538844603}
   - {fileID: 218836108}
   m_Father: {fileID: 0}
@@ -17925,7 +17861,7 @@ Transform:
   m_GameObject: {fileID: 612351703135684560}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 50.19, y: 12, z: 9.5}
+  m_LocalPosition: {x: 0, y: 12, z: -12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

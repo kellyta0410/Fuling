@@ -117,12 +117,6 @@ public class CountdownManager : MonoBehaviour
         {
             normal.StopSpawning();
         }
-
-        InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
-        if (infinite != null)
-        {
-            infinite.StopSpawning();
-        }
     }
 
     private void EnableAllSpawners()
@@ -133,37 +127,9 @@ public class CountdownManager : MonoBehaviour
             return;
         }
 
-        // 根据 GameManager 的模式启用对应的生成器
-        if (GameManager.Instance != null)
-        {
-            bool isInfinite = GameManager.Instance.IsInfiniteMode();
-
-            if (isInfinite)
-            {
-                InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
-                if (infinite != null)
-                {
-                    infinite.StartSpawning();
-                }
-            }
-            else
-            {
-                EnemySpawner normal = FindObjectOfType<EnemySpawner>();
-                if (normal != null)
-                {
-                    normal.StartSpawning();
-                }
-            }
-        }
-        else
-        {
-            // 降级方案：启用所有
-            EnemySpawner normal = FindObjectOfType<EnemySpawner>();
-            if (normal != null) normal.StartSpawning();
-
-            InfiniteEnemySpawner infinite = FindObjectOfType<InfiniteEnemySpawner>();
-            if (infinite != null) infinite.StartSpawning();
-        }
+        // 开放世界无限模式已移除；非地牢模式统一启用普通生成器（EnemySpawner）
+        EnemySpawner normal = FindObjectOfType<EnemySpawner>();
+        if (normal != null) normal.StartSpawning();
     }
 
     public bool IsGameStarted() => gameStarted;

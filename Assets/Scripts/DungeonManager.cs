@@ -28,7 +28,6 @@ public class DungeonManager : MonoBehaviour
     public float doorWidth = 3f;
 
     [Header("敌人生成")]
-    public int roomEnemyCap = 30;       // 每间房敌人上限（打完这 30 只门才开）
     public float spawnInterval = 1f;    // 每隔多少秒生成一只（每秒一只）
 
     public float playerClearRadius = 4f;
@@ -55,19 +54,19 @@ public class DungeonManager : MonoBehaviour
     [Header("调试")]
     public bool showDebugLogs = true;
 
-    [Header("预制体（留空则使用程序化基础体；稍后导入地板/带门墙/不带门墙后拖入对应槽）")]
-    public List<GameObject> floorPrefabs = new List<GameObject>(); // 多种地板，每间房随机取一种（不同房间可能不同地板）；墙始终同一套
-    public GameObject floorPrefab;          // 兼容：floorPrefabs 为空时用这个
-    public GameObject wallPrefab;          // 不带门的墙（用作墙段）
-    public GameObject wallWithDoorPrefab;  // 带门洞的墙（含可开关的门挡）
-    public string doorBlockerChildName = "DoorBlocker";
-    public string doorOpenAnimParam = "Open";     // DoorBlocker 上 Animator 的开/关参数（bool；也可用 trigger）
+    [Header("地板预制体")]
+    public List<GameObject> floorPrefabs = new List<GameObject>(); // 多种地板，每间房随机取一种
+    public GameObject floorPrefab;          // floorPrefabs 为空时用这个
 
-    [Header("墙体/门等级（蛇=lvl1，僵尸=lvl2，混合=随机）")]
-    public GameObject wallPrefabLvl1;
-    public GameObject wallWithDoorPrefabLvl1;
-    public GameObject wallPrefabLvl2;
-    public GameObject wallWithDoorPrefabLvl2;
+    [Header("门挡子物体名称（放在带门墙预制体里，代码据此找到并开关）")]
+    public string doorBlockerChildName = "DoorBlocker";
+
+    [Header("墙体/门预制体（按房间类型选，无 base 兜底）")]
+    [Tooltip("蛇房 / 商店房 用 lvl1；僵尸房 用 lvl2；混合房 随机 lvl1/lvl2")]
+    public GameObject wallPrefabLvl1;          // 不带门的墙段（lvl1）
+    public GameObject wallWithDoorPrefabLvl1;  // 带门洞的墙（lvl1）
+    public GameObject wallPrefabLvl2;          // 不带门的墙段（lvl2）
+    public GameObject wallWithDoorPrefabLvl2;  // 带门洞的墙（lvl2）
 
     // ---------- 运行时状态 ----------
     private int roomIndex = 0;
@@ -85,7 +84,7 @@ public class DungeonManager : MonoBehaviour
 
     private List<GameObject> snakeEnemyPrefabs = new List<GameObject>();
     private List<GameObject> zombieEnemyPrefabs = new List<GameObject>();
-    private DifficultySettings difficulty;
+    public DungeonDifficulty difficulty = new DungeonDifficulty();   // 地牢专用难度，直接在 Inspector 配（与普通/Buff 的 DifficultySettings 解耦）
     private NavMeshSurface navMeshSurface;
     private UIManager uiManager;
 
@@ -106,7 +105,7 @@ public class DungeonManager : MonoBehaviour
             if (p != null) playerTarget = p.transform;
         }
         uiManager = FindObjectOfType<UIManager>();
-        difficulty = GameManager.Instance != null ? GameManager.Instance.currentDifficulty : null;
+        // 难度直接读取 Inspector 上挂的 DungeonDifficulty 资产（与 GameManager 的普通/Buff 难度解耦）
 
         ResolveEnemyPrefabs();
         EnsureNavMeshSurface();
@@ -120,17 +119,18 @@ public class DungeonManager : MonoBehaviour
         snakeEnemyPrefabs.Clear();
         zombieEnemyPrefabs.Clear();
 
-        List<GameObject> src = null;
-        if (difficulty != null && difficulty.allowedEnemyPrefabs != null && difficulty.allowedEnemyPrefabs.Count > 0)
-            src = difficulty.allowedEnemyPrefabs;
-        if (src == null && GameManager.Instance != null)
+        if (difficulty != null)
         {
-            var inf = GameManager.Instance.infiniteSpawner;
-            if (inf != null && inf.enemyPrefabs != null) src = inf.enemyPrefabs;
+            if (difficulty.snakeEnemyPrefabs != null) snakeEnemyPrefabs.AddRange(difficulty.snakeEnemyPrefabs);
+            if (difficulty.zombieEnemyPrefabs != null) zombieEnemyPrefabs.AddRange(difficulty.zombieEnemyPrefabs);
         }
-        if (src != null)
+
+        // 若 Inspector 没填任何敌人，回落到普通模式 EnemySpawner 的池子，保证不会空场
+        if (snakeEnemyPrefabs.Count == 0 && zombieEnemyPrefabs.Count == 0 && GameManager.Instance != null
+            && GameManager.Instance.normalSpawner != null && GameManager.Instance.normalSpawner.enemyPrefabs != null)
         {
-            foreach (var prefab in src)
+            var inf = GameManager.Instance.normalSpawner.enemyPrefabs;
+            foreach (var prefab in inf)
             {
                 if (prefab == null) continue;
                 string n = prefab.name.ToLower();
@@ -138,7 +138,6 @@ public class DungeonManager : MonoBehaviour
                 else if (n.Contains("jiangshi") || n.Contains("zombie")) zombieEnemyPrefabs.Add(prefab);
                 else
                 {
-                    // 通用敌人（如 Basic / Fast）两种房间都可出现
                     snakeEnemyPrefabs.Add(prefab);
                     zombieEnemyPrefabs.Add(prefab);
                 }
@@ -279,23 +278,32 @@ public class DungeonManager : MonoBehaviour
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 按房间类型选择墙/门等级：蛇=lvl1，僵尸=lvl2，混合=随机
-        GameObject wwd = wallWithDoorPrefab;
-        GameObject w = wallPrefab;
-        bool useLvl2;
-        if (currentType == DungeonRoomType.Snake) useLvl2 = false;
-        else if (currentType == DungeonRoomType.Zombie) useLvl2 = true;
-        else useLvl2 = Random.value < 0.5f; // 混合房间：随机选 lvl1 / lvl2
-        if (useLvl2)
+        // 按房间类型直接选墙/门预制体（蛇/商店=lvl1，僵尸=lvl2，混合=随机）
+        GameObject wwd = null;
+        GameObject w = null;
+        if (currentType == DungeonRoomType.Shop)
         {
-            if (wallWithDoorPrefabLvl2 != null) wwd = wallWithDoorPrefabLvl2;
-            if (wallPrefabLvl2 != null) w = wallPrefabLvl2;
+            wwd = wallWithDoorPrefabLvl1 != null ? wallWithDoorPrefabLvl1 : wallWithDoorPrefabLvl2;
+            w = wallPrefabLvl1 != null ? wallPrefabLvl1 : wallPrefabLvl2;
         }
-        else
+        else if (currentType == DungeonRoomType.Snake)
         {
-            if (wallWithDoorPrefabLvl1 != null) wwd = wallWithDoorPrefabLvl1;
-            if (wallPrefabLvl1 != null) w = wallPrefabLvl1;
+            wwd = wallWithDoorPrefabLvl1;
+            w = wallPrefabLvl1;
         }
+        else if (currentType == DungeonRoomType.Zombie)
+        {
+            wwd = wallWithDoorPrefabLvl2;
+            w = wallPrefabLvl2;
+        }
+        else // Mixed
+        {
+            if (Random.value < 0.5f) { wwd = wallWithDoorPrefabLvl1; w = wallPrefabLvl1; }
+            else { wwd = wallWithDoorPrefabLvl2; w = wallPrefabLvl2; }
+        }
+        // 兜底：选中的等级为空时，退而用另一个等级（不再有 base 墙）
+        if (wwd == null) wwd = wallWithDoorPrefabLvl1 != null ? wallWithDoorPrefabLvl1 : wallWithDoorPrefabLvl2;
+        if (w == null) w = wallPrefabLvl1 != null ? wallPrefabLvl1 : wallPrefabLvl2;
 
         // 优先：使用“带门墙”预制体
         if (wwd != null)
@@ -590,6 +598,8 @@ public class DungeonManager : MonoBehaviour
         spawningDone = false;
         spawnedCount = 0;
 
+        int cap = difficulty.maxEnemiesPerRoom;
+
         ComputeScaling(roomIndex, out float speed, out float health, out float damage);
 
         List<GameObject> prefabs = new List<GameObject>();
@@ -615,7 +625,7 @@ public class DungeonManager : MonoBehaviour
             center + new Vector3(-inset, 0, -inset),
         };
 
-        while (spawnedCount < roomEnemyCap)
+        while (spawnedCount < cap)
         {
             yield return new WaitForSeconds(spawnInterval);
             if (playerTarget == null) break;
