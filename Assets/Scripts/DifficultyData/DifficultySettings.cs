@@ -28,13 +28,13 @@ public class DifficultySettings : ScriptableObject
     public int spawnPerIntervalMax = 5;
     public float speedMultiplierMax = 2.5f;
     public float healthMultiplierMax = 3f;
-    public float damageMultiplierMax = 2f;
+    public float damageMultiplierMax = 1.5f;
 
     public float spawnIntervalStep = 0.05f;
     public int spawnPerIntervalStep = 1;
     public float speedMultiplierStep = 0.03f;
     public float healthMultiplierStep = 0.04f;
-    public float damageMultiplierStep = 0.02f;
+    public float damageMultiplierStep = 0.0278f;
 
     [Header("生成参数（基础值）")]
     public float spawnInterval = 2f;

@@ -210,12 +210,12 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // 地牢模式：把计时器文本改为“第 N 关”（如 第一关 / 第十关 / 第二十一关）
-    public void SetRoomDisplay(int room)
+    // 地牢模式：把计时器文本改为“第 N 关”；商店房显示为“商店”（不计入关序号）
+    public void SetRoomDisplay(int level, bool isShop = false)
     {
         if (timerText == null) return;
         timerText.gameObject.SetActive(true);
-        timerText.text = "第" + ToChineseNumber(room) + "关";
+        timerText.text = isShop ? "商店" : ("第" + ToChineseNumber(level) + "关");
         timerText.color = Color.white;
     }
 
@@ -703,18 +703,73 @@ public class UIManager : MonoBehaviour
     }
 
     // ==================== 商店 ====================
+    // ⭐ 规则：每次随机出 3 个 Buff；每个只能买一次；刷新消耗 20 金币且整局仅 1 次。
+    private List<BuffDataSO> shopPool = new List<BuffDataSO>();
     private List<BuffDataSO> shopOffer = new List<BuffDataSO>();
+    private List<bool> shopPurchased = new List<bool>();
     private int shopCost = 0;
+    private int shopRefreshCost = 20;
+    private bool shopRefreshUsed = false;
+    private const int shopOfferSize = 3;
 
-    public void OpenShop(List<BuffDataSO> offer, int cost)
+    public UnityEngine.UI.Button shopRefreshButton;   // 刷新按钮（Inspector 拖入商店面板）
+    public UnityEngine.UI.Button shopCloseButton;     // 关闭按钮（Inspector 拖入商店面板）
+
+    public void OpenShop(List<BuffDataSO> pool, int cost)
     {
         if (shopPanel == null || shopButtonPrefab == null || shopButtonContainer == null)
         {
             Debug.LogWarning("UIManager: 商店面板未配置（shopPanel / shopButtonPrefab / shopButtonContainer）");
             return;
         }
-        shopOffer = offer;
+        if (pool == null || pool.Count == 0)
+        {
+            Debug.LogWarning("UIManager: 商店池为空，无法开商店");
+            return;
+        }
+        shopPool = pool;
         shopCost = cost;
+        shopRefreshUsed = false;   // 每次新开商店，刷新次数重置
+
+        if (shopRefreshButton != null)
+        {
+            shopRefreshButton.gameObject.SetActive(true);
+            shopRefreshButton.interactable = true;
+            var rnt = shopRefreshButton.transform.Find("Name");
+            if (rnt != null) rnt.GetComponent<TextMeshProUGUI>().text = "刷新";
+            var rct = shopRefreshButton.transform.Find("Cost");
+            if (rct != null) rct.GetComponent<TextMeshProUGUI>().text = shopRefreshCost.ToString();
+            shopRefreshButton.onClick.RemoveAllListeners();
+            shopRefreshButton.onClick.AddListener(RefreshShop);
+        }
+        if (shopCloseButton != null)
+        {
+            shopCloseButton.onClick.RemoveAllListeners();
+            shopCloseButton.onClick.AddListener(CloseShop);
+        }
+
+        GenerateOffer();
+        BuildShopButtons();
+        shopPanel.SetActive(true);
+    }
+
+    // 从商店池随机取最多 3 个（去重）作为本次提供的 Buff
+    private void GenerateOffer()
+    {
+        shopOffer.Clear();
+        shopPurchased.Clear();
+        List<BuffDataSO> pool = new List<BuffDataSO>(shopPool);
+        while (shopOffer.Count < shopOfferSize && pool.Count > 0)
+        {
+            int idx = Random.Range(0, pool.Count);
+            shopOffer.Add(pool[idx]);
+            shopPurchased.Add(false);
+            pool.RemoveAt(idx);
+        }
+    }
+
+    private void BuildShopButtons()
+    {
         foreach (Transform c in shopButtonContainer) Destroy(c.gameObject);
         for (int i = 0; i < shopOffer.Count; i++)
         {
@@ -727,14 +782,24 @@ public class UIManager : MonoBehaviour
             if (costT != null) costT.GetComponent<TextMeshProUGUI>().text = shopCost.ToString();
             int index = i;
             var button = btn.GetComponent<UnityEngine.UI.Button>();
-            if (button != null) button.onClick.AddListener(() => BuyBuff(index));
+            if (button != null)
+            {
+                button.onClick.AddListener(() => BuyBuff(index));
+                // 已购买的置灰不可再买
+                if (shopPurchased[i])
+                {
+                    button.interactable = false;
+                    var img = btn.GetComponent<UnityEngine.UI.Image>();
+                    if (img != null) img.color = new Color(1f, 1f, 1f, 0.4f);
+                }
+            }
         }
-        shopPanel.SetActive(true);
     }
 
     public void BuyBuff(int index)
     {
         if (index < 0 || index >= shopOffer.Count) return;
+        if (shopPurchased[index]) return;   // 每个 Buff 只能购买一次（除非刷新后再次出现）
         BuffDataSO buff = shopOffer[index];
         PlayerController pc = FindObjectOfType<PlayerController>();
         if (pc == null) return;
@@ -750,13 +815,46 @@ public class UIManager : MonoBehaviour
             if (buff.isInstantEffect) bh.ApplyBuff(buff);
             else bh.ApplyBuff(buff, true);
         }
-        CloseShop();
+        shopPurchased[index] = true;
+        RefreshBuffIcons();
+        // 只置灰该按钮，不关闭商店，可继续购买其它 Buff
+        if (shopButtonContainer != null && index < shopButtonContainer.childCount)
+        {
+            var btn = shopButtonContainer.GetChild(index);
+            var button = btn != null ? btn.GetComponent<UnityEngine.UI.Button>() : null;
+            if (button != null) button.interactable = false;
+            var img = btn != null ? btn.GetComponent<UnityEngine.UI.Image>() : null;
+            if (img != null) img.color = new Color(1f, 1f, 1f, 0.4f);
+        }
+    }
+
+    public void RefreshShop()
+    {
+        if (shopRefreshUsed) return;
+        PlayerController pc = FindObjectOfType<PlayerController>();
+        if (pc == null) return;
+        if (pc.GetCoins() < shopRefreshCost)
+        {
+            ShowBuffToast("金币不足，刷新需要 " + shopRefreshCost + " 金币");
+            return;
+        }
+        pc.AddCoin(-shopRefreshCost);
+        shopRefreshUsed = true;   // 整局仅 1 次刷新
+        if (shopRefreshButton != null)
+        {
+            shopRefreshButton.interactable = false;
+            shopRefreshButton.gameObject.SetActive(false);
+        }
+        // 重新随机 3 个；若某 Buff 再次出现在新列表里，本次可再购买一次
+        GenerateOffer();
+        BuildShopButtons();
     }
 
     public void CloseShop()
     {
         if (shopPanel != null) shopPanel.SetActive(false);
         shopOffer.Clear();
+        shopPurchased.Clear();
     }
 
     public void RefreshBuffIcons()

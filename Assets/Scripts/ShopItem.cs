@@ -54,17 +54,8 @@ public class ShopItem : MonoBehaviour
         if (!playerNear) return;
         if (buffPool == null || buffPool.Count == 0) return;
 
-        // 随机取最多 3 个（去重）作为本店提供项
-        List<BuffDataSO> offer = new List<BuffDataSO>();
-        List<BuffDataSO> pool = new List<BuffDataSO>(buffPool);
-        while (offer.Count < 3 && pool.Count > 0)
-        {
-            int idx = Random.Range(0, pool.Count);
-            offer.Add(pool[idx]);
-            pool.RemoveAt(idx);
-        }
-
+        // 把整个池交给 UIManager，由它随机抽 3 个并支持刷新
         UIManager ui = FindObjectOfType<UIManager>();
-        if (ui != null) ui.OpenShop(offer, roomCost);
+        if (ui != null) ui.OpenShop(buffPool, roomCost);
     }
 }

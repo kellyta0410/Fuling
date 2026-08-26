@@ -8,7 +8,7 @@ using UnityEngine.AI;
 //  Dungeon 房间制地牢系统
 //  改造 Infinite 场景：玩家一次只在一个房间内，
 //  清空敌人后才能前往下一个随机方向的房间，
-//  每 5 个房间（5/10/15…）为商店房间，敌人随房间数递增变强。
+    //  每 5 个战斗关之后插入一个商店房（物理房号 6/12/18…，商店不计入“关”序号），敌人随房间数递增变强。
 // =============================================================
 
 public enum DungeonRoomType
@@ -95,7 +95,8 @@ public class DungeonManager : MonoBehaviour
     public GameObject shopFloorPrefab;
 
     // ---------- 运行时状态 ----------
-    private int roomIndex = 0;
+    private int roomIndex = 0;           // 物理房间序号（含商店房）
+    private int levelIndex = 0;          // 战斗关序号（商店房不计入，用于顶部“第N关”显示）
     private DungeonRoomType currentType;
     private GameObject roomRoot;
     private List<GameObject> aliveEnemies = new List<GameObject>();
@@ -216,10 +217,14 @@ public class DungeonManager : MonoBehaviour
 
         roomIndex++;
 
-        if (roomIndex % 5 == 0)
+        // 每 5 个战斗关之后插入一个商店房（物理房号 6/12/18…，商店不计入“关”序号）
+        if (roomIndex % 6 == 0)
             currentType = DungeonRoomType.Shop;
         else
+        {
             currentType = (DungeonRoomType)Random.Range(0, 3);
+            levelIndex++;
+        }
 
         roomRoot = new GameObject("DungeonRoom_" + roomIndex + "_" + currentType);
         roomRoot.transform.position = center;
@@ -247,7 +252,7 @@ public class DungeonManager : MonoBehaviour
         BuildNavMesh();
         yield return null;
 
-        if (uiManager != null) uiManager.SetRoomDisplay(roomIndex);
+        if (uiManager != null) uiManager.SetRoomDisplay(levelIndex, currentType == DungeonRoomType.Shop);
         if (GameManager.Instance != null) GameManager.Instance.SetDungeonRoom(roomIndex);
 
         if (showDebugLogs) Debug.Log("[Dungeon] 生成房间 #" + roomIndex + " 类型=" + currentType + " 中心=" + center);
@@ -374,7 +379,6 @@ public class DungeonManager : MonoBehaviour
             floor.transform.localRotation = Quaternion.identity;
             floor.transform.localScale = new Vector3(roomSize / 10f, 1f, roomSize / 10f);
         }
-        floor.tag = "Ground";
         int groundLayer = LayerMask.NameToLayer("Ground");
         if (groundLayer != -1) floor.layer = groundLayer;
     }
@@ -753,7 +757,9 @@ public class DungeonManager : MonoBehaviour
         // 只烘焙当前房间子树，避免敌人走到旧世界的大地面上
         navMeshSurface.enabled = true;
         navMeshSurface.collectObjects = CollectObjects.All;
-        navMeshSurface.layerMask = ~0;
+        // 只烤“Ground”层的网格（即地板），避免把场景里其它模型（如遗留的 Plane.003）一并卷进 NavMesh 烘焙
+        int groundLay = LayerMask.NameToLayer("Ground");
+        navMeshSurface.layerMask = (groundLay != -1) ? (1 << groundLay) : ~0;
         navMeshSurface.transform.SetParent(roomRoot.transform, false);
         navMeshSurface.RemoveData(); // 清掉上一间房残留的 NavMeshData，避免多房间 NavMesh 叠加导致寻路错乱
         if (showDebugLogs) Debug.Log("[Dungeon] 烘焙 NavMesh…");
@@ -775,16 +781,15 @@ public class DungeonManager : MonoBehaviour
         {
             speed = Mathf.Min(1f + (room - 1) * 0.03f, 2.5f);
             health = Mathf.Min(1f + (room - 1) * 0.04f, 3f);
-            damage = Mathf.Min(1f + (room - 1) * 0.02f, 2f);
+            damage = Mathf.Min(1f + (room - 1) * 0.0278f, 1.5f);
         }
     }
 
     // 敌人生成间隔随房间数递减：前 4 间 3s，5~9 间 2.5s，10 间起 2s
     float GetSpawnInterval()
     {
-        if (roomIndex >= 10) return 2f;
-        if (roomIndex >= 5) return 2.5f;
-        return 3f;
+        if (roomIndex >= 6) return 1.75f;  // 6 起（含 10+）= 1.75s
+        return 2f;                          // 1-5 = 2s
     }
 
     void SpawnEnemiesForRoom()
@@ -797,7 +802,8 @@ public class DungeonManager : MonoBehaviour
         spawningDone = false;
         spawnedCount = 0;
 
-        int cap = difficulty.maxEnemiesPerRoom;
+        // 无限(地牢)模式敌人房间上限：1-10 房最多 20 只，11 房起最多 30 只（商店房不走这里）
+        int cap = (roomIndex <= 10) ? 20 : 30;
 
         ComputeScaling(roomIndex, out float speed, out float health, out float damage);
 
@@ -930,7 +936,7 @@ public class DungeonManager : MonoBehaviour
         Vector3 pos = roomRoot.transform.position + new Vector3(0, 1f, 0);
         GameObject shop = new GameObject("Shop");
         shop.transform.position = pos;
-        shop.AddComponent<ShopItem>().Setup(buffs, this, Mathf.Max(5, 10 + roomIndex));
+        shop.AddComponent<ShopItem>().Setup(buffs, this, 100);
         if (showDebugLogs) Debug.Log("[Dungeon] 商店已生成（靠近后点击打开，随机提供 3 个 Buff）");
     }
 

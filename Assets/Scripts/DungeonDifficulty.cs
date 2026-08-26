@@ -25,6 +25,6 @@ public class DungeonDifficulty
     public float healthMultiplierMax   = 3f;
 
     public float enemyDamageMultiplier = 1f;
-    public float damageMultiplierStep  = 0.02f;
-    public float damageMultiplierMax   = 2f;
+    public float damageMultiplierStep  = 0.0278f;  // 第10房 ≈ 1.25（1+9×step）
+    public float damageMultiplierMax   = 1.5f;     // 第20房封顶 1.5
 }

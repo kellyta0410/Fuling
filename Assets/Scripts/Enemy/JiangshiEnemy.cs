@@ -1,31 +1,67 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
 public class JiangshiEnemy : EnemyAI
 {
-    private enum BlinkState { Chasing, Preparing, PostBlink, Cooldown }
+    private enum BlinkState { Chasing, Preparing, Charging, Cooldown }
     private BlinkState blinkState = BlinkState.Chasing;
     private float stateTimer = 0f;
     private bool hasPrepared = false;
     private bool hasAttacked = false;
     private Vector3 lockedFacingDir = Vector3.zero;  // 蓄力开始时锁定朝向（身体 + 指示线共用）
 
-    [Header("瞬移参数")]
-    [Tooltip("大于此距离才会瞬移（远距离用瞬移接近；近距离直接走过去打）")]
+    // 冲撞运行时状态
+    private float chargeTraveled = 0f;
+    private bool hasHitPlayer = false;
+    private float chargeDistanceCache = 0f;
+
+    // 全局：同时处于冲撞(蓄力+冲刺)的僵尸最多 MaxConcurrentCharges 只，避免一窝蜂同时冲
+    private const int MaxConcurrentCharges = 2;
+    private static readonly HashSet<JiangshiEnemy> s_charging = new HashSet<JiangshiEnemy>();
+    private bool meChargeActive = false;
+
+    private void LeaveChargeState()
+    {
+        if (meChargeActive)
+        {
+            meChargeActive = false;
+            s_charging.Remove(this);
+        }
+    }
+
+    protected override void OnDestroy()
+    {
+        LeaveChargeState();
+        base.OnDestroy();
+    }
+
+    [Header("冲撞/蓄力参数")]
+    [Tooltip("大于此距离才会冲撞（远距离冲撞接近；近距离直接走过去打）")]
     public float prepareDistance = 6f;
-    [Tooltip("每次瞬移前进的距离(米)：一小步跳跃接近，而不是一次跳到玩家面前")]
-    public float blinkStepDistance = 6f;
     [Tooltip("蓄力停顿时间（秒）")]
     public float prepareDuration = 2.0f;
     [Tooltip("蓄力时长随机偏移(±秒)：拉开多个僵尸的瞬移时刻，避免全部同一时间瞬移")]
     public float prepareDurationJitter = 0.8f;
     [Tooltip("小于等于此距离时直接走过去攻击（不再瞬移）")]
     public float directAttackDistance = 2f;
-    [Tooltip("瞬移冷却时间（秒）")]
-    public float blinkCooldown = 10f;
-    [Tooltip("瞬移会被哪些层挡住（默认 Wall 层）。有墙挡着就不会瞬移，改为绕墙走过去")]
+    [Tooltip("冲撞冷却时间（秒）")]
+    public float blinkCooldown = 15f;
+    [Tooltip("瞬移会被哪些层挡住（默认 Wall 层）。有墙挡着就不会冲撞，改为绕墙走过去")]
     public LayerMask blinkObstacleMask = 1 << 6;
+
+    [Header("冲撞攻击参数")]
+    [Tooltip("冲撞冲刺速度(米/秒)")]
+    public float chargeSpeed = 18f;
+    [Tooltip("冲撞终点超过玩家当前位置的距离(米)：红条会越过玩家，冲过去")]
+    public float chargeOvershoot = 3f;
+    [Tooltip("冲撞命中玩家的判定半径(米)")]
+    public float chargeHitRadius = 2f;
+    [Tooltip("冲撞命中后把玩家击退的距离(米)，轻微")]
+    public float chargeKnockback = 2.5f;
+    [Tooltip("冲撞伤害基础值（不再 ×普通攻击，固定基础值 × 房间缩放）")]
+    public float chargeBaseDamage = 8f;
 
     [Header("地面指示特效")]
     [Tooltip("是否显示地面指示")]
@@ -88,20 +124,24 @@ public class JiangshiEnemy : EnemyAI
     protected override void Update()
     {
         base.Update();
+        // 冲撞/蓄力每帧由这里驱动：即使 base 在攻击范围内提前 return 跳过 HandleMovement，
+        // 也能保证蓄力读条不被普通攻击打断（"不打断瞬移"）。
+        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
+            DriveSpecial();
         UpdateLandSFX();
     }
 
-    // ⭐ 被击退中断蓄力：恢复分离推挤（击退用 agent.Move 推，无需再挂起；蓄力残留落点锁定已失效）
+    // 蓄力/冲撞期间不被击退打断（仍保持挂起推挤与指示），瞬移照常进行
     protected override void OnKnockback()
     {
         base.OnKnockback();
-        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.PostBlink)
-        {
-            SetSeparationSuspended(false);
-            HideGroundIndicator();   // ⭐ 隐藏瞬移指示线，避免击退打断蓄力后红线残留在地上
-            blinkState = BlinkState.Cooldown;
-            stateTimer = 0f;
-        }
+        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
+            return;
+        SetSeparationSuspended(false);
+        HideGroundIndicator();
+        LeaveChargeState();
+        blinkState = BlinkState.Cooldown;
+        stateTimer = 0f;
     }
 
     // 僵尸跳着走：检测视觉模型从"离地"落到"贴地"的下降沿，落地瞬间播放一次 moveSFX。
@@ -197,8 +237,8 @@ public class JiangshiEnemy : EnemyAI
                     return;
                 }
 
-                // ⭐ 远距离：只在无墙遮挡时瞬移接近（蓄力 → 指示 → 瞬移一小步 → 冷却）。
-                // 有墙挡着就继续绕墙追击，等玩家出墙再瞬移。
+                // ⭐ 远距离：只在无墙遮挡时冲撞接近（蓄力 → 指示红条越过玩家 → 冲撞 → 冷却）。
+                // 有墙挡着就继续绕墙追击，等玩家出墙再冲撞。
                 if (distance > prepareDistance && !isAttacking && blinkState == BlinkState.Chasing)
                 {
                     if (!HasClearLineToPlayer())
@@ -212,6 +252,12 @@ public class JiangshiEnemy : EnemyAI
                         return;
                     }
 
+                    // ⭐ 同时冲撞的僵尸最多 2 只：已达上限本帧不进入蓄力，继续追击，下帧再试
+                    if (s_charging.Count >= MaxConcurrentCharges)
+                        return;
+
+                    s_charging.Add(this);
+                    meChargeActive = true;
                     blinkState = BlinkState.Preparing;
                     stateTimer = 0f;
                     // ⭐ 本次蓄力随机化时长：不同僵尸瞬移时刻错开，避免同时瞬移
@@ -219,9 +265,10 @@ public class JiangshiEnemy : EnemyAI
                     hasPrepared = false;
                     hasAttacked = false;
                     lockedFacingDir = GetLockedFacingDir();
-                    // ⭐ 锁定瞬移落点基准：沿锁定方向前进 blinkStepDistance(6m) 一小步，之后不跟随玩家
+                    // ⭐ 锁定冲撞终点：沿锁定方向冲过玩家再超出 chargeOvershoot（红条越过玩家）
+                    float distToPlayer0 = player != null ? Vector3.Distance(transform.position, player.transform.position) : 0f;
                     lockedIndicatorTarget = player != null
-                        ? GetGroundPosition(transform.position + lockedFacingDir * blinkStepDistance) // blinkStepDistance=6m
+                        ? GetGroundPosition(transform.position + lockedFacingDir * (distToPlayer0 + chargeOvershoot))
                         : GetGroundPosition(transform.position);
                     StopAgent();
 
@@ -233,7 +280,7 @@ public class JiangshiEnemy : EnemyAI
                 }
 
                 // ⭐ 走到这里说明距离 <= prepareDistance（近距已在上方处理）或正在攻击，
-                // 保持追击即可（不会出现"超过上限走过去"分支，因为远距一律瞬移一小步）
+                // 保持追击即可（远距一律进入冲撞蓄力）
                 if (isAgentValid)
                 {
                     NotePathMutation("Jiangshi.blink未触发 → isStopped=false");
@@ -243,88 +290,11 @@ public class JiangshiEnemy : EnemyAI
                 return;
 
             case BlinkState.Preparing:
-                StopAgent();
-                // ⭐ 蓄力站桩锁定站位：挂起分离推挤，避免被其他敌人/玩家挤动导致落点/指示错位
-                SetSeparationSuspended(true);
-                // ⭐ 蓄力期间朝锁定方向转向（身体不跟随玩家，落点/朝向都锁定在蓄力开始瞬间）
-                RotateToLockedFacing();
-
-                stateTimer += Time.deltaTime;
-
-                if (showGroundIndicator && endMarker != null)
-                {
-                    UpdateGroundIndicator();
-                }
-
-                // ⭐ 蓄力过程中玩家躲到墙后：取消蓄力，回到追击
-                if (!HasClearLineToPlayer())
-                {
-                    HideGroundIndicator();
-                    SetSeparationSuspended(false);
-                    blinkState = BlinkState.Chasing;
-                    stateTimer = 0f;
-                    return;
-                }
-
-                // ⭐ 蓄力过程中如果玩家靠近到直接攻击距离，取消蓄力直接攻击
-                float currentDistance = Vector3.Distance(transform.position, player.transform.position);
-                if (currentDistance <= directAttackDistance && canAttack && !isAttacking)
-                {
-                    HideGroundIndicator();
-                    SetSeparationSuspended(false);
-                    StopAgent();
-                    RotateTowardPlayer();
-                    if (IsFacingPlayer())
-                    {
-                        PerformAttack();
-                        hasAttacked = true;
-                        blinkState = BlinkState.Cooldown;
-                        stateTimer = 0f;
-                    }
-                    return;
-                }
-
-                // ⭐ 蓄力填满的当下立刻瞬移
-                if (stateTimer >= effectivePrepareDuration && !hasPrepared)
-                {
-                    hasPrepared = true;
-                    HideGroundIndicator();
-                    SetSeparationSuspended(false);
-
-                    // 瞬移前最后校验：玩家已躲到墙后或瞬移路径被墙挡，就放弃瞬移
-                    if (!HasClearLineToPlayer())
-                    {
-                        blinkState = BlinkState.Chasing;
-                        stateTimer = 0f;
-                        return;
-                    }
-                    if (PerformBlinkToPlayer())
-                    {
-                        blinkState = BlinkState.PostBlink;
-                        stateTimer = 0f;
-                    }
-                    else
-                    {
-                        // ⭐ 落点路径被墙挡：放弃瞬移，回到追击
-                        blinkState = BlinkState.Chasing;
-                        stateTimer = 0f;
-                    }
-                }
+                // 蓄力逻辑已移到 Update()->DriveSpecial()，避免被普通攻击打断（不打断瞬移）
                 break;
 
-            case BlinkState.PostBlink:
-                // ⭐ 瞬移后立即攻击（不等待）
-                StopAgent();
-                float distAfterBlink = Vector3.Distance(transform.position, player.transform.position);
-                if (!hasAttacked && distAfterBlink <= enemyData.attackRange && canAttack)
-                {
-                    PerformAttack();
-                    hasAttacked = true;
-                }
-
-                // 立即进入冷却
-                blinkState = BlinkState.Cooldown;
-                stateTimer = 0f;
+            case BlinkState.Charging:
+                // 冲撞逻辑同样由 Update()->DriveSpecial() 驱动
                 break;
 
             case BlinkState.Cooldown:
@@ -351,6 +321,67 @@ public class JiangshiEnemy : EnemyAI
                     Debug.Log("[Jiangshi] 冷却结束");
                 }
                 break;
+        }
+    }
+
+    // ⭐ 冲撞/蓄力由 Update 每帧驱动（即使 base 在攻击范围内提前 return 跳过 HandleMovement，
+    // 也能保证蓄力读条不被普通攻击/击退打断）。保留墙检测：蓄力期玩家躲墙后→取消；冲撞遇墙→停。
+    private void DriveSpecial()
+    {
+        if (blinkState == BlinkState.Preparing)
+        {
+            StopAgent();
+            // 蓄力站桩锁定站位：挂起分离推挤，避免被挤动导致落点/指示错位
+            SetSeparationSuspended(true);
+            // 蓄力期间朝锁定方向转向（身体不跟随玩家，落点/朝向都锁定在蓄力开始瞬间）
+            RotateToLockedFacing();
+
+            stateTimer += Time.deltaTime;
+
+            if (showGroundIndicator && endMarker != null)
+            {
+                UpdateGroundIndicator();
+            }
+
+            // ⭐ 蓄力过程中玩家躲到墙后：取消蓄力，回到追击（瞬移不能穿墙）
+            if (!HasClearLineToPlayer())
+            {
+                HideGroundIndicator();
+                SetSeparationSuspended(false);
+                LeaveChargeState();
+                blinkState = BlinkState.Chasing;
+                stateTimer = 0f;
+                return;
+            }
+
+            // ⭐ 蓄力填满：进入冲撞（锁定方向不变，红条已越过玩家）
+            if (stateTimer >= effectivePrepareDuration && !hasPrepared)
+            {
+                hasPrepared = true;
+                HideGroundIndicator();
+
+                // 最后校验：玩家躲到墙后 / 冲撞路径被墙挡，就放弃冲撞改为追击
+                if (!HasClearLineToPlayer())
+                {
+                    LeaveChargeState();
+                    blinkState = BlinkState.Chasing;
+                    stateTimer = 0f;
+                    return;
+                }
+
+                float distToPlayer = player != null ? Vector3.Distance(transform.position, player.transform.position) : 0f;
+                chargeDistanceCache = distToPlayer + chargeOvershoot;
+                chargeTraveled = 0f;
+                hasHitPlayer = false;
+                if (player != null)
+                    lockedIndicatorTarget = GetGroundPosition(transform.position + lockedFacingDir * chargeDistanceCache);
+                blinkState = BlinkState.Charging;   // 蓄力期间已挂起分离推挤，冲撞全程保持
+                stateTimer = 0f;
+            }
+        }
+        else if (blinkState == BlinkState.Charging)
+        {
+            DriveCharge();
         }
     }
 
@@ -444,72 +475,85 @@ public class JiangshiEnemy : EnemyAI
         return true;
     }
 
-    /// <summary>
-    /// ⭐ 每次瞬移只沿"蓄力开始时锁定的朝向"前进 blinkStepDistance(6m) 一小步，
-    /// 锁定方向不跟随玩家；落点与指示条终点一致。
-    /// 成功瞬移返回 true；落点路径被墙挡则返回 false（不瞬移，由调用方回到追击）。
-    /// </summary>
-    private bool PerformBlinkToPlayer()
+    // ============ 冲撞攻击 ============
+    // 蓄力(Preparing)填满后进入冲撞：沿锁定方向高速冲刺，红条已越过玩家；
+    // 冲刺中命中玩家→轻微击退 + 高于普攻的伤害；冲撞期间抑制普通攻击（避免同时触发）。
+    private void DriveCharge()
     {
-        if (player == null) return false;
+        StopAgent();
+        RotateToLockedFacing();   // 冲撞全程锁定蓄力朝向，不跟随玩家
 
-        // ⭐ 落点基准：蓄力开始时锁定的朝向 × 6m 一小步，不跳到玩家面前
-        if (lockedFacingDir == Vector3.zero)
-            lockedFacingDir = GetLockedFacingDir();
-        Vector3 targetPos = transform.position + lockedFacingDir * blinkStepDistance;
-        targetPos.y = transform.position.y;
-
-        // ⭐ 瞬移落点校验：从僵尸到落点的路径被墙挡（会穿墙瞬移、玩家看不到瞬移）就放弃瞬移
-        if (IsBlinkTargetBlocked(targetPos))
-            return false;
-
-        // 确保目标点在地面上
-        if (isAgentValid && agent.isOnNavMesh)
+        if (player != null && !player.IsDead())
         {
-            NavMeshHit hit;
-            if (NavMesh.SamplePosition(targetPos, out hit, 3f, NavMesh.AllAreas))
+            // 正前方有墙就提前结束（不穿墙）
+            if (WallAhead(lockedFacingDir, chargeSpeed * Time.deltaTime + 0.6f))
             {
-                NotePathMutation("Jiangshi.Blink → agent.Warp(采样点)");
-                agent.Warp(hit.position);
-                transform.position = hit.position;
+                EndCharge();
+                return;
             }
+
+            float step = chargeSpeed * Time.deltaTime;
+            if (isAgentValid && agent != null && agent.isOnNavMesh)
+                agent.Move(lockedFacingDir * step);
             else
+                transform.position += lockedFacingDir * step;
+            chargeTraveled += step;
+
+            if (!hasHitPlayer)
             {
-                NotePathMutation("Jiangshi.Blink → agent.Warp(原目标)");
-                agent.Warp(targetPos);
-                transform.position = targetPos;
+                Vector3 a = transform.position; a.y = 0f;
+                Vector3 b = player.transform.position; b.y = 0f;
+                if (Vector3.Distance(a, b) <= chargeHitRadius)
+                {
+                    DealChargeHit();
+                    hasHitPlayer = true;
+                }
             }
         }
-        else
-        {
-            transform.position = targetPos;
-        }
 
-        // 瞬移后保持锁定朝向（不跟随玩家）
-        if (lockedFacingDir != Vector3.zero)
-            transform.rotation = Quaternion.LookRotation(lockedFacingDir);
-        return true;
+        if (chargeTraveled >= chargeDistanceCache)
+            EndCharge();
     }
 
-    /// <summary>
-    /// 从僵尸胸口高度到落点胸口高度发射射线，命中障碍即返回 true（落点路径穿墙）。
-    /// 额外用 NavMesh.Raycast 检测 carve 的 NavMeshObstacle（装饰物挖洞也阻断瞬移路径）。
-    /// </summary>
-    private bool IsBlinkTargetBlocked(Vector3 targetPos)
+    private void DealChargeHit()
     {
-        Vector3 from = transform.position + Vector3.up * 1.4f;
-        Vector3 to = targetPos + Vector3.up * 1.4f;
-        Vector3 dir = to - from;
-        float dist = dir.magnitude;
-        if (dist <= 0.01f) return false;
+        if (player == null || player.IsDead()) return;
+        float dmg = chargeBaseDamage * currentDamageMultiplier;
+        player.TakeDamage(Mathf.RoundToInt(dmg));
+        Vector3 away = player.transform.position - transform.position;
+        away.y = 0f;
+        if (away.sqrMagnitude < 1e-4f) away = -lockedFacingDir;
+        player.AddKnockback(away.normalized, chargeKnockback);
+        if (attackSFX != null && AudioManager.Instance != null)
+            AudioManager.Instance.PlaySFX(attackSFX, transform.position);
+    }
 
-        if (Physics.Raycast(from, dir / dist, dist, blinkObstacleMask))
+    private bool WallAhead(Vector3 dir, float dist)
+    {
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position + Vector3.up * 1.0f, dir, out hit, dist, blinkObstacleMask))
             return true;
-
-        if (IsNavMeshPathBlocked())
-            return true;
-
         return false;
+    }
+
+    private void EndCharge()
+    {
+        HideGroundIndicator();
+        SetSeparationSuspended(false);
+        hasHitPlayer = false;
+        LeaveChargeState();
+        blinkState = BlinkState.Cooldown;
+        stateTimer = 0f;
+    }
+
+    // 蓄力/冲撞期间抑制普通攻击，避免“同时触发”；位移与读条由 Update()->DriveSpecial() 驱动
+    protected override bool TryPerformInRangeAttack()
+    {
+        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
+        {
+            return true;   // 蓄力/冲撞期间吃掉攻击请求，普通攻击不打断瞬移
+        }
+        return base.TryPerformInRangeAttack();
     }
 
     /// <summary>
@@ -602,13 +646,13 @@ public class JiangshiEnemy : EnemyAI
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, enemyData.attackRange);
 
-        // ⭐ 瞬移步进距离（青色圆）- 显示每次瞬移前进多远
+        // ⭐ 冲撞步进距离（青色圆）- 显示冲撞越过玩家的超出量
         Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
-        Gizmos.DrawWireSphere(transform.position, blinkStepDistance);
+        Gizmos.DrawWireSphere(transform.position, chargeOvershoot);
 
 #if UNITY_EDITOR
         UnityEditor.Handles.Label(transform.position + Vector3.up * 3.5f,
-            $"蓄力: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n瞬移步进: {blinkStepDistance:F1}m");
+            $"蓄力触发: {prepareDistance:F1}m\n直接攻击: {directAttackDistance:F1}m\n冲撞超出: {chargeOvershoot:F1}m\n冲撞速度: {chargeSpeed:F1}m/s");
 #endif
     }
 }

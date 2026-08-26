@@ -422,50 +422,6 @@ MonoBehaviour:
     enemyDamageMultiplier: 1
     damageMultiplierStep: 0.02
     damageMultiplierMax: 2
---- !u!1 &667670078
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 667670080}
-  - component: {fileID: 667670081}
-  m_Layer: 0
-  m_Name: EnemySpawner
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &667670080
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 667670078}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &667670081
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 667670078}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 05780436684267b47b72aab51854920b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &961739749
 GameObject:
   m_ObjectHideFlags: 0
@@ -15076,6 +15032,7 @@ MonoBehaviour:
   attackDamageDelay: 0.3
   attackFacingAngle: 120
   skillDamageDelay: 0.3
+  skillHitFraction: 0.5
   attackSFX: {fileID: 8300000, guid: fb3f6c097414b5147a4e58977e2a0394, type: 3}
   skillSFX: {fileID: 8300000, guid: 6fe6c9b2eea5c534e95b096bcb6d2760, type: 3}
   hitSFX:
@@ -15337,6 +15294,8 @@ MonoBehaviour:
   reviveHint: {fileID: 8999999999815855648}
   reviveButton: {fileID: 849378465354870957}
   reviveEndButton: {fileID: 1040730706678654296}
+  shopRefreshButton: {fileID: 0}
+  shopCloseButton: {fileID: 0}
 --- !u!222 &5894248977926897157
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -18761,7 +18720,6 @@ SceneRoots:
   - {fileID: 961739753}
   - {fileID: 203844589}
   - {fileID: 8232265437665412482}
-  - {fileID: 667670080}
   - {fileID: 6886525407605860346}
   - {fileID: 3360664246604732540}
   - {fileID: 7421121859857493202}
