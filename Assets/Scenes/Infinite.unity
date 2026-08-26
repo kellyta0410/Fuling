@@ -356,7 +356,7 @@ MonoBehaviour:
   wallHeight: 4
   wallThickness: 1
   doorWidth: 5
-  roomEnemyCap: 30
+  doorOpenAnimParam: Open
   spawnInterval: 1
   playerClearRadius: 4
   decorationMin: 4
@@ -369,20 +369,32 @@ MonoBehaviour:
   shopBuffs: []
   playerTarget: {fileID: 6886525407605860346}
   showDebugLogs: 1
-  floorPrefabs: []
-  floorPrefab: {fileID: 0}
-  wallPrefab: {fileID: 0}
-  wallWithDoorPrefab: {fileID: 0}
   doorBlockerChildName: DoorBlocker
-  doorOpenAnimParam: Open
-  wallPrefabLvl1: {fileID: 7692100882094079684, guid: 91d9f02267d7f6a4680e8719c08f4cad,
-    type: 3}
-  wallWithDoorPrefabLvl1: {fileID: 6373214921952214671, guid: 7d98bb3ca48997444892829e92ef828f,
-    type: 3}
-  wallPrefabLvl2: {fileID: 4174379925819882714, guid: 1a84674a16463454981c2bf943ac1f12,
-    type: 3}
-  wallWithDoorPrefabLvl2: {fileID: 8804418509386184056, guid: 87a9dc65de3595a46a8e249014a558da,
-    type: 3}
+  snakeWallPrefab: {fileID: 0}
+  snakeWallWithDoorPrefab: {fileID: 0}
+  snakeFloorPrefab: {fileID: 0}
+  zombieWallPrefab: {fileID: 0}
+  zombieWallWithDoorPrefab: {fileID: 0}
+  zombieFloorPrefab: {fileID: 0}
+  mixedFloorPrefab: {fileID: 0}
+  shopWallPrefab: {fileID: 0}
+  shopWallWithDoorPrefab: {fileID: 0}
+  shopFloorPrefab: {fileID: 0}
+  difficulty:
+    snakeEnemyPrefabs:
+    - {fileID: 2190662386543830987, guid: 9e854d9d7af37294dbd508a41a949d31, type: 3}
+    zombieEnemyPrefabs:
+    - {fileID: 4828800342966192151, guid: cea5634867e8baf47b737316e61e7c23, type: 3}
+    maxEnemiesPerRoom: 30
+    enemySpeedMultiplier: 1
+    speedMultiplierStep: 0.03
+    speedMultiplierMax: 2.5
+    enemyHealthMultiplier: 1
+    healthMultiplierStep: 0.04
+    healthMultiplierMax: 3
+    enemyDamageMultiplier: 1
+    damageMultiplierStep: 0.02
+    damageMultiplierMax: 2
 --- !u!1 &667670078
 GameObject:
   m_ObjectHideFlags: 0
@@ -15313,7 +15325,6 @@ MonoBehaviour:
   clickSFX: {fileID: 8300000, guid: cca79893167967c4fb36f0f31eaee021, type: 3}
   player: {fileID: 5666960912894009702}
   enemySpawner: {fileID: 0}
-  infiniteSpawner: {fileID: 667670081}
   gameManager: {fileID: 8194553614850778318}
   buffToastText: {fileID: 7884111085241587443}
   shopPanel: {fileID: 0}
@@ -15506,6 +15517,74 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!1001 &6064954763009100038
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -5.72
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7230922617413471692, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8003658927347914614, guid: 31a2e77f769ebd045b49267dc8b0346b,
+        type: 3}
+      propertyPath: m_Name
+      value: long wall shop door
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 31a2e77f769ebd045b49267dc8b0346b, type: 3}
 --- !u!114 &6101844070603662072
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17826,7 +17905,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentDifficulty: {fileID: 11400000, guid: d5105edb7b30cd940a7d3bad358a3c47, type: 2}
   normalSpawner: {fileID: 0}
-  infiniteSpawner: {fileID: 667670081}
   scalingLevel: 0
   currentSpawnInterval: 0
   currentSpawnPerInterval: 0
@@ -17835,7 +17913,7 @@ MonoBehaviour:
   currentDamageMultiplier: 0
   currentMaxEnemyCount: 0
   isDungeon: 1
-  dungeonManager: {fileID: 0}
+  dungeonManager: {fileID: 218836109}
 --- !u!4 &8202286758585728858
 Transform:
   m_ObjectHideFlags: 0
@@ -18756,3 +18834,4 @@ SceneRoots:
   - {fileID: 7421121859857493202}
   - {fileID: 3710071783513920083}
   - {fileID: 74866176}
+  - {fileID: 6064954763009100038}

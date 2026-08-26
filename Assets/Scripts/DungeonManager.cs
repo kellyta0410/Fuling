@@ -57,19 +57,26 @@ public class DungeonManager : MonoBehaviour
     [Header("调试")]
     public bool showDebugLogs = true;
 
-    [Header("地板预制体")]
-    public List<GameObject> floorPrefabs = new List<GameObject>(); // 多种地板，每间房随机取一种
-    public GameObject floorPrefab;          // floorPrefabs 为空时用这个
+    [Header("门物体名称（放在带门墙预制体里，自带 BoxCollider；代码据此找到并开关其碰撞体/动画）")]
+    public string doorChildName = "Door";
 
-    [Header("门挡子物体名称（放在带门墙预制体里，代码据此找到并开关）")]
-    public string doorBlockerChildName = "DoorBlocker";
+    [Header("蛇房间（墙 + 地板）")]
+    public GameObject snakeWallPrefab;
+    public GameObject snakeWallWithDoorPrefab;
+    public GameObject snakeFloorPrefab;
 
-    [Header("墙体/门预制体（按房间类型选，无 base 兜底）")]
-    [Tooltip("蛇房 / 商店房 用 lvl1；僵尸房 用 lvl2；混合房 随机 lvl1/lvl2")]
-    public GameObject wallPrefabLvl1;          // 不带门的墙段（lvl1）
-    public GameObject wallWithDoorPrefabLvl1;  // 带门洞的墙（lvl1）
-    public GameObject wallPrefabLvl2;          // 不带门的墙段（lvl2）
-    public GameObject wallWithDoorPrefabLvl2;  // 带门洞的墙（lvl2）
+    [Header("僵尸房间（墙 + 地板）")]
+    public GameObject zombieWallPrefab;
+    public GameObject zombieWallWithDoorPrefab;
+    public GameObject zombieFloorPrefab;
+
+    [Header("混合房间（只用地板；墙随机取蛇房或僵尸房）")]
+    public GameObject mixedFloorPrefab;
+
+    [Header("商店房间（墙 + 地板）")]
+    public GameObject shopWallPrefab;
+    public GameObject shopWallWithDoorPrefab;
+    public GameObject shopFloorPrefab;
 
     // ---------- 运行时状态 ----------
     private int roomIndex = 0;
@@ -231,13 +238,18 @@ public class DungeonManager : MonoBehaviour
         advancing = false;
     }
 
+    GameObject GetFloorPrefab(DungeonRoomType type)
+    {
+        if (type == DungeonRoomType.Snake) return snakeFloorPrefab;
+        if (type == DungeonRoomType.Zombie) return zombieFloorPrefab;
+        if (type == DungeonRoomType.Mixed) return mixedFloorPrefab;
+        if (type == DungeonRoomType.Shop) return shopFloorPrefab;
+        return null;
+    }
+
     void BuildFloor(Transform parent)
     {
-        GameObject floorPrefabToUse = null;
-        if (floorPrefabs != null && floorPrefabs.Count > 0)
-            floorPrefabToUse = floorPrefabs[Random.Range(0, floorPrefabs.Count)]; // 每间房随机一种地板
-        else if (floorPrefab != null)
-            floorPrefabToUse = floorPrefab;
+        GameObject floorPrefabToUse = GetFloorPrefab(currentType);
 
         GameObject floor;
         if (floorPrefabToUse != null)
@@ -281,50 +293,44 @@ public class DungeonManager : MonoBehaviour
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 按房间类型直接选墙/门预制体（蛇/商店=lvl1，僵尸=lvl2，混合=随机）
+        // 按房间类型直接选各自的墙/门预制体
         GameObject wwd = null;
         GameObject w = null;
-        if (currentType == DungeonRoomType.Shop)
+        if (currentType == DungeonRoomType.Snake) { wwd = snakeWallWithDoorPrefab; w = snakeWallPrefab; }
+        else if (currentType == DungeonRoomType.Zombie) { wwd = zombieWallWithDoorPrefab; w = zombieWallPrefab; }
+        else if (currentType == DungeonRoomType.Mixed)
         {
-            wwd = wallWithDoorPrefabLvl1 != null ? wallWithDoorPrefabLvl1 : wallWithDoorPrefabLvl2;
-            w = wallPrefabLvl1 != null ? wallPrefabLvl1 : wallPrefabLvl2;
+            // 混合房墙随机取蛇房或僵尸房的墙（混合房自己只配地板）
+            if (Random.value < 0.5f) { wwd = snakeWallWithDoorPrefab; w = snakeWallPrefab; }
+            else { wwd = zombieWallWithDoorPrefab; w = zombieWallPrefab; }
         }
-        else if (currentType == DungeonRoomType.Snake)
-        {
-            wwd = wallWithDoorPrefabLvl1;
-            w = wallPrefabLvl1;
-        }
-        else if (currentType == DungeonRoomType.Zombie)
-        {
-            wwd = wallWithDoorPrefabLvl2;
-            w = wallPrefabLvl2;
-        }
-        else // Mixed
-        {
-            if (Random.value < 0.5f) { wwd = wallWithDoorPrefabLvl1; w = wallPrefabLvl1; }
-            else { wwd = wallWithDoorPrefabLvl2; w = wallPrefabLvl2; }
-        }
-        // 兜底：选中的等级为空时，退而用另一个等级（不再有 base 墙）
-        if (wwd == null) wwd = wallWithDoorPrefabLvl1 != null ? wallWithDoorPrefabLvl1 : wallWithDoorPrefabLvl2;
-        if (w == null) w = wallPrefabLvl1 != null ? wallPrefabLvl1 : wallPrefabLvl2;
+        else if (currentType == DungeonRoomType.Shop) { wwd = shopWallWithDoorPrefab; w = shopWallPrefab; }
+
+        // 兜底：该类型未配墙时，借用蛇房墙，避免空墙
+        if (wwd == null) wwd = snakeWallWithDoorPrefab;
+        if (w == null) w = snakeWallPrefab;
 
         // 优先：使用“带门墙”预制体
         if (wwd != null)
         {
             GameObject wall = Instantiate(wwd, wallParent.transform);
             wall.name = "WallMesh";
-            Transform blockerT = wall.transform.Find(doorBlockerChildName);
-            GameObject blockerObj = blockerT != null ? blockerT.gameObject : null;
-            if (blockerObj == null)
+            // 用预制体里自带的“门”物体（自带 BoxCollider）来开关；不再单独造 DoorBlocker。
+            // 关门 = 碰撞体开启挡玩家；清场开门 = 关碰撞体 + 播动画，玩家即可穿过。
+            Transform doorT = wall.transform.Find(doorChildName);
+            GameObject doorObj = doorT != null ? doorT.gameObject : null;
+            if (doorObj == null)
             {
-                blockerObj = new GameObject("DoorBlocker");
-                blockerObj.transform.SetParent(wallParent.transform);
-                blockerObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
-                var bcInner = blockerObj.AddComponent<BoxCollider>();
-                bcInner.size = new Vector3(doorWidth, wallHeight, wallThickness);
-                bcInner.isTrigger = false;
+                // 兜底：预制体里没找到门物体时，才补一个方块碰撞体挡住（正常不应走到这）
+                doorObj = new GameObject("DoorColliderFallback");
+                doorObj.transform.SetParent(wallParent.transform);
+                doorObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
+                var bc = doorObj.AddComponent<BoxCollider>();
+                bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                bc.isTrigger = false;
+                if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到名为 " + doorChildName + " 的门物体，已用兜底方块碰撞体");
             }
-            doorBlockers.Add(blockerObj);
+            doorBlockers.Add(doorObj);
             return;
         }
 
@@ -385,7 +391,7 @@ public class DungeonManager : MonoBehaviour
         GameObject b = doorBlockers[dirIndex];
         if (b == null) return;
 
-        var col = b.GetComponent<Collider>();
+        var col = b.GetComponentInChildren<Collider>();
         var anims = b.GetComponentsInChildren<Animator>();
 
         if (block)
@@ -480,7 +486,7 @@ public class DungeonManager : MonoBehaviour
         yield return new WaitForSeconds(openLen + 0.05f);     // 等开门动画播完
 
         if (b == null) { doorAnimCoroutines[dirIndex] = null; yield break; }
-        var col = b.GetComponent<Collider>();
+        var col = b.GetComponentInChildren<Collider>();
         if (col != null) col.enabled = false;                 // 动画结束才放行
         doorAnimCoroutines[dirIndex] = null;
     }
@@ -605,17 +611,28 @@ public class DungeonManager : MonoBehaviour
 
         ComputeScaling(roomIndex, out float speed, out float health, out float damage);
 
-        List<GameObject> prefabs = new List<GameObject>();
-        if (currentType == DungeonRoomType.Snake) prefabs.AddRange(snakeEnemyPrefabs);
-        else if (currentType == DungeonRoomType.Zombie) prefabs.AddRange(zombieEnemyPrefabs);
-        else { prefabs.AddRange(snakeEnemyPrefabs); prefabs.AddRange(zombieEnemyPrefabs); }
+        // 每种房间固定池：蛇房全蛇、僵尸房全僵尸、混合房各一半（总数 = cap）
+        int snakeCount = 0, zombieCount = 0;
+        if (currentType == DungeonRoomType.Snake) snakeCount = cap;
+        else if (currentType == DungeonRoomType.Zombie) zombieCount = cap;
+        else { snakeCount = Mathf.FloorToInt(cap / 2); zombieCount = cap - snakeCount; }
 
-        if (prefabs.Count == 0)
+        // 某类池为空时，把它的份额并入另一侧
+        if (snakeEnemyPrefabs == null || snakeEnemyPrefabs.Count == 0) { zombieCount += snakeCount; snakeCount = 0; }
+        if (zombieEnemyPrefabs == null || zombieEnemyPrefabs.Count == 0) { snakeCount += zombieCount; zombieCount = 0; }
+
+        if (snakeCount == 0 && zombieCount == 0)
         {
             Debug.LogWarning("[Dungeon] 没有可用敌人预制体！");
             spawningDone = true;
             yield break;
         }
+
+        // 生成顺序列表（混合房洗牌交错，避免一侧先刷完）
+        List<GameObject> order = new List<GameObject>(cap);
+        for (int i = 0; i < snakeCount; i++) order.Add(snakeEnemyPrefabs[Random.Range(0, snakeEnemyPrefabs.Count)]);
+        for (int i = 0; i < zombieCount; i++) order.Add(zombieEnemyPrefabs[Random.Range(0, zombieEnemyPrefabs.Count)]);
+        if (currentType == DungeonRoomType.Mixed) Shuffle(order);
 
         float half = roomSize * 0.5f;
         float inset = Mathf.Max(1f, half - 1f);
@@ -628,13 +645,14 @@ public class DungeonManager : MonoBehaviour
             center + new Vector3(-inset, 0, -inset),
         };
 
-        while (spawnedCount < cap)
+        int idx = 0;
+        while (idx < order.Count)
         {
             yield return new WaitForSeconds(spawnInterval);
             if (playerTarget == null) break;
 
-            GameObject prefab = prefabs[Random.Range(0, prefabs.Count)];
-            if (prefab == null) continue;
+            GameObject prefab = order[idx];
+            if (prefab == null) { idx++; continue; }
 
             Vector3 corner = corners[Random.Range(0, 4)] + new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f));
             NavMeshHit hit;
@@ -652,10 +670,22 @@ public class DungeonManager : MonoBehaviour
 
             aliveEnemies.Add(enemy);
             spawnedCount++;
+            idx++;
         }
 
         spawningDone = true;
         if (showDebugLogs) Debug.Log("[Dungeon] 房间敌人生成完毕，共 " + spawnedCount + " 只");
+    }
+
+    void Shuffle<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            T tmp = list[i];
+            list[i] = list[j];
+            list[j] = tmp;
+        }
     }
 
 

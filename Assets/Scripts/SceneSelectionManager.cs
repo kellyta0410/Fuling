@@ -470,6 +470,10 @@ public class SceneSelectionManager : MonoBehaviour
             return;
         }
 
+        // 跨场景记录选中的难度（GameManager 非持久单例，切场景会丢，用静态 holder 携带到地牢场景）
+        SelectedDifficultyHolder.Current = difficulty;
+        if (GameManager.Instance != null) GameManager.Instance.currentDifficulty = difficulty;
+
         if (gameDataManager == null)
         {
             Debug.LogError("GameDataManager 不存在！");

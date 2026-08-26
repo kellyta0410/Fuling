@@ -63,6 +63,11 @@ public class GameManager : MonoBehaviour
         if (dungeonManager != null && !isDungeon)
             dungeonManager.gameObject.SetActive(false);
 
+        // 菜单选中的难度通过 SelectedDifficultyHolder 跨场景带到本场景
+        // （GameManager 非持久单例，切场景后当前场景的 GameManager 是新的，currentDifficulty 需重新取）
+        if (currentDifficulty == null)
+            currentDifficulty = SelectedDifficultyHolder.Current;
+
         // 根据模式启用对应的生成器
         if (currentDifficulty != null)
         {
