@@ -48,6 +48,15 @@ public class DungeonManager : MonoBehaviour
     public List<GameObject> zombieDecorations = new List<GameObject>();
     public List<GameObject> neutralDecorations = new List<GameObject>();
 
+    [Header("墙壁装饰（按敌人类型分类；随机上某面墙，正面朝向房间内；商店房不放）")]
+    public int wallDecorationMin = 1;
+    public int wallDecorationMax = 3;
+    public float wallDecorationHeight = 2f;     // 离地高度
+    public float wallDecorationInset = 0.25f;   // 距墙面往房内退一点，避免嵌进墙里
+    public List<GameObject> snakeWallDecorations = new List<GameObject>();
+    public List<GameObject> zombieWallDecorations = new List<GameObject>();
+    public List<GameObject> neutralWallDecorations = new List<GameObject>();
+
     [Header("商店 Buff（拖入 BuffDataSO 资产；留空自动在 Resources 找）")]
     public List<BuffDataSO> shopBuffs = new List<BuffDataSO>();
 
@@ -57,8 +66,7 @@ public class DungeonManager : MonoBehaviour
     [Header("调试")]
     public bool showDebugLogs = true;
 
-    [Header("门物体名称（放在带门墙预制体里，自带 BoxCollider；代码据此找到并开关其碰撞体/动画）")]
-    public string doorChildName = "Door";
+    [Header("门识别：在带门墙预制体的门子物体上挂 DoorMarker 组件即可（运行时自动查找）")]
 
     [Header("蛇房间（墙 + 地板）")]
     public GameObject snakeWallPrefab;
@@ -196,6 +204,7 @@ public class DungeonManager : MonoBehaviour
         BuildFloor(roomRoot.transform);
         BuildWalls(roomRoot.transform);
         PlaceDecorations(roomRoot.transform);
+        PlaceWallDecorations(roomRoot.transform);
 
         yield return null;
         BuildNavMesh();
@@ -257,7 +266,7 @@ public class DungeonManager : MonoBehaviour
             floor = Instantiate(floorPrefabToUse, parent);
             floor.name = "Floor";
             floor.transform.localPosition = Vector3.zero;
-            floor.transform.localRotation = Quaternion.identity;
+            // 不强制改旋转，保留预制体自身的朝向（你说 floor prefab 方向已正确）
         }
         else
         {
@@ -315,20 +324,20 @@ public class DungeonManager : MonoBehaviour
         {
             GameObject wall = Instantiate(wwd, wallParent.transform);
             wall.name = "WallMesh";
-            // 用预制体里自带的“门”物体（自带 BoxCollider）来开关；不再单独造 DoorBlocker。
-            // 关门 = 碰撞体开启挡玩家；清场开门 = 关碰撞体 + 播动画，玩家即可穿过。
-            Transform doorT = wall.transform.Find(doorChildName);
-            GameObject doorObj = doorT != null ? doorT.gameObject : null;
+            // 用预制体里自带的“门”物体（带 DoorMarker 组件、自带 BoxCollider）来开关；不再单独造 DoorBlocker。
+            // 关门 = 碰撞体在门洞处挡玩家；清场开门 = 播动画把门移开门洞，碰撞体随之离开，玩家即可穿过。
+            DoorMarker dm = wall.GetComponentInChildren<DoorMarker>();
+            GameObject doorObj = dm != null ? dm.gameObject : null;
             if (doorObj == null)
             {
-                // 兜底：预制体里没找到门物体时，才补一个方块碰撞体挡住（正常不应走到这）
+                // 兜底：预制体里没挂 DoorMarker 时，才补一个方块碰撞体挡住（正常不应走到这）
                 doorObj = new GameObject("DoorColliderFallback");
                 doorObj.transform.SetParent(wallParent.transform);
                 doorObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
-                var bc = doorObj.AddComponent<BoxCollider>();
-                bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
-                bc.isTrigger = false;
-                if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到名为 " + doorChildName + " 的门物体，已用兜底方块碰撞体");
+                var bcFallback = doorObj.AddComponent<BoxCollider>();
+                bcFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                bcFallback.isTrigger = false;
+                if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到 DoorMarker，已用兜底方块碰撞体（请在门的子物体上挂 DoorMarker）");
             }
             doorBlockers.Add(doorObj);
             return;
@@ -383,113 +392,42 @@ public class DungeonManager : MonoBehaviour
         doorBlockers.Add(blocker);
     }
 
-    private Coroutine[] doorAnimCoroutines = new Coroutine[4];
-
     void SetDoorBlocker(int dirIndex, bool block)
     {
         if (dirIndex < 0 || dirIndex >= doorBlockers.Count) return;
         GameObject b = doorBlockers[dirIndex];
         if (b == null) return;
 
-        var col = b.GetComponentInChildren<Collider>();
+        // 优先用开门/关门动画：门在开启时会被动画移开门洞，其 BoxCollider 随之离开门洞，
+        // 因此无需手动开关碰撞体（关门=碰撞体在门洞处挡人；开门=碰撞体已不在门洞处）。
         var anims = b.GetComponentsInChildren<Animator>();
-
-        if (block)
-        {
-            // 关门 / 保持关闭：立即启用碰撞体，并停止可能还在播放的开门协程。
-            // 不需要关门动画 —— 直接回到闭合姿态（默认状态无 clip 即瞬切）。
-            StopDoorAnim(dirIndex);
-            if (col != null) col.enabled = true;
-
-            bool matched = false;
-            if (anims != null)
-            {
-                foreach (var anim in anims)
-                {
-                    foreach (var p in anim.parameters)
-                    {
-                        if (p.name != doorOpenAnimParam) continue;
-                        matched = true;
-                        if (p.type == AnimatorControllerParameterType.Bool)
-                            anim.SetBool(doorOpenAnimParam, false);   // 回到关闭姿态（无关门动画）
-                        break;
-                    }
-                }
-            }
-            if (!matched) b.SetActive(true);   // 兜底（无动画方块）：保持显示 + 阻挡
-        }
-        else
-        {
-            // 开门：门还在往内转时先保持碰撞体开启（挡住玩家），
-            // 等动画播完再关碰撞体放行，避免“门没开完人就穿过去”。
-            if (col != null) col.enabled = true;
-
-            bool matched = false;
-            if (anims != null)
-            {
-                foreach (var anim in anims)
-                {
-                    foreach (var p in anim.parameters)
-                    {
-                        if (p.name != doorOpenAnimParam) continue;
-                        matched = true;
-                        if (p.type == AnimatorControllerParameterType.Bool)
-                            anim.SetBool(doorOpenAnimParam, true);
-                        else if (p.type == AnimatorControllerParameterType.Trigger)
-                            anim.SetTrigger(doorOpenAnimParam);
-                        break;
-                    }
-                }
-            }
-
-            if (matched)
-            {
-                StopDoorAnim(dirIndex);
-                doorAnimCoroutines[dirIndex] = StartCoroutine(WaitDoorOpenThenDisable(dirIndex, b));
-            }
-            else
-            {
-                // 无动画兜底：直接放行
-                if (col != null) col.enabled = false;
-                b.SetActive(false);
-            }
-        }
-    }
-
-    void StopDoorAnim(int dirIndex)
-    {
-        if (dirIndex >= 0 && dirIndex < doorAnimCoroutines.Length && doorAnimCoroutines[dirIndex] != null)
-        {
-            StopCoroutine(doorAnimCoroutines[dirIndex]);
-            doorAnimCoroutines[dirIndex] = null;
-        }
-    }
-
-    IEnumerator WaitDoorOpenThenDisable(int dirIndex, GameObject b)
-    {
-        yield return null;                                   // 等一帧，让状态机切到 Open 状态
-        if (b == null) { doorAnimCoroutines[dirIndex] = null; yield break; }
-
-        var anims = b.GetComponentsInChildren<Animator>();
-        float openLen = 0f;
+        bool hasAnim = false;
         if (anims != null)
         {
             foreach (var anim in anims)
             {
-                // 取 Open 状态（过渡目标）的 clip 时长，双开门取较长的一个
-                var next = anim.GetNextAnimatorStateInfo(0);
-                float len = next.length > 0f ? next.length : anim.GetCurrentAnimatorStateInfo(0).length;
-                if (len > openLen) openLen = len;
+                foreach (var p in anim.parameters)
+                {
+                    if (p.name != doorOpenAnimParam) continue;
+                    hasAnim = true;
+                    if (p.type == AnimatorControllerParameterType.Bool)
+                        anim.SetBool(doorOpenAnimParam, !block);          // block=true 关门, false 开门
+                    else if (p.type == AnimatorControllerParameterType.Trigger && !block)
+                        anim.SetTrigger(doorOpenAnimParam);               // 触发器只在开门时触发
+                    break;
+                }
             }
         }
-        if (openLen <= 0f) openLen = 0.5f;                   // 兜底时长
-        yield return new WaitForSeconds(openLen + 0.05f);     // 等开门动画播完
 
-        if (b == null) { doorAnimCoroutines[dirIndex] = null; yield break; }
-        var col = b.GetComponentInChildren<Collider>();
-        if (col != null) col.enabled = false;                 // 动画结束才放行
-        doorAnimCoroutines[dirIndex] = null;
+        // 无动画的兜底方块：只能用碰撞体的启用/停用来实现挡人 / 放行
+        if (!hasAnim)
+        {
+            var col = b.GetComponentInChildren<Collider>();
+            if (col != null) col.enabled = block;
+        }
     }
+
+
 
     // ============================================================
     //  装饰随机摆放（呼应敌人类型）
@@ -505,7 +443,8 @@ public class DungeonManager : MonoBehaviour
 
         int placed = 0;
         int tries = 0;
-        while (placed < count && tries < count * 8)
+        int maxTries = count * 40;   // 提高重试上限，保底能摆到 decorationMin 个
+        while (placed < count && tries < maxTries)
         {
             tries++;
             GameObject prefab = pool[Random.Range(0, pool.Count)];
@@ -514,7 +453,8 @@ public class DungeonManager : MonoBehaviour
             float x = Random.Range(-limit, limit);
             float z = Random.Range(-limit, limit);
             Vector3 pos = new Vector3(x, 0, z);
-            if (pos.magnitude < decorationClearRadius) continue;
+            // 前 70% 重试严格避让中心；后期放宽，确保数量达标
+            if (pos.magnitude < decorationClearRadius && tries < maxTries * 0.7f) continue;
 
             bool nearDoor = false;
             for (int d = 0; d < 4; d++)
@@ -523,7 +463,7 @@ public class DungeonManager : MonoBehaviour
                 if (Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(doorLocal.x, 0, doorLocal.z)) < doorWidth * 0.6f)
                 { nearDoor = true; break; }
             }
-            if (nearDoor) continue;
+            if (nearDoor && tries < maxTries * 0.7f) continue;
 
             GameObject deco = Instantiate(prefab, parent);
             deco.transform.localPosition = pos;
@@ -565,6 +505,72 @@ public class DungeonManager : MonoBehaviour
             pool.AddRange(neutralDecorations);
         }
         return pool;
+    }
+
+    List<GameObject> GetWallDecorationPool(DungeonRoomType type)
+    {
+        List<GameObject> pool = new List<GameObject>();
+        if (type == DungeonRoomType.Shop) return pool; // 商店房不放墙壁装饰
+
+        if (type == DungeonRoomType.Snake)
+        {
+            pool.AddRange(snakeWallDecorations);
+            pool.AddRange(neutralWallDecorations);
+        }
+        else if (type == DungeonRoomType.Zombie)
+        {
+            pool.AddRange(zombieWallDecorations);
+            pool.AddRange(neutralWallDecorations);
+        }
+        else if (type == DungeonRoomType.Mixed)
+        {
+            pool.AddRange(snakeWallDecorations);
+            pool.AddRange(zombieWallDecorations);
+            pool.AddRange(neutralWallDecorations);
+        }
+        else
+        {
+            pool.AddRange(neutralWallDecorations);
+        }
+        return pool;
+    }
+
+    void PlaceWallDecorations(Transform parent)
+    {
+        List<GameObject> pool = GetWallDecorationPool(currentType);
+        if (pool.Count == 0) return;
+
+        int count = Random.Range(wallDecorationMin, wallDecorationMax + 1);
+        float half = roomSize * 0.5f;
+        float limit = half - wallThickness - 0.2f;
+        float off = half - wallThickness - wallDecorationInset; // 距房间中心到墙面的内退位置
+
+        int placed = 0, tries = 0;
+        int maxTries = count * 40;
+        while (placed < count && tries < maxTries)
+        {
+            tries++;
+            GameObject prefab = pool[Random.Range(0, pool.Count)];
+            if (prefab == null) continue;
+
+            int d = Random.Range(0, 4);                 // 随机一面墙
+            float along = Random.Range(-limit, limit); // 沿墙随机位置
+            Vector3 pos;
+            if (d == 0)      pos = new Vector3(along, wallDecorationHeight, off);
+            else if (d == 1) pos = new Vector3(off, wallDecorationHeight, along);
+            else if (d == 2) pos = new Vector3(along, wallDecorationHeight, -off);
+            else             pos = new Vector3(-off, wallDecorationHeight, along);
+
+            // 确定方向：物体正面(+Z)朝向房间内（即 -DirVec[d]），保证上墙后不朝墙
+            Quaternion rot = Quaternion.LookRotation(-DirVec[d]);
+
+            GameObject deco = Instantiate(prefab, parent);
+            deco.transform.localPosition = pos;
+            deco.transform.localRotation = rot;
+            if (deco.GetComponent<Collider>() == null) deco.AddComponent<BoxCollider>();
+            placed++;
+        }
+        if (showDebugLogs) Debug.Log("[Dungeon] 摆放墙壁装饰 " + placed + " 个");
     }
 
     void BuildNavMesh()
