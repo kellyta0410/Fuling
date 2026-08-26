@@ -492,11 +492,7 @@ public class UIManager : MonoBehaviour
         int kills = player != null ? player.GetKills() : 0;
 
         string timeText = "";
-        if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
-        {
-            timeText = $"\n房间: 第{ToChineseNumber(GameManager.Instance.GetDungeonRoom())}关";
-        }
-        else if (isTimerMode)
+        if (isTimerMode)
         {
             int min = Mathf.FloorToInt(elapsedTime / 60);
             int sec = Mathf.FloorToInt(elapsedTime % 60);

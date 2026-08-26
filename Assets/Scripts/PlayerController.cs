@@ -35,7 +35,8 @@ public class PlayerController : MonoBehaviour
     [Tooltip("普通攻击判定方位角(度)：只有玩家正前方 ±该角度 内的敌人才会收到伤害，背后/侧面打不到；技能不受此限制(全方位)")]
     public float attackFacingAngle = 150f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
-    public float skillDamageDelay = 0.5f;
+    public float skillDamageDelay = 0.5f;        // 兜底：找不到“Skill Attack”动画时长时使用
+    public float skillHitFraction = 0.5f;          // 伤害落在“Skill Attack”动画归一化时间的位置（0~1），跟动画对齐用
     [Header("攻击音效（Clip 放这里，音量读 SettingsManager）")]
     [Tooltip("普通攻击音效，每次攻击随机取一个播放")]
     public AudioClip attackSFX;
@@ -279,7 +280,14 @@ public class PlayerController : MonoBehaviour
 #else
         if (joystickBg != null) joystickBg.gameObject.SetActive(false);
         if (actionButton != null) actionButton.gameObject.SetActive(false);
-        if (skillButton != null) skillButton.gameObject.SetActive(false);
+        // 桌面端也保留可点击的技能按钮（同时仍支持 Q / 空格 触发）
+        if (skillButton == null) skillButton = CreateSkillButton();
+        if (skillButton != null)
+        {
+            skillButton.gameObject.SetActive(true);
+            skillButton.onClick.RemoveAllListeners();
+            skillButton.onClick.AddListener(PerformSkillAttack);
+        }
         if (dodgeButton != null) dodgeButton.gameObject.SetActive(false);
         isJoystickEnabled = false;
 #endif
@@ -827,6 +835,13 @@ public class PlayerController : MonoBehaviour
     {
         if (!canUseSkill || isDead || isDying) return;
 
+        // 技能播放中再点：排队，等当前技能播完再放，避免“点击太快”导致技能动画被打断/重播
+        if (isUsingSkill)
+        {
+            queuedSkill = true;
+            return;
+        }
+
         // 攻击动画没播完：技能排队，等当前攻击播完再自动放（Update 里触发），不打断攻击
         if (isAttacking)
         {
@@ -848,19 +863,40 @@ public class PlayerController : MonoBehaviour
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
         // 在技能起手瞬间、以当时玩家位置为球心锁定范围内的敌人，
-        // 避免 0.5s 延迟期间玩家移动 / 敌人被击退导致"有时只打到部分"。
-        StartCoroutine(DelayedSkillDamage(finalDamage, Physics.OverlapSphere(transform.position, skillRange)));
+        // 避免延迟期间玩家移动 / 敌人被击退导致"有时只打到部分"。
+        // 伤害延迟自动跟随“Skill Attack”动画时长（skillHitFraction 控制落在动画的哪一帧），不再与动画“对不上”。
+        float hitDelay = GetSkillHitDelay();
+        StartCoroutine(DelayedSkillDamage(finalDamage, Physics.OverlapSphere(transform.position, skillRange), hitDelay));
     }
 
-    IEnumerator DelayedSkillDamage(int damage, Collider[] hitColliders)
+    // 读取“Skill Attack”动画片段时长，按 skillHitFraction 算出伤害应延迟的秒数；拿不到片段则用 skillDamageDelay 兜底
+    float GetSkillHitDelay()
     {
-        yield return new WaitForSeconds(skillDamageDelay);
+        if (animator == null) return skillDamageDelay;
+        float len = 0f;
+        var clips = animator.GetNextAnimatorClipInfo(0);
+        if (clips.Length == 0) clips = animator.GetCurrentAnimatorClipInfo(0);
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i].clip != null && clips[i].clip.name.ToLower().Contains("skill"))
+            {
+                len = clips[i].clip.length;
+                break;
+            }
+        }
+        if (len <= 0.01f) return skillDamageDelay;
+        return len * Mathf.Clamp01(skillHitFraction);
+    }
+
+    IEnumerator DelayedSkillDamage(int damage, Collider[] hitColliders, float delay)
+    {
+        yield return new WaitForSeconds(delay);
 
         // 命中所捕获（技能起手瞬间、以当时位置为球心）半径内的所有敌人，
         // 实现稳定的 360° 范围技：不再因延迟期间的移动/击退而漏掉部分敌人。
         foreach (Collider hit in hitColliders)
         {
-            EnemyAI enemy = hit.GetComponent<EnemyAI>();
+            EnemyAI enemy = hit.GetComponentInParent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
                 enemy.TakeDamageImmediate(damage);

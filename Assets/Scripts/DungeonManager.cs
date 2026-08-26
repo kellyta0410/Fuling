@@ -779,6 +779,14 @@ public class DungeonManager : MonoBehaviour
         }
     }
 
+    // 敌人生成间隔随房间数递减：前 4 间 3s，5~9 间 2.5s，10 间起 2s
+    float GetSpawnInterval()
+    {
+        if (roomIndex >= 10) return 2f;
+        if (roomIndex >= 5) return 2.5f;
+        return 3f;
+    }
+
     void SpawnEnemiesForRoom()
     {
         StartCoroutine(SpawnRoomEnemies());
@@ -822,7 +830,7 @@ public class DungeonManager : MonoBehaviour
         int idx = 0;
         while (idx < order.Count)
         {
-            yield return new WaitForSeconds(spawnInterval);
+            yield return new WaitForSeconds(GetSpawnInterval());
             if (playerTarget == null) break;
 
             GameObject prefab = order[idx];
