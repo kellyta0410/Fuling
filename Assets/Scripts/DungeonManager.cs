@@ -27,6 +27,9 @@ public class DungeonManager : MonoBehaviour
     public float wallThickness = 1f;
     public float doorWidth = 3f;
 
+    [Header("门动画参数名（需与门 Animator 的 Bool/Trigger 参数一致）")]
+    [SerializeField] private string doorOpenAnimParam = "DoorOpen";
+
     [Header("敌人生成")]
     public float spawnInterval = 1f;    // 每隔多少秒生成一只（每秒一只）
 
