@@ -23,6 +23,8 @@ public class DungeonManager : MonoBehaviour
 {
     [Header("房间尺寸")]
     public float roomSize = 10f;
+    [Tooltip("勾选：roomSize 自动取地板预制体的实测尺寸，无需手填；取消勾选则用上面的 roomSize 值")]
+    public bool autoRoomSizeFromFloor = true;
     public float wallHeight = 4f;
     public float wallThickness = 1f;
     public float doorWidth = 3f;
@@ -48,14 +50,16 @@ public class DungeonManager : MonoBehaviour
     public List<GameObject> zombieDecorations = new List<GameObject>();
     public List<GameObject> neutralDecorations = new List<GameObject>();
 
-    [Header("墙壁装饰（按敌人类型分类；随机上某面墙，正面朝向房间内；商店房不放）")]
-    public int wallDecorationMin = 1;
-    public int wallDecorationMax = 3;
+    [Header("墙壁装饰（所有战斗房通用；随机上某面墙，正面朝向房间内；商店房不放）")]
+    public int wallDecorationMin = 3;
+    public int wallDecorationMax = 5;
     public float wallDecorationHeight = 2f;     // 离地高度
     public float wallDecorationInset = 0.25f;   // 距墙面往房内退一点，避免嵌进墙里
-    public List<GameObject> snakeWallDecorations = new List<GameObject>();
-    public List<GameObject> zombieWallDecorations = new List<GameObject>();
-    public List<GameObject> neutralWallDecorations = new List<GameObject>();
+    public List<GameObject> wallDecorations = new List<GameObject>();
+
+    [Header("房间中央顶灯（每间房生成一个，拖入你的 Point Light 预制体；Mode 设 Realtime）")]
+    public GameObject roomLightPrefab;
+    public float roomLightHeightOffset = 1f;   // 在 wallHeight 之上再抬一点
 
     [Header("商店 Buff（拖入 BuffDataSO 资产；留空自动在 Resources 找）")]
     public List<BuffDataSO> shopBuffs = new List<BuffDataSO>();
@@ -205,6 +209,7 @@ public class DungeonManager : MonoBehaviour
         BuildWalls(roomRoot.transform);
         PlaceDecorations(roomRoot.transform);
         PlaceWallDecorations(roomRoot.transform);
+        PlaceRoomLight(roomRoot.transform);
 
         yield return null;
         BuildNavMesh();
@@ -267,6 +272,13 @@ public class DungeonManager : MonoBehaviour
             floor.name = "Floor";
             floor.transform.localPosition = Vector3.zero;
             // 不强制改旋转，保留预制体自身的朝向（你说 floor prefab 方向已正确）
+
+            // 勾选时：用地板预制体实测尺寸推导 roomSize，墙面/门据此摆放，无需手填 roomSize
+            if (autoRoomSizeFromFloor)
+            {
+                var rend = floor.GetComponent<Renderer>();
+                if (rend != null) roomSize = Mathf.Max(rend.bounds.size.x, rend.bounds.size.z);
+            }
         }
         else
         {
@@ -511,27 +523,7 @@ public class DungeonManager : MonoBehaviour
     {
         List<GameObject> pool = new List<GameObject>();
         if (type == DungeonRoomType.Shop) return pool; // 商店房不放墙壁装饰
-
-        if (type == DungeonRoomType.Snake)
-        {
-            pool.AddRange(snakeWallDecorations);
-            pool.AddRange(neutralWallDecorations);
-        }
-        else if (type == DungeonRoomType.Zombie)
-        {
-            pool.AddRange(zombieWallDecorations);
-            pool.AddRange(neutralWallDecorations);
-        }
-        else if (type == DungeonRoomType.Mixed)
-        {
-            pool.AddRange(snakeWallDecorations);
-            pool.AddRange(zombieWallDecorations);
-            pool.AddRange(neutralWallDecorations);
-        }
-        else
-        {
-            pool.AddRange(neutralWallDecorations);
-        }
+        pool.AddRange(wallDecorations);                // 所有战斗房通用同一批墙壁装饰
         return pool;
     }
 
@@ -571,6 +563,15 @@ public class DungeonManager : MonoBehaviour
             placed++;
         }
         if (showDebugLogs) Debug.Log("[Dungeon] 摆放墙壁装饰 " + placed + " 个");
+    }
+
+    void PlaceRoomLight(Transform parent)
+    {
+        if (roomLightPrefab == null) return;
+        GameObject lightObj = Instantiate(roomLightPrefab, parent);
+        lightObj.name = "RoomLight";
+        // 房间正中、略高于墙顶，向下照亮全房；随 roomRoot 销毁而一起销毁
+        lightObj.transform.localPosition = new Vector3(0, wallHeight + roomLightHeightOffset, 0);
     }
 
     void BuildNavMesh()
