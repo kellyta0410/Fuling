@@ -73,12 +73,10 @@ public class DungeonManager : MonoBehaviour
     [Header("门识别：在带门墙预制体的门子物体上挂 DoorMarker 组件即可（运行时自动查找）")]
 
     [Header("蛇房间（墙 + 地板）")]
-    public GameObject snakeWallPrefab;
     public GameObject snakeWallWithDoorPrefab;
     public GameObject snakeFloorPrefab;
 
     [Header("僵尸房间（墙 + 地板）")]
-    public GameObject zombieWallPrefab;
     public GameObject zombieWallWithDoorPrefab;
     public GameObject zombieFloorPrefab;
 
@@ -86,7 +84,6 @@ public class DungeonManager : MonoBehaviour
     public GameObject mixedFloorPrefab;
 
     [Header("商店房间（墙 + 地板）")]
-    public GameObject shopWallPrefab;
     public GameObject shopWallWithDoorPrefab;
     public GameObject shopFloorPrefab;
 
@@ -276,8 +273,27 @@ public class DungeonManager : MonoBehaviour
             // 勾选时：用地板预制体实测尺寸推导 roomSize，墙面/门据此摆放，无需手填 roomSize
             if (autoRoomSizeFromFloor)
             {
-                var rend = floor.GetComponent<Renderer>();
-                if (rend != null) roomSize = Mathf.Max(rend.bounds.size.x, rend.bounds.size.z);
+                var rends = floor.GetComponentsInChildren<Renderer>();
+                if (rends.Length > 0)
+                {
+                    Bounds fb = rends[0].bounds;
+                    for (int i = 1; i < rends.Length; i++) fb.Encapsulate(rends[i].bounds);
+                    roomSize = Mathf.Max(fb.size.x, fb.size.z);
+                }
+            }
+            // 把地板几何 x/z 居中，并让“顶面”落在房间地面高度(parent.position.y)，
+            // 否则带厚度的地板会把墙/玩家/敌人埋进 slab 里（直接进到地板）
+            {
+                var rends = floor.GetComponentsInChildren<Renderer>();
+                if (rends.Length > 0)
+                {
+                    Bounds fb = rends[0].bounds;
+                    for (int i = 1; i < rends.Length; i++) fb.Encapsulate(rends[i].bounds);
+                    floor.transform.localPosition = new Vector3(
+                        parent.position.x - fb.center.x,
+                        parent.position.y - fb.center.y - fb.size.y * 0.5f,
+                        parent.position.z - fb.center.z);
+                }
             }
         }
         else
@@ -306,39 +322,130 @@ public class DungeonManager : MonoBehaviour
 
     void BuildWallWithDoor(Transform parent, Vector3 localPos, Quaternion localRot, int dirIndex)
     {
-        float segLen = (roomSize - doorWidth) * 0.5f;
-        float segCenter = doorWidth * 0.5f + segLen * 0.5f;
-
         GameObject wallParent = new GameObject("Wall_" + dirIndex);
         wallParent.transform.SetParent(parent);
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 按房间类型直接选各自的墙/门预制体
+        // 按房间类型直接选各自的带门墙预制体（墙/门几何全部来自预制体）
         GameObject wwd = null;
-        GameObject w = null;
-        if (currentType == DungeonRoomType.Snake) { wwd = snakeWallWithDoorPrefab; w = snakeWallPrefab; }
-        else if (currentType == DungeonRoomType.Zombie) { wwd = zombieWallWithDoorPrefab; w = zombieWallPrefab; }
+        if (currentType == DungeonRoomType.Snake) wwd = snakeWallWithDoorPrefab;
+        else if (currentType == DungeonRoomType.Zombie) wwd = zombieWallWithDoorPrefab;
         else if (currentType == DungeonRoomType.Mixed)
         {
-            // 混合房墙随机取蛇房或僵尸房的墙（混合房自己只配地板）
-            if (Random.value < 0.5f) { wwd = snakeWallWithDoorPrefab; w = snakeWallPrefab; }
-            else { wwd = zombieWallWithDoorPrefab; w = zombieWallPrefab; }
+            // 混合房墙随机取蛇房或僵尸房的带门墙（混合房自己只配地板）
+            wwd = (Random.value < 0.5f) ? snakeWallWithDoorPrefab : zombieWallWithDoorPrefab;
         }
-        else if (currentType == DungeonRoomType.Shop) { wwd = shopWallWithDoorPrefab; w = shopWallPrefab; }
+        else if (currentType == DungeonRoomType.Shop) wwd = shopWallWithDoorPrefab;
 
-        // 兜底：该类型未配墙时，借用蛇房墙，避免空墙
+        // 兜底：该类型未配带门墙时，借用蛇房墙，避免空墙
         if (wwd == null) wwd = snakeWallWithDoorPrefab;
-        if (w == null) w = snakeWallPrefab;
 
         // 优先：使用“带门墙”预制体
         if (wwd != null)
         {
             GameObject wall = Instantiate(wwd, wallParent.transform);
             wall.name = "WallMesh";
+            // 自动量墙高/墙厚：取带门墙预制体整体渲染包围盒（墙只绕 Y 旋转，Y 不受影响；
+            // 墙宽沿墙长方向取 X/Z 较大者，墙厚取较小者），让顶灯高度、装饰内退都跟随预制体。
+            Renderer[] wrs = wall.GetComponentsInChildren<Renderer>();
+            float wallWidth = 0f;
+            if (wrs.Length > 0)
+            {
+                Bounds rb = wrs[0].bounds;
+                for (int i = 1; i < wrs.Length; i++) rb.Encapsulate(wrs[i].bounds);
+                if (rb.size.y > 0.1f) wallHeight = rb.size.y;
+                float wt = Mathf.Min(rb.size.x, rb.size.z);
+                if (wt > 0.01f) wallThickness = wt;
+                wallWidth = Mathf.Max(rb.size.x, rb.size.z);
+            }
+            // 墙体/门若缺 NavMeshObstacle 则按各自网格自动补（防止敌人穿墙/穿门寻路）
+            bool addedObs = false;
+            foreach (var r in wall.GetComponentsInChildren<Renderer>())
+            {
+                if (r.GetComponent<NavMeshObstacle>() != null) continue;
+                var obs = r.gameObject.AddComponent<NavMeshObstacle>();
+                obs.carving = true;
+                var mf = r.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null)
+                {
+                    obs.size = mf.sharedMesh.bounds.size;
+                    obs.center = mf.sharedMesh.bounds.center;
+                }
+                else
+                {
+                    obs.size = r.bounds.size;
+                    obs.center = r.transform.InverseTransformPoint(r.bounds.center);
+                }
+                addedObs = true;
+            }
+            if (addedObs && showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体部分网格缺少 NavMeshObstacle，已按网格自动补（建议预制体里给墙/门加 NavMeshObstacle）");
             // 用预制体里自带的“门”物体（带 DoorMarker 组件、自带 BoxCollider）来开关；不再单独造 DoorBlocker。
             // 关门 = 碰撞体在门洞处挡玩家；清场开门 = 播动画把门移开门洞，碰撞体随之离开，玩家即可穿过。
             DoorMarker dm = wall.GetComponentInChildren<DoorMarker>();
+            // 自动量门洞宽度：门叶碰撞体在关门姿态下的包围盒跨度 ≈ 门洞宽，
+            // 这样每间房的 doorWidth 跟着各自带门墙预制体走，无需手填（仅作兜底/装饰避让用）。
+            if (dm != null)
+            {
+                var dcols = dm.GetComponentsInChildren<Collider>();
+                if (dcols.Length > 0)
+                {
+                    Bounds db = dcols[0].bounds;
+                    for (int i = 1; i < dcols.Length; i++) db.Encapsulate(dcols[i].bounds);
+                    float measured = Mathf.Max(db.size.x, db.size.z); // 墙旋转0/90/180/270，取世界X或Z较大者
+                    if (measured > 0.1f) doorWidth = measured;
+                }
+                // 门碰撞体必须是实心才能挡玩家：若全是 Trigger 自动改为实心；若一个都没有则补一个实心方块
+                bool hasSolid = false;
+                foreach (var c in dcols) if (!c.isTrigger) { hasSolid = true; break; }
+                if (dcols.Length == 0)
+                {
+                    var bc = dm.gameObject.AddComponent<BoxCollider>();
+                    bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                    bc.isTrigger = false;
+                    if (showDebugLogs) Debug.LogWarning("[Dungeon] 门未挂任何碰撞体，已自动补实心 BoxCollider（建议在门预制体上直接加）");
+                }
+                else if (!hasSolid)
+                {
+                    foreach (var c in dcols) c.isTrigger = false;
+                    if (showDebugLogs) Debug.LogWarning("[Dungeon] 门的碰撞体是 Trigger，已自动改为实心(Is Trigger=false)以挡玩家；若需要触发检测请另加碰撞体");
+                }
+            }
+
+            // 让墙严格对齐地板边缘：
+            // 1) 统一缩放使墙“长度”= roomSize（轴无关，无论墙长沿本地 X 还是 Z 都能对齐，避免墙角对不上）；
+            //    同时同步 wallHeight/wallThickness/doorWidth，保证灯光高度、装饰内退、门洞一致。
+            // 2) 把墙几何中心重新对齐到边线中点（纠正预制体 pivot 不在几何中心导致的偏移）。
+            // 若预制体长度与中心已正确，s≈1 且偏移≈0，无副作用。
+            if (wallWidth > 0.001f)
+            {
+                float s = Mathf.Clamp(roomSize / wallWidth, 0.1f, 10f);
+                if (Mathf.Abs(s - 1f) > 0.01f)
+                {
+                    wall.transform.localScale = new Vector3(s, s, s);
+                    wallHeight *= s;
+                    wallThickness *= s;
+                    doorWidth *= s;
+                    if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体长度(" + wallWidth.ToString("F2") + ")与房间尺寸(" + roomSize.ToString("F2") + ")不一致，已整体缩放对齐（建议把墙预制体长度直接做成房间尺寸）");
+                }
+            }
+            // 重新对齐（pivot 无关）：水平把墙几何中心对到边线中点，垂直把墙“底面”落到地面高度
+            // （prefab pivot 在几何中心时，几何中心会被放在地面高度导致半截埋进地板，这里纠正为底面贴地）
+            {
+                var rs2 = wall.GetComponentsInChildren<Renderer>();
+                if (rs2.Length > 0)
+                {
+                    Bounds b2 = rs2[0].bounds;
+                    for (int i = 1; i < rs2.Length; i++) b2.Encapsulate(rs2[i].bounds);
+                    float groundY = wallParent.transform.position.y;
+                    Vector3 desiredCenter = new Vector3(
+                        wallParent.transform.position.x,
+                        groundY + b2.size.y * 0.5f,
+                        wallParent.transform.position.z);
+                    wall.transform.position += (desiredCenter - b2.center);
+                }
+            }
+
             GameObject doorObj = dm != null ? dm.gameObject : null;
             if (doorObj == null)
             {
@@ -349,59 +456,17 @@ public class DungeonManager : MonoBehaviour
                 var bcFallback = doorObj.AddComponent<BoxCollider>();
                 bcFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
                 bcFallback.isTrigger = false;
+                var noFallback = doorObj.AddComponent<NavMeshObstacle>();
+                noFallback.carving = true;
+                noFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                noFallback.center = Vector3.zero;
                 if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到 DoorMarker，已用兜底方块碰撞体（请在门的子物体上挂 DoorMarker）");
             }
             doorBlockers.Add(doorObj);
             return;
         }
 
-        // 次选：用“不带门墙”预制体当两段墙段 + 程序化门挡
-        if (w != null)
-        {
-            for (int s = 0; s < 2; s++)
-            {
-                float sign = (s == 0) ? -1f : 1f;
-                GameObject seg = Instantiate(w, wallParent.transform);
-                seg.name = "WallSeg";
-                seg.transform.localPosition = new Vector3(sign * segCenter, wallHeight * 0.5f, 0);
-                seg.transform.localRotation = Quaternion.identity;
-                seg.tag = "Wall";
-                NavMeshObstacle obs = seg.GetComponent<NavMeshObstacle>();
-                if (obs == null)
-                {
-                    obs = seg.AddComponent<NavMeshObstacle>();
-                    obs.size = new Vector3(segLen, wallHeight, wallThickness);
-                }
-                obs.carving = true;
-                obs.center = Vector3.zero;
-            }
-        }
-        else
-        {
-            // 兜底：完全程序化
-            for (int s = 0; s < 2; s++)
-            {
-                float sign = (s == 0) ? -1f : 1f;
-                GameObject seg = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                seg.name = "WallSeg";
-                seg.transform.SetParent(wallParent.transform);
-                seg.transform.localPosition = new Vector3(sign * segCenter, wallHeight * 0.5f, 0);
-                seg.transform.localScale = new Vector3(segLen, wallHeight, wallThickness);
-                seg.tag = "Wall";
-                NavMeshObstacle obs = seg.AddComponent<NavMeshObstacle>();
-                obs.carving = true;
-                obs.size = new Vector3(segLen, wallHeight, wallThickness);
-                obs.center = Vector3.zero;
-            }
-        }
 
-        GameObject blocker = new GameObject("DoorBlocker");
-        blocker.transform.SetParent(wallParent.transform);
-        blocker.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
-        var bc = blocker.AddComponent<BoxCollider>();
-        bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
-        bc.isTrigger = false;
-        doorBlockers.Add(blocker);
     }
 
     void SetDoorBlocker(int dirIndex, bool block)
@@ -481,6 +546,18 @@ public class DungeonManager : MonoBehaviour
             deco.transform.localPosition = pos;
             deco.transform.localRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
+            // 把装饰底部贴到地面(parent.position.y)：兼容不同 pivot（中心/底部），避免悬空或下陷
+            {
+                Renderer r = deco.GetComponentInChildren<Renderer>();
+                if (r != null)
+                {
+                    float groundY = parent.position.y;
+                    float minY = r.bounds.min.y;
+                    if (Mathf.Abs(minY - groundY) > 0.001f)
+                        deco.transform.position += Vector3.up * (groundY - minY);
+                }
+            }
+
             if (deco.GetComponent<Collider>() == null) deco.AddComponent<BoxCollider>();
             NavMeshObstacle obs = deco.GetComponent<NavMeshObstacle>();
             if (obs == null) obs = deco.AddComponent<NavMeshObstacle>();
@@ -532,10 +609,15 @@ public class DungeonManager : MonoBehaviour
         List<GameObject> pool = GetWallDecorationPool(currentType);
         if (pool.Count == 0) return;
 
-        int count = Random.Range(wallDecorationMin, wallDecorationMax + 1);
+        int count = Mathf.Max(3, Random.Range(wallDecorationMin, wallDecorationMax + 1));
         float half = roomSize * 0.5f;
         float limit = half - wallThickness - 0.2f;
         float off = half - wallThickness - wallDecorationInset; // 距房间中心到墙面的内退位置
+
+        // 每面墙都带门（门在墙正中 along≈0），避开门洞区域，避免装饰压在门前
+        float doorClear = doorWidth * 0.5f + wallThickness + 0.4f;
+        // 装饰中心目标高度：至少为墙高的 0.4 倍，避免贴地/过低
+        float targetCenterY = parent.position.y + Mathf.Max(wallDecorationHeight, wallHeight * 0.4f);
 
         int placed = 0, tries = 0;
         int maxTries = count * 40;
@@ -547,11 +629,12 @@ public class DungeonManager : MonoBehaviour
 
             int d = Random.Range(0, 4);                 // 随机一面墙
             float along = Random.Range(-limit, limit); // 沿墙随机位置
+            if (Mathf.Abs(along) < doorClear) continue; // 避开门洞中心
             Vector3 pos;
-            if (d == 0)      pos = new Vector3(along, wallDecorationHeight, off);
-            else if (d == 1) pos = new Vector3(off, wallDecorationHeight, along);
-            else if (d == 2) pos = new Vector3(along, wallDecorationHeight, -off);
-            else             pos = new Vector3(-off, wallDecorationHeight, along);
+            if (d == 0)      pos = new Vector3(along, 0, off);
+            else if (d == 1) pos = new Vector3(off, 0, along);
+            else if (d == 2) pos = new Vector3(along, 0, -off);
+            else             pos = new Vector3(-off, 0, along);
 
             // 确定方向：物体正面(+Z)朝向房间内（即 -DirVec[d]），保证上墙后不朝墙
             Quaternion rot = Quaternion.LookRotation(-DirVec[d]);
@@ -559,6 +642,15 @@ public class DungeonManager : MonoBehaviour
             GameObject deco = Instantiate(prefab, parent);
             deco.transform.localPosition = pos;
             deco.transform.localRotation = rot;
+            // 让装饰“垂直中心”落在目标高度（兼容不同 pivot，避免整体偏低）
+            {
+                Renderer r = deco.GetComponentInChildren<Renderer>();
+                if (r != null)
+                {
+                    float dy = targetCenterY - r.bounds.center.y;
+                    if (Mathf.Abs(dy) > 0.001f) deco.transform.position += Vector3.up * dy;
+                }
+            }
             if (deco.GetComponent<Collider>() == null) deco.AddComponent<BoxCollider>();
             placed++;
         }
@@ -579,8 +671,11 @@ public class DungeonManager : MonoBehaviour
         if (navMeshSurface == null) EnsureNavMeshSurface();
         if (navMeshSurface == null || roomRoot == null) return;
         // 只烘焙当前房间子树，避免敌人走到旧世界的大地面上
+        navMeshSurface.enabled = true;
         navMeshSurface.collectObjects = CollectObjects.All;
+        navMeshSurface.layerMask = ~0;
         navMeshSurface.transform.SetParent(roomRoot.transform, false);
+        navMeshSurface.RemoveData(); // 清掉上一间房残留的 NavMeshData，避免多房间 NavMesh 叠加导致寻路错乱
         if (showDebugLogs) Debug.Log("[Dungeon] 烘焙 NavMesh…");
         navMeshSurface.BuildNavMesh();
     }
@@ -642,15 +737,7 @@ public class DungeonManager : MonoBehaviour
         if (currentType == DungeonRoomType.Mixed) Shuffle(order);
 
         float half = roomSize * 0.5f;
-        float inset = Mathf.Max(1f, half - 1f);
         Vector3 center = roomRoot.transform.position;
-        Vector3[] corners = new Vector3[]
-        {
-            center + new Vector3(inset, 0, inset),
-            center + new Vector3(-inset, 0, inset),
-            center + new Vector3(inset, 0, -inset),
-            center + new Vector3(-inset, 0, -inset),
-        };
 
         int idx = 0;
         while (idx < order.Count)
@@ -661,10 +748,8 @@ public class DungeonManager : MonoBehaviour
             GameObject prefab = order[idx];
             if (prefab == null) { idx++; continue; }
 
-            Vector3 corner = corners[Random.Range(0, 4)] + new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f));
-            NavMeshHit hit;
-            Vector3 pos = corner;
-            if (NavMesh.SamplePosition(corner, out hit, 3f, NavMesh.AllAreas)) pos = hit.position;
+            // 在房间内部、离墙留余量的随机点；并校验 NavMesh 可达、不在装饰/门内、且不过近玩家，确保生成在墙内
+            Vector3 pos = GetDungeonSpawnPos(center, half);
 
             GameObject enemy = Instantiate(prefab, pos, Quaternion.Euler(0, Random.Range(0, 360), 0));
             enemy.transform.parent = null;
@@ -682,6 +767,42 @@ public class DungeonManager : MonoBehaviour
 
         spawningDone = true;
         if (showDebugLogs) Debug.Log("[Dungeon] 房间敌人生成完毕，共 " + spawnedCount + " 只");
+    }
+
+    // 在房间内部、离墙留余量的随机点；校验 NavMesh 可达、不在装饰/门等 NavMeshObstacle 内、且不过近玩家
+    Vector3 GetDungeonSpawnPos(Vector3 center, float half)
+    {
+        float margin = Mathf.Max(wallThickness, 0.5f) + 1.0f; // 墙厚 + 约一个敌人碰撞半径
+        float limit = Mathf.Max(1f, half - margin);
+        for (int attempt = 0; attempt < 25; attempt++)
+        {
+            Vector3 cand = center + new Vector3(Random.Range(-limit, limit), 0f, Random.Range(-limit, limit));
+            NavMeshHit hit;
+            if (!NavMesh.SamplePosition(cand, out hit, 2f, NavMesh.AllAreas)) continue;
+            Vector3 pos = hit.position;
+            if (IsInsideObstacle(pos)) continue;
+            if (playerTarget != null)
+            {
+                Vector3 a = pos; a.y = 0f;
+                Vector3 b = playerTarget.position; b.y = 0f;
+                if (Vector3.Distance(a, b) < playerClearRadius) continue;
+            }
+            return pos;
+        }
+        return center; // 兜底：房间正中
+    }
+
+    // 该点是否落在某个实心 NavMeshObstacle（装饰物 carve 挖洞 / 门）的碰撞体内
+    bool IsInsideObstacle(Vector3 pos)
+    {
+        Collider[] buf = new Collider[8];
+        int n = Physics.OverlapSphereNonAlloc(pos, 0.3f, buf);
+        for (int i = 0; i < n; i++)
+        {
+            if (buf[i] == null || buf[i].isTrigger) continue;
+            if (buf[i].GetComponentInParent<NavMeshObstacle>() != null) return true;
+        }
+        return false;
     }
 
     void Shuffle<T>(List<T> list)

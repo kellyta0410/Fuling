@@ -10,6 +10,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 007911011cbc1024ab898619eec07deb,
         type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 007911011cbc1024ab898619eec07deb,
+        type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.19999999
       objectReference: {fileID: 0}
@@ -21,7 +26,7 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: 007911011cbc1024ab898619eec07deb,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 29.4
+      value: 13
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 007911011cbc1024ab898619eec07deb,
         type: 3}
@@ -85,11 +90,11 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 007911011cbc1024ab898619eec07deb,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 4290557714202426187}
+      addedObject: {fileID: 7394437585136268000}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 007911011cbc1024ab898619eec07deb,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3989361823883420614}
+      addedObject: {fileID: 971227388093941541}
   m_SourcePrefab: {fileID: 100100000, guid: 007911011cbc1024ab898619eec07deb, type: 3}
 --- !u!1 &6448541869407925655 stripped
 GameObject:
@@ -97,7 +102,7 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 6178018929848862918}
   m_PrefabAsset: {fileID: 0}
---- !u!65 &4290557714202426187
+--- !u!65 &7394437585136268000
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -116,9 +121,9 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.6, y: 0.010000024, z: 0.059999987}
-  m_Center: {x: 0.004000023, y: -0.000000011874361, z: 0.029999994}
---- !u!208 &3989361823883420614
+  m_Size: {x: 60, y: 1.0000024, z: 5.999999}
+  m_Center: {x: 0.40000153, y: -0.0000011920927, z: 2.9999995}
+--- !u!208 &971227388093941541
 NavMeshObstacle:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -128,9 +133,9 @@ NavMeshObstacle:
   m_Enabled: 1
   serializedVersion: 3
   m_Shape: 1
-  m_Extents: {x: 0.3, y: 0.0050000004, z: 0.030000001}
+  m_Extents: {x: 30.000002, y: 0.5, z: 3.0000002}
   m_MoveThreshold: 0.1
   m_Carve: 1
   m_CarveOnlyStationary: 1
-  m_Center: {x: 0.004, y: 0, z: 0.030000001}
+  m_Center: {x: 0.4, y: 0, z: 3.0000002}
   m_TimeToStationary: 0.5
