@@ -579,7 +579,7 @@ public class DungeonManager : MonoBehaviour
         if (navMeshSurface == null) EnsureNavMeshSurface();
         if (navMeshSurface == null || roomRoot == null) return;
         // 只烘焙当前房间子树，避免敌人走到旧世界的大地面上
-        navMeshSurface.collectObjects = CollectObjects.Children;
+        navMeshSurface.collectObjects = CollectObjects.All;
         navMeshSurface.transform.SetParent(roomRoot.transform, false);
         if (showDebugLogs) Debug.Log("[Dungeon] 烘焙 NavMesh…");
         navMeshSurface.BuildNavMesh();
