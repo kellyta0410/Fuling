@@ -45,6 +45,10 @@ public class DungeonManager : MonoBehaviour
     [Header("玩家进入房间的落点偏移（房间中心朝入口方向退后）")]
     public float entryInset = 4f;
 
+    [Header("进房相机就位等待（左右门进入时，等相机转到玩家背后再刷怪）")]
+    public float camAlignMaxWait = 1.2f;   // 最长等待秒数：相机不跟随朝向时也只会卡这么久
+    public float camAlignAngle = 12f;      // 相机前向与“看向房间内”夹角小于该值即认为就位
+
     [Header("装饰预制体（按敌人类型分类；留空则该类型用中性装饰）")]
     public List<GameObject> snakeDecorations = new List<GameObject>();
     public List<GameObject> zombieDecorations = new List<GameObject>();
@@ -60,6 +64,9 @@ public class DungeonManager : MonoBehaviour
     [Header("房间中央顶灯（每间房生成一个，拖入你的 Point Light 预制体；Mode 设 Realtime）")]
     public GameObject roomLightPrefab;
     public float roomLightHeightOffset = 1f;   // 在 wallHeight 之上再抬一点
+
+    [Header("外观：外面变黑，看不到房间外的 void")]
+    public bool blackOutside = true;           // 把主相机背景设为纯黑，门外/墙外的虚空不可见
 
     [Header("商店 Buff（拖入 BuffDataSO 资产；留空自动在 Resources 找）")]
     public List<BuffDataSO> shopBuffs = new List<BuffDataSO>();
@@ -124,10 +131,25 @@ public class DungeonManager : MonoBehaviour
             if (p != null) playerTarget = p.transform;
         }
         uiManager = FindObjectOfType<UIManager>();
+
+        // X-Ray：把“相机与玩家之间”的墙变半透明（只影响挡在相机前的那面墙，不透明其余墙）。
+        // 墙壁已在 BuildWallWithDoor 里打上 "Wall" 标签，配合 Custom/XRayWall 着色器生效。
+        if (Camera.main != null && Camera.main.GetComponent<CinemachineWallXRay>() == null)
+        {
+            var xray = Camera.main.gameObject.AddComponent<CinemachineWallXRay>();
+            xray.player = playerTarget;
+        }
         // 难度直接读取 Inspector 上挂的 DungeonDifficulty 资产（与 GameManager 的普通/Buff 难度解耦）
 
         ResolveEnemyPrefabs();
         EnsureNavMeshSurface();
+
+        // 外面变黑：主相机背景设纯黑，房间外的 void 不可见（仍看得到房间内部与灯光）
+        if (blackOutside && Camera.main != null)
+        {
+            Camera.main.clearFlags = CameraClearFlags.SolidColor;
+            Camera.main.backgroundColor = Color.black;
+        }
 
         if (showDebugLogs) Debug.Log("[Dungeon] 地牢系统启动，生成第 1 个房间");
         StartCoroutine(GenerateRoomRoutine(Vector3.zero, -1));
@@ -208,10 +230,8 @@ public class DungeonManager : MonoBehaviour
         PlaceWallDecorations(roomRoot.transform);
         PlaceRoomLight(roomRoot.transform);
 
-        yield return null;
-        BuildNavMesh();
-        yield return null;
-
+        // 先在本帧内把玩家传送进新房间的地面安全点，再 yield。
+        // 否则“旧房已销毁、玩家还站在门口（新房边缘）”的那几帧里可能悬空/掉落。
         if (playerTarget != null)
         {
             Vector3 playerPos = center;
@@ -223,15 +243,17 @@ public class DungeonManager : MonoBehaviour
             if (cc != null) cc.enabled = true;
         }
 
+        yield return null;
+        BuildNavMesh();
+        yield return null;
+
         if (uiManager != null) uiManager.SetRoomDisplay(roomIndex);
         if (GameManager.Instance != null) GameManager.Instance.SetDungeonRoom(roomIndex);
 
         if (showDebugLogs) Debug.Log("[Dungeon] 生成房间 #" + roomIndex + " 类型=" + currentType + " 中心=" + center);
 
-        if (currentType == DungeonRoomType.Shop)
-            SpawnShop();
-        else
-            SpawnEnemiesForRoom();
+        // 左右门进入时，先等相机转到玩家背面再开始刷怪/商店；正前/正后进入则直接进入。
+        BeginRoomContent(entryDir);
 
         if (currentType != DungeonRoomType.Shop)
         {
@@ -247,6 +269,53 @@ public class DungeonManager : MonoBehaviour
         }
 
         advancing = false;
+    }
+
+    // 进入房间后启动内容（刷怪/商店）。左右门(entryDir 为 1=东 / 3=西)进入时，
+    // 先把玩家转向房间内并等待相机转到玩家背面，避免一进门镜头还背对就开始战斗。
+    void BeginRoomContent(int entryDir)
+    {
+        if (entryDir == 1 || entryDir == 3)
+            StartCoroutine(SpawnAfterCameraAligned(entryDir));
+        else
+            StartRoomContent();
+    }
+
+    void StartRoomContent()
+    {
+        if (currentType == DungeonRoomType.Shop)
+            SpawnShop();
+        else
+            SpawnEnemiesForRoom();
+    }
+
+    IEnumerator SpawnAfterCameraAligned(int entryDir)
+    {
+        // 玩家应面向房间内（-DirVec[entryDir]），相机随之转到玩家背面
+        Vector3 intoRoom = -DirVec[entryDir];
+        intoRoom.y = 0;
+        if (intoRoom.sqrMagnitude > 1e-6f && playerTarget != null)
+            playerTarget.rotation = Quaternion.LookRotation(intoRoom);
+
+        float timer = 0f;
+        bool aligned = false;
+        while (timer < camAlignMaxWait)
+        {
+            timer += Time.deltaTime;
+            if (Camera.main != null)
+            {
+                Vector3 fwd = Camera.main.transform.forward;
+                fwd.y = 0;
+                if (fwd.sqrMagnitude > 1e-4f && Vector3.Angle(fwd, intoRoom) < camAlignAngle)
+                {
+                    aligned = true;
+                    break;
+                }
+            }
+            yield return null;
+        }
+        if (showDebugLogs) Debug.Log("[Dungeon] 相机就位（" + (aligned ? "已对齐" : "超时") + "），开始房间内容");
+        StartRoomContent();
     }
 
     GameObject GetFloorPrefab(DungeonRoomType type)
@@ -346,6 +415,10 @@ public class DungeonManager : MonoBehaviour
         {
             GameObject wall = Instantiate(wwd, wallParent.transform);
             wall.name = "WallMesh";
+            // 给墙体所有带碰撞体的子物体打上 "Wall" 标签，供 CinemachineWallXRay
+            // （相机与玩家之间的墙变透明）射线检测使用。
+            foreach (var col in wall.GetComponentsInChildren<Collider>())
+                col.gameObject.tag = "Wall";
             // 自动量墙高/墙厚：取带门墙预制体整体渲染包围盒（墙只绕 Y 旋转，Y 不受影响；
             // 墙宽沿墙长方向取 X/Z 较大者，墙厚取较小者），让顶灯高度、装饰内退都跟随预制体。
             Renderer[] wrs = wall.GetComponentsInChildren<Renderer>();
@@ -358,6 +431,13 @@ public class DungeonManager : MonoBehaviour
                 float wt = Mathf.Min(rb.size.x, rb.size.z);
                 if (wt > 0.01f) wallThickness = wt;
                 wallWidth = Mathf.Max(rb.size.x, rb.size.z);
+            }
+            // 让墙“贴”在地板边缘：把墙父物体从边线向内移半墙厚，使外墙正好落在 floor 边缘，
+            // 而不是向外凸出半墙厚（之前墙几何中心被放在边线上，导致墙有一半悬在地板外）。
+            {
+                Vector3 outDir = localPos.normalized;
+                if (outDir != Vector3.zero)
+                    wallParent.transform.localPosition = localPos - outDir * (wallThickness * 0.5f);
             }
             // 墙体/门若缺 NavMeshObstacle 则按各自网格自动补（防止敌人穿墙/穿门寻路）
             bool addedObs = false;
@@ -908,7 +988,9 @@ public class DungeonManager : MonoBehaviour
     {
         if (advancing) return;
         if (showDebugLogs) Debug.Log("[Dungeon] 玩家从 " + dir + " 方向前往新房间");
-        Vector3 newCenter = roomRoot.transform.position + DirVec[dir] * (roomSize + 2f);
+        // 新房间与当前房间“相邻拼接”（中心相距正好 roomSize），两间房的边线重合，
+        // 门口不再留 2m 空隙，玩家踏出门即落在下一间地板，不会掉进 void。
+        Vector3 newCenter = roomRoot.transform.position + DirVec[dir] * roomSize;
         int entryDir = (dir + 2) % 4; // 从对面墙进入新房间
         StartCoroutine(GenerateRoomRoutine(newCenter, entryDir));
     }

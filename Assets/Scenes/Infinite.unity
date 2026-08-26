@@ -364,12 +364,15 @@ MonoBehaviour:
   decorationMax: 10
   decorationClearRadius: 3
   entryInset: 4
+  camAlignMaxWait: 1.2
+  camAlignAngle: 12
   snakeDecorations:
   - {fileID: 2676492277455832938, guid: 6bb35ba24beeea94aa9ef8023880002b, type: 3}
   - {fileID: 5545784698057040900, guid: abb8aeb2a60443a4b90dc2625cbfe572, type: 3}
   zombieDecorations:
   - {fileID: 1746397746422561115, guid: 8e35a35a93ace7c4785b7ff923777a01, type: 3}
   - {fileID: 5088348308546522756, guid: 34997af607b6dbc49a20f022fa956b1a, type: 3}
+  - {fileID: 1746397746422561115, guid: 6877b8d9a5d865449b6ad5b591dc4c88, type: 3}
   neutralDecorations:
   - {fileID: 1867192932845221945, guid: 7dd1ff01e5ed9fd46b2011542b3372aa, type: 3}
   - {fileID: 3546603492872652854, guid: e6e8fc990ad9ad44fb0235058c53b279, type: 3}
@@ -386,6 +389,7 @@ MonoBehaviour:
   roomLightPrefab: {fileID: 2708115536176529193, guid: 9b6fc28c1d4b3894f960da49153b967f,
     type: 3}
   roomLightHeightOffset: 1
+  blackOutside: 1
   shopBuffs: []
   playerTarget: {fileID: 6886525407605860346}
   showDebugLogs: 1
@@ -395,7 +399,7 @@ MonoBehaviour:
     type: 3}
   zombieWallWithDoorPrefab: {fileID: 745232564564278100, guid: cf550e8ce51e4324a864e0a9d008b8e4,
     type: 3}
-  zombieFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
+  zombieFloorPrefab: {fileID: 447929316062128568, guid: cda8598b214c65b4a9f1633a7d3204a1,
     type: 3}
   mixedFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
     type: 3}
@@ -6046,7 +6050,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: OnReviveWatchAd
         m_Mode: 1
@@ -6342,7 +6346,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: OnReviveEndGame
         m_Mode: 1
@@ -6494,7 +6498,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: OpenSettings
         m_Mode: 1
@@ -6619,7 +6623,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: OpenPauseMenu
         m_Mode: 1
@@ -15790,7 +15794,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: CloseSettings
         m_Mode: 1
@@ -17301,7 +17305,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: QuitToGameOver
         m_Mode: 1
@@ -18165,7 +18169,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: GoToSelection
         m_Mode: 1
@@ -18665,7 +18669,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 5878806386804130979}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
         m_MethodName: ClosePauseMenu
         m_Mode: 1
