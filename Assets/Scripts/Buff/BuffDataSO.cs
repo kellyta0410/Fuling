@@ -21,6 +21,8 @@ public class BuffDataSO : ScriptableObject
     public BuffType buffType;
     public string buffName;
     public Sprite icon;
+    [TextArea(2, 4)]
+    public string description;
 
     [Header("效果分类")]
     [Tooltip("勾选 = 即时恢复(Heal)；不勾 = 商店永久叠层")]

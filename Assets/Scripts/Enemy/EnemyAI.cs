@@ -92,9 +92,9 @@ public abstract class EnemyAI : MonoBehaviour
     public float detectionRange = 30f;
     public float loseTargetRange = 45f;
 
-    [Header("追击检测（无限模式专用）")]
-    public float infiniteDetectionRange = 60f;
-    public float infiniteLoseTargetRange = 80f;
+    [Header("追击检测（无限/地牢模式专用）")]
+    public float infiniteDetectionRange = 300f;   // 足够覆盖任意大小的房间，进房即被整间房侦测到
+    public float infiniteLoseTargetRange = 400f;
 
     [Header("群组行为（分离力）")]
     public bool enableSeparation = true;
@@ -235,6 +235,9 @@ public abstract class EnemyAI : MonoBehaviour
     // 无限模式标志
     protected bool useDirectChase = false;
 
+    // 地牢模式调用：强制整间房追击（无视普通 detect range），并可按房间尺寸覆盖检测范围
+    public void ForceDirectChase(bool on) { useDirectChase = on; }
+
     // 所属Tile
     [Header("所属Tile")]
 
@@ -283,7 +286,8 @@ public abstract class EnemyAI : MonoBehaviour
 
         if (GameManager.Instance != null)
         {
-            useDirectChase = GameManager.Instance.IsInfiniteMode();
+            // 地牢(无尽)模式也视为“无限追击”：敌人侦测范围覆盖整间房，进房即被追
+            useDirectChase = GameManager.Instance.IsInfiniteMode() || GameManager.Instance.IsDungeonMode();
         }
 
         SetupNonBlockingPhysics();

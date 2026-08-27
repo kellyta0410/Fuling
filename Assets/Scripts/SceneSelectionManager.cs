@@ -27,6 +27,10 @@ public class SceneSelectionManager : MonoBehaviour
     public GameObject tutorialPanel;
     [Tooltip("引导页容器：每个子物体是一页，翻页时逐个切换显示")]
     public RectTransform tutorialPagesContainer;
+    [Tooltip("引导上一页按钮：第一页时自动隐藏")]
+    public Button tutorialPrevButton;
+    [Tooltip("引导下一页按钮：最后一页时自动隐藏")]
+    public Button tutorialNextButton;
 
     [Header("===== 玩家信息 =====")]
     public TextMeshProUGUI coinText;
@@ -43,6 +47,14 @@ public class SceneSelectionManager : MonoBehaviour
     public TextMeshProUGUI infiniteCoinsText;
     public TextMeshProUGUI infiniteKillsText;
     public TextMeshProUGUI infiniteTimeText;
+    [Tooltip("记录翻页容器：每个子物体是一页，翻页时逐个切换显示（内容你自己加）")]
+    public RectTransform recordsPagesContainer;
+    [Tooltip("记录页码文本（可选），例如 “1 / 3”")]
+    public TextMeshProUGUI recordsPageText;
+    [Tooltip("上一页按钮：第一页时自动隐藏")]
+    public Button recordsPrevButton;
+    [Tooltip("下一页按钮：最后一页时自动隐藏")]
+    public Button recordsNextButton;
 
     [Header("===== 角色按钮（左侧一排，只有头像图片）=====")]
     public Button[] characterButtons;
@@ -248,22 +260,29 @@ public class SceneSelectionManager : MonoBehaviour
 
         UpdateRecordUI("简单", easyCoinsText, easyKillsText, easyTimeText);
         UpdateRecordUI("普通", normalCoinsText, normalKillsText, normalTimeText);
-        UpdateRecordUI("无限", infiniteCoinsText, infiniteKillsText, infiniteTimeText);
+        // 无限模式：不显示金币，用“通关数量”代替计时
+        UpdateRecordUI("无限", infiniteCoinsText, infiniteKillsText, infiniteTimeText,
+            showCoins: false, useRoomsInsteadOfTime: true);
     }
 
-    void UpdateRecordUI(string difficultyName, TextMeshProUGUI coinsText, TextMeshProUGUI killsText, TextMeshProUGUI timeText)
+    void UpdateRecordUI(string difficultyName, TextMeshProUGUI coinsText, TextMeshProUGUI killsText, TextMeshProUGUI timeText,
+        bool showCoins = true, bool useRoomsInsteadOfTime = false)
     {
         GameRecord record = gameDataManager.GetRecord(difficultyName);
 
         if (coinsText != null)
-            coinsText.text = record.HasRecord ? record.bestCoins.ToString() : "--";
+            coinsText.text = (showCoins && record.HasRecord) ? record.bestCoins.ToString() : "";
 
         if (killsText != null)
             killsText.text = record.HasRecord ? record.bestKills.ToString() : "--";
 
         if (timeText != null)
         {
-            if (record.HasRecord && record.bestTime > 0)
+            if (useRoomsInsteadOfTime)
+            {
+                timeText.text = record.HasRecord ? record.bestRooms.ToString() : "--";
+            }
+            else if (record.HasRecord && record.bestTime > 0)
             {
                 int minutes = Mathf.FloorToInt(record.bestTime / 60);
                 int seconds = Mathf.FloorToInt(record.bestTime % 60);
@@ -290,6 +309,7 @@ public class SceneSelectionManager : MonoBehaviour
         SetPanelActive(recordsPanel, true);
         SetPanelActive(characterPanel, false);
         RefreshRecordsDisplay();
+        ShowRecordsPage(0);
     }
 
     public void ShowCharacterPanel()
@@ -394,14 +414,14 @@ public class SceneSelectionManager : MonoBehaviour
     {
         int total = GetTutorialPageCount();
         if (total <= 0) return;
-        ShowTutorialPage((currentTutorialPage - 1 + total) % total);
+        ShowTutorialPage(Mathf.Max(0, currentTutorialPage - 1));
     }
 
     public void TutorialNextPage()
     {
         int total = GetTutorialPageCount();
         if (total <= 0) return;
-        ShowTutorialPage((currentTutorialPage + 1) % total);
+        ShowTutorialPage(Mathf.Min(total - 1, currentTutorialPage + 1));
     }
 
     int GetTutorialPageCount()
@@ -421,6 +441,53 @@ public class SceneSelectionManager : MonoBehaviour
         {
             tutorialPagesContainer.GetChild(i).gameObject.SetActive(i == currentTutorialPage);
         }
+
+        // 第一页隐藏“上一页”，最后一页隐藏“下一页”
+        if (tutorialPrevButton != null) tutorialPrevButton.gameObject.SetActive(currentTutorialPage > 0);
+        if (tutorialNextButton != null) tutorialNextButton.gameObject.SetActive(currentTutorialPage < total - 1);
+    }
+
+    // ==================== 记录面板翻页 ====================
+    private int currentRecordsPage = 0;
+
+    public void RecordsPrevPage()
+    {
+        int total = GetRecordsPageCount();
+        if (total <= 0) return;
+        ShowRecordsPage(Mathf.Max(0, currentRecordsPage - 1));
+    }
+
+    public void RecordsNextPage()
+    {
+        int total = GetRecordsPageCount();
+        if (total <= 0) return;
+        ShowRecordsPage(Mathf.Min(total - 1, currentRecordsPage + 1));
+    }
+
+    int GetRecordsPageCount()
+    {
+        return recordsPagesContainer != null ? recordsPagesContainer.childCount : 0;
+    }
+
+    void ShowRecordsPage(int index)
+    {
+        if (recordsPagesContainer == null) return;
+
+        int total = recordsPagesContainer.childCount;
+        if (total <= 0) return;
+
+        currentRecordsPage = index;
+        for (int i = 0; i < total; i++)
+        {
+            recordsPagesContainer.GetChild(i).gameObject.SetActive(i == currentRecordsPage);
+        }
+
+        // 第一页隐藏“上一页”，最后一页隐藏“下一页”
+        if (recordsPrevButton != null) recordsPrevButton.gameObject.SetActive(currentRecordsPage > 0);
+        if (recordsNextButton != null) recordsNextButton.gameObject.SetActive(currentRecordsPage < total - 1);
+
+        if (recordsPageText != null)
+            recordsPageText.text = (currentRecordsPage + 1) + " / " + total;
     }
 
     // ==================== 返回主菜单 ====================

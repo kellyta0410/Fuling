@@ -192,12 +192,14 @@ public class GameDataManager : MonoBehaviour
             difficultyName = difficultyName,
             bestCoins = PlayerPrefs.GetInt($"{difficultyName}_BestCoins", 0),
             bestKills = PlayerPrefs.GetInt($"{difficultyName}_BestKills", 0),
-            bestTime = PlayerPrefs.GetFloat($"{difficultyName}_BestTime", 0f)
+            bestTime = PlayerPrefs.GetFloat($"{difficultyName}_BestTime", 0f),
+            bestRooms = PlayerPrefs.GetInt($"{difficultyName}_BestRooms", 0)
         };
 
         record.recordCoins = PlayerPrefs.GetInt($"{difficultyName}_RecordCoins", record.bestCoins);
         record.recordKills = PlayerPrefs.GetInt($"{difficultyName}_RecordKills", record.bestKills);
         record.recordTime = PlayerPrefs.GetFloat($"{difficultyName}_RecordTime", record.bestTime);
+        record.recordRooms = PlayerPrefs.GetInt($"{difficultyName}_RecordRooms", record.bestRooms);
 
         return record;
     }
@@ -208,7 +210,7 @@ public class GameDataManager : MonoBehaviour
         get => GetRecord("简单").HasRecord;
     }
 
-    public void UpdateRecord(string difficultyName, int coins, int kills, float time)
+    public void UpdateRecord(string difficultyName, int coins, int kills, float time, int rooms = 0)
     {
         GameRecord currentBest = GetRecord(difficultyName);
 
@@ -222,20 +224,29 @@ public class GameDataManager : MonoBehaviour
         }
         else
         {
-            if (kills > currentBest.bestKills)
+            // 无限/地牢模式以“通关房间数”为首要指标，其余模式 rooms 为 0 不影响原比较
+            if (rooms > currentBest.bestRooms)
             {
                 isBetter = true;
-                Debug.Log($"🏆 击杀更多！{kills} > {currentBest.bestKills}");
+                Debug.Log($"🏆 通关更多！{rooms} > {currentBest.bestRooms}");
             }
-            else if (kills == currentBest.bestKills && coins > currentBest.bestCoins)
+            else if (rooms == currentBest.bestRooms)
             {
-                isBetter = true;
-                Debug.Log($"🏆 击杀相同，金币更多！{coins} > {currentBest.bestCoins}");
-            }
-            else if (kills == currentBest.bestKills && coins == currentBest.bestCoins && time < currentBest.bestTime)
-            {
-                isBetter = true;
-                Debug.Log($"🏆 击杀和金币相同，时间更短！{time:F2} < {currentBest.bestTime:F2}");
+                if (kills > currentBest.bestKills)
+                {
+                    isBetter = true;
+                    Debug.Log($"🏆 击杀更多！{kills} > {currentBest.bestKills}");
+                }
+                else if (kills == currentBest.bestKills && coins > currentBest.bestCoins)
+                {
+                    isBetter = true;
+                    Debug.Log($"🏆 击杀相同，金币更多！{coins} > {currentBest.bestCoins}");
+                }
+                else if (kills == currentBest.bestKills && coins == currentBest.bestCoins && time < currentBest.bestTime)
+                {
+                    isBetter = true;
+                    Debug.Log($"🏆 击杀和金币相同，时间更短！{time:F2} < {currentBest.bestTime:F2}");
+                }
             }
         }
 
@@ -244,12 +255,14 @@ public class GameDataManager : MonoBehaviour
             PlayerPrefs.SetInt($"{difficultyName}_BestCoins", coins);
             PlayerPrefs.SetInt($"{difficultyName}_BestKills", kills);
             PlayerPrefs.SetFloat($"{difficultyName}_BestTime", time);
+            PlayerPrefs.SetInt($"{difficultyName}_BestRooms", rooms);
             PlayerPrefs.SetInt($"{difficultyName}_RecordCoins", coins);
             PlayerPrefs.SetInt($"{difficultyName}_RecordKills", kills);
             PlayerPrefs.SetFloat($"{difficultyName}_RecordTime", time);
+            PlayerPrefs.SetInt($"{difficultyName}_RecordRooms", rooms);
             PlayerPrefs.Save();
             OnDataChanged?.Invoke();
-            Debug.Log($"🎉 新纪录！{difficultyName} | 击杀: {kills} | 金币: {coins} | 时间: {time:F2}秒");
+            Debug.Log($"🎉 新纪录！{difficultyName} | 击杀: {kills} | 金币: {coins} | 时间: {time:F2}秒 | 通关: {rooms}");
         }
     }
 
@@ -376,9 +389,11 @@ public class GameRecord
     public int bestCoins;
     public int bestKills;
     public float bestTime;
+    public int bestRooms;       // 无限（地牢）模式：通关房间数
     public int recordCoins;
     public int recordKills;
     public float recordTime;
+    public int recordRooms;
 
-    public bool HasRecord => bestCoins > 0 || bestKills > 0 || bestTime > 0f;
+    public bool HasRecord => bestCoins > 0 || bestKills > 0 || bestTime > 0f || bestRooms > 0;
 }

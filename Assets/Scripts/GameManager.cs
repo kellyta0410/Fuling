@@ -133,6 +133,7 @@ public class GameManager : MonoBehaviour
         hasProcessedGameOver = false;
         reviveUsedThisRun = false;
         scalingLevel = 0;
+        roomsCleared = 0;
         scalingTimer = 0f;
         gameStartTime = Time.time;
 
@@ -385,7 +386,7 @@ public class GameManager : MonoBehaviour
         {
             if (currentDifficulty != null)
             {
-                dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+                dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave, GetRoomsCleared());
             }
             // ⭐ 地牢（无尽）模式的金币只在本局商店内使用，不带入全局（不"带出去"）
             if (!IsDungeonMode())
@@ -398,7 +399,7 @@ public class GameManager : MonoBehaviour
             Debug.LogError("❌ GameDataManager.Instance 为空！使用 PlayerPrefs 降级方案");
             if (currentDifficulty != null)
             {
-                SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
+                SaveBestRecord(currentDifficulty.difficultyName, coins, kills, timeToSave, GetRoomsCleared());
             }
         }
 
@@ -410,15 +411,17 @@ public class GameManager : MonoBehaviour
         Debug.Log($"🏁 ===== 游戏结束完成 ===== | {currentDifficulty?.difficultyName ?? "未知"}");
     }
 
-    void SaveBestRecord(string difficultyName, int coins, int kills, float time)
+    void SaveBestRecord(string difficultyName, int coins, int kills, float time, int rooms = 0)
     {
         string coinsKey = difficultyName + "_BestCoins";
         string killsKey = difficultyName + "_BestKills";
         string timeKey = difficultyName + "_BestTime";
+        string roomsKey = difficultyName + "_BestRooms";
 
         int bestCoins = PlayerPrefs.GetInt(coinsKey, 0);
         int bestKills = PlayerPrefs.GetInt(killsKey, 0);
         float bestTime = PlayerPrefs.GetFloat(timeKey, 0f);
+        int bestRooms = PlayerPrefs.GetInt(roomsKey, 0);
 
         bool updated = false;
 
@@ -437,6 +440,12 @@ public class GameManager : MonoBehaviour
         if (time > bestTime)
         {
             PlayerPrefs.SetFloat(timeKey, time);
+            updated = true;
+        }
+
+        if (rooms > bestRooms)
+        {
+            PlayerPrefs.SetInt(roomsKey, rooms);
             updated = true;
         }
 
