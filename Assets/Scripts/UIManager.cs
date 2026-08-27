@@ -210,12 +210,12 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // 地牢模式：把计时器文本改为“第 N 关”；商店房显示为“商店”（不计入关序号）
+    // 地牢模式：把计时器文本改为“第 N 关”（阿拉伯数字）；商店房显示为“商店”（不计入关序号）
     public void SetRoomDisplay(int level, bool isShop = false)
     {
         if (timerText == null) return;
         timerText.gameObject.SetActive(true);
-        timerText.text = isShop ? "商店" : ("第" + ToChineseNumber(level) + "关");
+        timerText.text = isShop ? "商店" : ("第" + level + "关");
         timerText.color = Color.white;
     }
 

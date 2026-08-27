@@ -107,6 +107,13 @@ public static class RewardVideoAdService
         rewardEarned = false;
         watchdogDeadline = -1f;
 
+#if UNITY_EDITOR
+        // 编辑器内没有真实广告 SDK，直接发放复活奖励，方便测试复活流程（真机仍走真实广告）
+        AdLog("[Ad] editor: grant reward directly (test revive)");
+        SafeInvoke(true);
+        return;
+#endif
+
         // ⭐ 微信小游戏环境（WebGL + SDK 存在）先走：播放真实激励视频
         if (IsWeChatRewardAdAvailable)
         {

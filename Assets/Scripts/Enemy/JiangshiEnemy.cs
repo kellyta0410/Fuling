@@ -131,12 +131,10 @@ public class JiangshiEnemy : EnemyAI
         UpdateLandSFX();
     }
 
-    // 蓄力/冲撞期间不被击退打断（仍保持挂起推挤与指示），瞬移照常进行
+    // 被击中/击退会中断蓄力与冲撞（恢复分离推挤，回到冷却）
     protected override void OnKnockback()
     {
         base.OnKnockback();
-        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
-            return;
         SetSeparationSuspended(false);
         HideGroundIndicator();
         LeaveChargeState();

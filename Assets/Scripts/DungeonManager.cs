@@ -102,6 +102,10 @@ public class DungeonManager : MonoBehaviour
     private List<GameObject> aliveEnemies = new List<GameObject>();
 
     private List<GameObject> doorBlockers = new List<GameObject>();
+    private Dictionary<GameObject, Coroutine> doorSwingRoutine = new Dictionary<GameObject, Coroutine>();
+    private Dictionary<GameObject, float> doorClosedAngle = new Dictionary<GameObject, float>();
+    [Tooltip("代码驱动开门：门绕本地 Y 轴旋转的角度（父墙只绕 Y 旋转，本地 Y=世界 Y，四种墙方向一致）")]
+    public float doorSwingAngle = 90f;
     private bool[] doorOpen = new bool[4];
     private bool roomCleared = false;
     private bool spawningDone = false;
@@ -547,6 +551,7 @@ public class DungeonManager : MonoBehaviour
                 if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到 DoorMarker，已用兜底方块碰撞体（请在门的子物体上挂 DoorMarker）");
             }
             doorBlockers.Add(doorObj);
+            doorClosedAngle[doorObj] = doorObj.transform.localEulerAngles.y;
             return;
         }
 
@@ -559,33 +564,46 @@ public class DungeonManager : MonoBehaviour
         GameObject b = doorBlockers[dirIndex];
         if (b == null) return;
 
-        // 优先用开门/关门动画：门在开启时会被动画移开门洞，其 BoxCollider 随之离开门洞，
-        // 因此无需手动开关碰撞体（关门=碰撞体在门洞处挡人；开门=碰撞体已不在门洞处）。
-        var anims = b.GetComponentsInChildren<Animator>();
-        bool hasAnim = false;
-        if (anims != null)
+        // 代码驱动开门：禁用门自带的 DoorOpen 动画（其烘焙旋转在旋转后的父墙下会摆错方向），
+        // 改为协程绕门“本地 Y 轴”旋转——父墙只绕 Y 旋转，故本地 Y = 世界 Y，四种墙方向表现一致。
+        foreach (var anim in b.GetComponentsInChildren<Animator>())
         {
-            foreach (var anim in anims)
+            foreach (var p in anim.parameters)
             {
-                foreach (var p in anim.parameters)
-                {
-                    if (p.name != doorOpenAnimParam) continue;
-                    hasAnim = true;
-                    if (p.type == AnimatorControllerParameterType.Bool)
-                        anim.SetBool(doorOpenAnimParam, !block);          // block=true 关门, false 开门
-                    else if (p.type == AnimatorControllerParameterType.Trigger && !block)
-                        anim.SetTrigger(doorOpenAnimParam);               // 触发器只在开门时触发
-                    break;
-                }
+                if (p.name == doorOpenAnimParam) { anim.enabled = false; break; }
             }
         }
 
-        // 无动画的兜底方块：只能用碰撞体的启用/停用来实现挡人 / 放行
-        if (!hasAnim)
+        if (!doorClosedAngle.ContainsKey(b))
+            doorClosedAngle[b] = b.transform.localEulerAngles.y;
+
+        if (doorSwingRoutine.ContainsKey(b) && doorSwingRoutine[b] != null)
+            StopCoroutine(doorSwingRoutine[b]);
+
+        float from = b.transform.localEulerAngles.y;
+        float to = block ? doorClosedAngle[b] : doorClosedAngle[b] + doorSwingAngle;
+        doorSwingRoutine[b] = StartCoroutine(DoorSwing(b.transform, from, to));
+
+        // 碰撞体 / 导航障碍：关门启用（挡人），开门禁用（放行）
+        foreach (var col in b.GetComponentsInChildren<Collider>())
+            col.enabled = block;
+        foreach (var obs in b.GetComponentsInChildren<NavMeshObstacle>())
+            obs.enabled = block;
+    }
+
+    IEnumerator DoorSwing(Transform t, float from, float to)
+    {
+        float dur = 0.4f;
+        float el = 0f;
+        while (el < dur)
         {
-            var col = b.GetComponentInChildren<Collider>();
-            if (col != null) col.enabled = block;
+            el += Time.deltaTime;
+            float a = Mathf.LerpAngle(from, to, Mathf.SmoothStep(0f, 1f, el / dur));
+            t.localEulerAngles = new Vector3(t.localEulerAngles.x, a, t.localEulerAngles.z);
+            yield return null;
         }
+        t.localEulerAngles = new Vector3(t.localEulerAngles.x, to, t.localEulerAngles.z);
+        if (doorSwingRoutine.ContainsKey(t.gameObject)) doorSwingRoutine[t.gameObject] = null;
     }
 
 
