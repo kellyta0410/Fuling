@@ -348,6 +348,7 @@ public class SceneSelectionManager : MonoBehaviour
         if (panel != null)
         {
             panel.SetActive(active);
+            if (!active) HintToast.Hide(); // 关闭/切换面板时提示直接消失
         }
     }
 

@@ -3318,8 +3318,8 @@ MonoBehaviour:
   characterPanel: {fileID: 1121451704}
   tutorialPanel: {fileID: 990000001}
   tutorialPagesContainer: {fileID: 990000032}
-  tutorialPrevButton: {fileID: 0}
-  tutorialNextButton: {fileID: 0}
+  tutorialPrevButton: {fileID: 990000044}
+  tutorialNextButton: {fileID: 990000054}
   coinText: {fileID: 1485398926}
   playerNameText: {fileID: 1881746274}
   playerAvatarImage: {fileID: 1404066654}
@@ -3329,13 +3329,12 @@ MonoBehaviour:
   normalCoinsText: {fileID: 2784668650021957500}
   normalKillsText: {fileID: 4779451097727831230}
   normalTimeText: {fileID: 1038200427198589874}
-  infiniteCoinsText: {fileID: 0}
-  infiniteKillsText: {fileID: 0}
-  infiniteTimeText: {fileID: 0}
-  recordsPagesContainer: {fileID: 0}
-  recordsPageText: {fileID: 0}
-  recordsPrevButton: {fileID: 0}
-  recordsNextButton: {fileID: 0}
+  infiniteKillsText: {fileID: 1768692141}
+  infiniteTimeText: {fileID: 2042166972}
+  infiniteCoinsRow: {fileID: 0}
+  recordsPagesContainer: {fileID: 308176769}
+  recordsPrevButton: {fileID: 1585494889}
+  recordsNextButton: {fileID: 396426381}
   characterButtons:
   - {fileID: 1233992665}
   - {fileID: 1130067250}
@@ -3343,10 +3342,6 @@ MonoBehaviour:
   - {fileID: 1233992663}
   - {fileID: 1130067246}
   characterDetailManager: {fileID: 1675248541}
-  unlockConfirmPanel: {fileID: 0}
-  unlockConfirmText: {fileID: 0}
-  unlockConfirmButton: {fileID: 0}
-  unlockCancelButton: {fileID: 0}
   hintToastText: {fileID: 1934046499}
   hintToastPanel: {fileID: 933966568}
 --- !u!1 &842090524
@@ -8451,12 +8446,12 @@ MonoBehaviour:
   easyCoinsText: {fileID: 7486791892213708814}
   easyKillsText: {fileID: 6060827709995323404}
   easyTimeText: {fileID: 5862386435075435761}
-  normalCoinsText: {fileID: 0}
-  normalKillsText: {fileID: 0}
-  normalTimeText: {fileID: 0}
+  normalCoinsText: {fileID: 2784668650021957500}
+  normalKillsText: {fileID: 4779451097727831230}
+  normalTimeText: {fileID: 1038200427198589874}
   infiniteCoinsText: {fileID: 0}
-  infiniteKillsText: {fileID: 0}
-  infiniteTimeText: {fileID: 0}
+  infiniteKillsText: {fileID: 1768692141}
+  infiniteTimeText: {fileID: 2042166972}
   autoRefreshOnEnable: 1
 --- !u!1 &192991975056163150
 GameObject:
@@ -8476,7 +8471,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1 &537668678823658203
 GameObject:
   m_ObjectHideFlags: 0
@@ -8925,17 +8920,17 @@ RectTransform:
   m_GameObject: {fileID: 192991975056163150}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1820214332}
   m_Father: {fileID: 448235849}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 57.037354, y: 0}
+  m_SizeDelta: {x: -114.07471, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &5249838895063266348
 RectTransform:
   m_ObjectHideFlags: 0

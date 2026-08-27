@@ -16,7 +16,9 @@ public static class HintToast
     private static Runner runner;
     private static bool isVisible;            // 当前是否有提示在显示中
     private static float hideAt;             // 实际隐藏时刻（重复点击可刷新）
-    private const float HoldSeconds = 1.6f;  // 提示停留时长（与场景选择 hint 一致）
+    private const float HoldSeconds = 0.9f;  // 提示停留时长（关闭/切面板会立即消失，这里只是自然淡出前的停留）
+    private const float InDuration = 0.12f;  // 滑入（跳动）动画时长，越短越“快”
+    private const float InOffset = 40f;      // 从下方滑入的距离
 
     private class Runner : MonoBehaviour { }
 
@@ -65,29 +67,37 @@ public static class HintToast
         text.gameObject.SetActive(true);
         text.text = message;
 
-        // 已在显示中：仅刷新隐藏计时（延长停留），不重播滑入动画，避免"每次点击都跳一下"
-        if (isVisible)
-        {
-            hideAt = Time.realtimeSinceStartup + HoldSeconds;
-            return;
-        }
+        // 每次点击都重播快速滑入动画（“一直跳、很快”），并刷新停留计时
         isVisible = true;
         if (showCoroutine != null) RunnerInstance.StopCoroutine(showCoroutine);
         showCoroutine = RunnerInstance.StartCoroutine(AnimateInAndHold());
+    }
+
+    // 立即隐藏（关闭面板时调用，让提示直接消失）
+    public static void Hide()
+    {
+        if (showCoroutine != null && runner != null)
+        {
+            runner.StopCoroutine(showCoroutine);
+            showCoroutine = null;
+        }
+        if (text != null) text.gameObject.SetActive(false);
+        if (panel != null) panel.SetActive(false);
+        isVisible = false;
     }
 
     private static IEnumerator AnimateInAndHold()
     {
         RectTransform rt = text != null ? text.rectTransform : null;
         Vector2 basePos = rt != null ? rt.anchoredPosition : Vector2.zero;
-        if (rt != null) rt.anchoredPosition = basePos + Vector2.down * 40f;
+        if (rt != null) rt.anchoredPosition = basePos + Vector2.down * InOffset;
 
-        float dur = 0.25f, t = 0f;
+        float dur = InDuration, t = 0f;
         while (t < dur)
         {
             t += Time.deltaTime;
-            float k = Mathf.SmoothStep(0f, 1f, t / dur);
-            if (rt != null) rt.anchoredPosition = basePos + Vector2.down * (40f * (1f - k));
+            float k = EaseOutBack(t / dur); // 带轻微回弹，更有弹性
+            if (rt != null) rt.anchoredPosition = basePos + Vector2.down * (InOffset * (1f - k));
             yield return null;
         }
         if (rt != null) rt.anchoredPosition = basePos;
@@ -101,6 +111,14 @@ public static class HintToast
         if (panel != null) panel.SetActive(false);
         isVisible = false;
         showCoroutine = null;
+    }
+
+    // 回弹缓动：末尾轻微过冲再回落，让文字更有“弹性”
+    private static float EaseOutBack(float x)
+    {
+        const float c1 = 2.2f;
+        float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(x - 1f, 3f) + c1 * Mathf.Pow(x - 1f, 2f);
     }
 
     private static void Build()
