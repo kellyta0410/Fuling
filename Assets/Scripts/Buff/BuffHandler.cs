@@ -84,20 +84,58 @@ public class BuffHandler : MonoBehaviour
         if (ui != null) ui.RefreshBuffIcons();
     }
 
+    // 按类型把"当前层数 × 每层幅度"从 base 重算并应用到玩家
     void ReapplyPermanent(BuffType type)
     {
-        if (!permanentData.ContainsKey(type)) return;
+        if (!permanentData.ContainsKey(type) || player == null) return;
         int n = permanentStacks[type];
         BuffDataSO data = permanentData[type];
-        if (type == BuffType.SpeedUp)
-            player.ApplySpeedMultiplier(1f + n * data.effectValue);
-        else if (type == BuffType.PowerUp)
-            player.ApplyAttackAdditive(Mathf.RoundToInt(n * data.effectValue));
+        switch (type)
+        {
+            case BuffType.SpeedUp:
+                player.ApplySpeedMultiplier(1f + n * data.effectValue); break;
+            case BuffType.PowerUp:
+                player.ApplyAttackAdditive(Mathf.RoundToInt(n * data.effectValue)); break;
+            case BuffType.AttackRangeUp:
+                player.ApplyAttackRangeAdditive(n * data.effectValue); break;
+            case BuffType.SkillPowerUp:
+                player.ApplySkillDamageAdditive(Mathf.RoundToInt(n * data.effectValue)); break;
+            case BuffType.SkillRangeUp:
+                player.ApplySkillRangeAdditive(n * data.effectValue); break;
+            case BuffType.SkillCooldownUp:
+                player.ApplySkillCooldownMultiplier(1f - n * data.effectValue); break;
+            case BuffType.CoinMultUp:
+                player.ApplyCoinMultiplier(1f + n * data.effectValue); break;
+            case BuffType.MaxHealthUp:
+                player.ApplyMaxHealthAdditive(n * data.effectValue); break;
+            case BuffType.Heal:
+                break; // 不会走这里
+        }
     }
 
     public int GetStack(BuffType type)
     {
         return permanentStacks.ContainsKey(type) ? permanentStacks[type] : 0;
+    }
+
+    // 供 UI 显示已购买 Buff 图标
+    public class BuffOwned
+    {
+        public BuffType type;
+        public BuffDataSO data;
+        public int stack;
+        public BuffOwned(BuffType t, BuffDataSO d, int s) { type = t; data = d; stack = s; }
+    }
+
+    public List<BuffOwned> GetOwnedBuffs()
+    {
+        var list = new List<BuffOwned>();
+        foreach (var kvp in permanentStacks)
+        {
+            if (kvp.Value > 0 && permanentData.ContainsKey(kvp.Key))
+                list.Add(new BuffOwned(kvp.Key, permanentData[kvp.Key], kvp.Value));
+        }
+        return list;
     }
 
     // ---------- Buff 获取提示 ----------
@@ -134,6 +172,11 @@ public class BuffHandler : MonoBehaviour
                 {
                     player.RestoreFullHealth();
                     Debug.Log("生命值已回满！");
+                }
+                else if (data.isHalfRestore)
+                {
+                    player.HealToHalf();
+                    Debug.Log("生命值恢复到一半！");
                 }
                 else
                 {

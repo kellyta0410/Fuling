@@ -391,6 +391,8 @@ MonoBehaviour:
   roomLightHeightOffset: 1
   blackOutside: 1
   shopBuffs: []
+  shopPrefab: {fileID: 5698931878998845775, guid: 85675fbbaa79f894f84a3fcc3bcb852d,
+    type: 3}
   playerTarget: {fileID: 6886525407605860346}
   showDebugLogs: 1
   snakeWallWithDoorPrefab: {fileID: 2705507838271533520, guid: 3464a0e48fbf4ec42a133572173a29b3,
@@ -407,6 +409,7 @@ MonoBehaviour:
     type: 3}
   shopFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
     type: 3}
+  doorSwingAngle: 90
   difficulty:
     snakeEnemyPrefabs:
     - {fileID: 2190662386543830987, guid: 9e854d9d7af37294dbd508a41a949d31, type: 3}

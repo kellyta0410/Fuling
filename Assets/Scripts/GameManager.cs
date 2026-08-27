@@ -26,6 +26,7 @@ public class GameManager : MonoBehaviour
     public bool isDungeon = false;
     public DungeonManager dungeonManager;
     private int dungeonRoom = 0;
+    private int roomsCleared = 0;          // 地牢（无尽）模式：已通关房间数（用于结算显示）
 
     private float timeLimit;
     private float remainingTime;
@@ -386,7 +387,11 @@ public class GameManager : MonoBehaviour
             {
                 dataManager.UpdateRecord(currentDifficulty.difficultyName, coins, kills, timeToSave);
             }
-            dataManager.AddCoins(coins);
+            // ⭐ 地牢（无尽）模式的金币只在本局商店内使用，不带入全局（不"带出去"）
+            if (!IsDungeonMode())
+            {
+                dataManager.AddCoins(coins);
+            }
         }
         else
         {
@@ -453,6 +458,13 @@ public class GameManager : MonoBehaviour
     public void SetDungeonRoom(int n)
     {
         dungeonRoom = n;
+    }
+
+    public int GetRoomsCleared() => roomsCleared;
+
+    public void AddRoomCleared()
+    {
+        roomsCleared++;
     }
 
     public float GetElapsedTime()

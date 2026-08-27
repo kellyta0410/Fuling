@@ -63,6 +63,8 @@ public class RandomBuffSpawner : MonoBehaviour
     // ⭐ 每击杀 buffKillInterval 个敌人必定掉落一个随机 Buff（由 EnemyAI.Die() 调用）
     public void OnEnemyKilled(Vector3 dropPos)
     {
+        // ⭐ 地牢（无尽）模式：怪物不掉落 Buff，玩家只能在商店购买
+        if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode()) return;
         if (!enabled) return;
         killCounter++;
         if (killCounter < buffKillInterval) return;

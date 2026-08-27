@@ -499,8 +499,18 @@ public class UIManager : MonoBehaviour
             timeText = $"\nTime: {min:00}:{sec:00}";
         }
 
-        if (finalCoinText != null) finalCoinText.text = $"{coins}";
-        if (finalKillText != null) finalKillText.text = $"{kills}{timeText}";
+        // 地牢（无尽）模式：结算界面的"金币"位置改为显示"通关房间数量"
+        if (gameManager != null && gameManager.IsDungeonMode())
+        {
+            int rooms = gameManager.GetRoomsCleared();
+            if (finalCoinText != null) finalCoinText.text = $"{rooms}";
+            if (finalKillText != null) finalKillText.text = $"{kills}";
+        }
+        else
+        {
+            if (finalCoinText != null) finalCoinText.text = $"{coins}";
+            if (finalKillText != null) finalKillText.text = $"{kills}{timeText}";
+        }
 
         Time.timeScale = 0f;
 
@@ -703,17 +713,26 @@ public class UIManager : MonoBehaviour
     }
 
     // ==================== 商店 ====================
-    // ⭐ 规则：每次随机出 3 个 Buff；每个只能买一次；刷新消耗 20 金币且整局仅 1 次。
+    // ⭐ 规则：列出商店池内所有 Buff；每种最多叠 maxStack 层（默认5）；
+    // 价格随下一层递进：30 / 65 / 105 / 150 / 200；即时恢复(Heal)按各自 shopCost。
     private List<BuffDataSO> shopPool = new List<BuffDataSO>();
-    private List<BuffDataSO> shopOffer = new List<BuffDataSO>();
-    private List<bool> shopPurchased = new List<bool>();
     private int shopCost = 0;
-    private int shopRefreshCost = 20;
-    private bool shopRefreshUsed = false;
-    private const int shopOfferSize = 3;
 
-    public UnityEngine.UI.Button shopRefreshButton;   // 刷新按钮（Inspector 拖入商店面板）
+    public UnityEngine.UI.Button shopRefreshButton;   // 新系统已停用（可留空）
     public UnityEngine.UI.Button shopCloseButton;     // 关闭按钮（Inspector 拖入商店面板）
+
+    int CostForLayer(int layer)
+    {
+        switch (layer)
+        {
+            case 1: return 30;
+            case 2: return 65;
+            case 3: return 105;
+            case 4: return 150;
+            case 5: return 200;
+            default: return 200;
+        }
+    }
 
     public void OpenShop(List<BuffDataSO> pool, int cost)
     {
@@ -728,133 +747,104 @@ public class UIManager : MonoBehaviour
             return;
         }
         shopPool = pool;
-        shopCost = cost;
-        shopRefreshUsed = false;   // 每次新开商店，刷新次数重置
 
-        if (shopRefreshButton != null)
-        {
-            shopRefreshButton.gameObject.SetActive(true);
-            shopRefreshButton.interactable = true;
-            var rnt = shopRefreshButton.transform.Find("Name");
-            if (rnt != null) rnt.GetComponent<TextMeshProUGUI>().text = "刷新";
-            var rct = shopRefreshButton.transform.Find("Cost");
-            if (rct != null) rct.GetComponent<TextMeshProUGUI>().text = shopRefreshCost.ToString();
-            shopRefreshButton.onClick.RemoveAllListeners();
-            shopRefreshButton.onClick.AddListener(RefreshShop);
-        }
+        if (shopRefreshButton != null) shopRefreshButton.gameObject.SetActive(false);
         if (shopCloseButton != null)
         {
             shopCloseButton.onClick.RemoveAllListeners();
             shopCloseButton.onClick.AddListener(CloseShop);
         }
 
-        GenerateOffer();
         BuildShopButtons();
         shopPanel.SetActive(true);
-    }
-
-    // 从商店池随机取最多 3 个（去重）作为本次提供的 Buff
-    private void GenerateOffer()
-    {
-        shopOffer.Clear();
-        shopPurchased.Clear();
-        List<BuffDataSO> pool = new List<BuffDataSO>(shopPool);
-        while (shopOffer.Count < shopOfferSize && pool.Count > 0)
-        {
-            int idx = Random.Range(0, pool.Count);
-            shopOffer.Add(pool[idx]);
-            shopPurchased.Add(false);
-            pool.RemoveAt(idx);
-        }
     }
 
     private void BuildShopButtons()
     {
         foreach (Transform c in shopButtonContainer) Destroy(c.gameObject);
-        for (int i = 0; i < shopOffer.Count; i++)
+        for (int i = 0; i < shopPool.Count; i++)
         {
             GameObject btn = Instantiate(shopButtonPrefab, shopButtonContainer);
             var icon = btn.transform.Find("Icon");
-            if (icon != null && shopOffer[i].icon != null) icon.GetComponent<UnityEngine.UI.Image>().sprite = shopOffer[i].icon;
-            var nameT = btn.transform.Find("Name");
-            if (nameT != null) nameT.GetComponent<TextMeshProUGUI>().text = shopOffer[i].buffName;
-            var costT = btn.transform.Find("Cost");
-            if (costT != null) costT.GetComponent<TextMeshProUGUI>().text = shopCost.ToString();
+            if (icon != null && shopPool[i].icon != null)
+                icon.GetComponent<UnityEngine.UI.Image>().sprite = shopPool[i].icon;
             int index = i;
             var button = btn.GetComponent<UnityEngine.UI.Button>();
-            if (button != null)
-            {
-                button.onClick.AddListener(() => BuyBuff(index));
-                // 已购买的置灰不可再买
-                if (shopPurchased[i])
-                {
-                    button.interactable = false;
-                    var img = btn.GetComponent<UnityEngine.UI.Image>();
-                    if (img != null) img.color = new Color(1f, 1f, 1f, 0.4f);
-                }
-            }
+            if (button != null) button.onClick.AddListener(() => BuyBuff(index));
+            UpdateShopRow(btn, shopPool[i]);
         }
+    }
+
+    // 刷新单行的名称/层数/价格/可购买状态
+    private void UpdateShopRow(GameObject btn, BuffDataSO buff)
+    {
+        var nameT = btn.transform.Find("Name");
+        var costT = btn.transform.Find("Cost");
+        var button = btn.GetComponent<UnityEngine.UI.Button>();
+        var img = btn.GetComponent<UnityEngine.UI.Image>();
+
+        bool isHeal = buff.isInstantEffect;
+        BuffHandler bh = FindObjectOfType<BuffHandler>();
+        int stack = isHeal ? 0 : (bh != null ? bh.GetStack(buff.buffType) : 0);
+        int price = isHeal ? buff.shopCost : CostForLayer(stack + 1);
+
+        if (nameT != null)
+        {
+            var t = nameT.GetComponent<TextMeshProUGUI>();
+            if (t != null) t.text = buff.buffName + (isHeal ? "" : $"  ({stack}/{buff.maxStack})");
+        }
+        if (costT != null)
+        {
+            var t = costT.GetComponent<TextMeshProUGUI>();
+            if (t != null) t.text = (isHeal || stack < buff.maxStack) ? price.ToString() : "已满级";
+        }
+
+        int coins = player != null ? player.GetCoins() : 0;
+        bool canBuy = isHeal ? (coins >= price) : (stack < buff.maxStack && coins >= price);
+        if (button != null) button.interactable = canBuy;
+        if (img != null) img.color = canBuy ? Color.white : new Color(1f, 1f, 1f, 0.4f);
     }
 
     public void BuyBuff(int index)
     {
-        if (index < 0 || index >= shopOffer.Count) return;
-        if (shopPurchased[index]) return;   // 每个 Buff 只能购买一次（除非刷新后再次出现）
-        BuffDataSO buff = shopOffer[index];
+        if (index < 0 || index >= shopPool.Count) return;
+        BuffDataSO buff = shopPool[index];
         PlayerController pc = FindObjectOfType<PlayerController>();
         if (pc == null) return;
-        if (pc.GetCoins() < shopCost)
-        {
-            ShowBuffToast("金币不足，需要 " + shopCost + " 金币");
-            return;
-        }
-        pc.AddCoin(-shopCost);
         BuffHandler bh = pc.GetComponent<BuffHandler>();
-        if (bh != null)
-        {
-            if (buff.isInstantEffect) bh.ApplyBuff(buff);
-            else bh.ApplyBuff(buff, true);
-        }
-        shopPurchased[index] = true;
-        RefreshBuffIcons();
-        // 只置灰该按钮，不关闭商店，可继续购买其它 Buff
-        if (shopButtonContainer != null && index < shopButtonContainer.childCount)
-        {
-            var btn = shopButtonContainer.GetChild(index);
-            var button = btn != null ? btn.GetComponent<UnityEngine.UI.Button>() : null;
-            if (button != null) button.interactable = false;
-            var img = btn != null ? btn.GetComponent<UnityEngine.UI.Image>() : null;
-            if (img != null) img.color = new Color(1f, 1f, 1f, 0.4f);
-        }
-    }
+        if (bh == null) return;
 
-    public void RefreshShop()
-    {
-        if (shopRefreshUsed) return;
-        PlayerController pc = FindObjectOfType<PlayerController>();
-        if (pc == null) return;
-        if (pc.GetCoins() < shopRefreshCost)
+        bool isHeal = buff.isInstantEffect;
+        int stack = isHeal ? 0 : bh.GetStack(buff.buffType);
+        int price = isHeal ? buff.shopCost : CostForLayer(stack + 1);
+
+        if (!isHeal && stack >= buff.maxStack)
         {
-            ShowBuffToast("金币不足，刷新需要 " + shopRefreshCost + " 金币");
+            ShowBuffToast("已满级");
             return;
         }
-        pc.AddCoin(-shopRefreshCost);
-        shopRefreshUsed = true;   // 整局仅 1 次刷新
-        if (shopRefreshButton != null)
+        if (pc.GetCoins() < price)
         {
-            shopRefreshButton.interactable = false;
-            shopRefreshButton.gameObject.SetActive(false);
+            ShowBuffToast("金币不足，需要 " + price + " 金币");
+            return;
         }
-        // 重新随机 3 个；若某 Buff 再次出现在新列表里，本次可再购买一次
-        GenerateOffer();
-        BuildShopButtons();
+
+        pc.AddCoin(-price);
+        if (isHeal) bh.ApplyBuff(buff);        // 即时恢复
+        else bh.ApplyBuff(buff, true);         // 永久叠加一层
+
+        // 刷新所有行的显示与金币
+        for (int i = 0; i < shopPool.Count; i++)
+        {
+            var child = shopButtonContainer.GetChild(i);
+            if (child != null) UpdateShopRow(child.gameObject, shopPool[i]);
+        }
+        UpdateCoinUI();
     }
 
     public void CloseShop()
     {
         if (shopPanel != null) shopPanel.SetActive(false);
-        shopOffer.Clear();
-        shopPurchased.Clear();
     }
 
     public void RefreshBuffIcons()
@@ -863,23 +853,15 @@ public class UIManager : MonoBehaviour
         BuffHandler bh = FindObjectOfType<BuffHandler>();
         if (bh == null) return;
         foreach (Transform c in buffIconContainer) Destroy(c.gameObject);
-        foreach (BuffType t in System.Enum.GetValues(typeof(BuffType)))
+        var owned = bh.GetOwnedBuffs();
+        foreach (var o in owned)
         {
-            int n = bh.GetStack(t);
-            if (n <= 0) continue;
             GameObject icon = Instantiate(buffIconPrefab, buffIconContainer);
             var img = icon.transform.Find("Icon");
-            if (img != null) img.GetComponent<UnityEngine.UI.Image>().sprite = IconFor(t);
+            if (img != null && o.data.icon != null) img.GetComponent<UnityEngine.UI.Image>().sprite = o.data.icon;
             var cnt = icon.transform.Find("Count");
-            if (cnt != null) cnt.GetComponent<TextMeshProUGUI>().text = "x" + n;
+            if (cnt != null) cnt.GetComponent<TextMeshProUGUI>().text = "x" + o.stack;
         }
-    }
-
-    Sprite IconFor(BuffType t)
-    {
-        string name = t == BuffType.Heal ? "Heal" : (t == BuffType.SpeedUp ? "SpeedUp" : "PowerUp");
-        BuffDataSO data = Resources.Load<BuffDataSO>("Buffs/" + name);
-        return data != null ? data.icon : null;
     }
 
     IEnumerator ProcessBuffToastQueue()

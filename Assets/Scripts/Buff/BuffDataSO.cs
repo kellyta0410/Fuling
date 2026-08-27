@@ -4,9 +4,15 @@ using UnityEngine;
 
 public enum BuffType
 {
-    SpeedUp,
-    PowerUp,
-    Heal
+    Heal,
+    SpeedUp,            // 移速
+    PowerUp,            // 普通攻击力
+    AttackRangeUp,      // 普通攻击范围
+    SkillPowerUp,       // 技能攻击力
+    SkillRangeUp,       // 技能范围
+    SkillCooldownUp,    // 技能冷却速度（缩短冷却）
+    CoinMultUp,         // 金币掉落倍率
+    MaxHealthUp         // 血量上限
 }
 
 [CreateAssetMenu(fileName = "Buff_New", menuName = "Game/Buff Data")]
@@ -16,17 +22,26 @@ public class BuffDataSO : ScriptableObject
     public string buffName;
     public Sprite icon;
 
-    [Header("效果类型")]
-    public bool isInstantEffect; // true=即时（Heal），false=持续（SpeedUp/PowerUp）
+    [Header("效果分类")]
+    [Tooltip("勾选 = 即时恢复(Heal)；不勾 = 商店永久叠层")]
+    public bool isInstantEffect;
 
-    [Header("持续Buff参数（仅当 isInstantEffect = false 时有效）")]
+    [Header("数值参数")]
+    [Tooltip("恢复类：恢复的血量（半血/满血忽略）。永久类：每一层的幅度。")]
+    public float effectValue;
+
+    [Header("恢复 Heal（地牢商店即时购买）")]
+    public bool isFullRestore;
+    public bool isHalfRestore;
+    [Tooltip("恢复类在地牢商店里的价格")]
+    public int shopCost = 40;
+
+    [Header("商店永久叠层（地牢商店）")]
+    [Tooltip("最多可购买的层数（默认 5）")]
+    public int maxStack = 5;
+
+    [Header("地图限时拾取（普通模式，可选）")]
+    [Tooltip("作为地图掉落时的持续时长（秒）")]
     public float duration = 5f;
-    public int maxStack = 1;
-
-    [Header("Heal 专用参数")]
-    public bool isFullRestore;   // 是否回满血
-    public float effectValue;    // 回血量 / 速度增量 / 攻击增量
-
-    [Header("场景模型")]
     public GameObject pickupPrefab;
 }

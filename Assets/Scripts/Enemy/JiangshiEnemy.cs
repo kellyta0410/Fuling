@@ -131,15 +131,25 @@ public class JiangshiEnemy : EnemyAI
         UpdateLandSFX();
     }
 
+    // 任意攻击（普通攻击 / 技能攻击）命中并触发击退时，EnemyAI.AddKnockback 都会调用 OnKnockback，
+    // 这里统一中断冲撞（蓄力/冲刺）→ 回到冷却。两个攻击入口都走 AddKnockback，因此“两种攻击都能打断”。
+    public void InterruptCharge()
+    {
+        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
+        {
+            HideGroundIndicator();
+            SetSeparationSuspended(false);
+            LeaveChargeState();
+            blinkState = BlinkState.Cooldown;
+            stateTimer = 0f;
+        }
+    }
+
     // 被击中/击退会中断蓄力与冲撞（恢复分离推挤，回到冷却）
     protected override void OnKnockback()
     {
         base.OnKnockback();
-        SetSeparationSuspended(false);
-        HideGroundIndicator();
-        LeaveChargeState();
-        blinkState = BlinkState.Cooldown;
-        stateTimer = 0f;
+        InterruptCharge();
     }
 
     // 僵尸跳着走：检测视觉模型从"离地"落到"贴地"的下降沿，落地瞬间播放一次 moveSFX。

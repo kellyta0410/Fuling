@@ -71,6 +71,9 @@ public class DungeonManager : MonoBehaviour
     [Header("商店 Buff（拖入 BuffDataSO 资产；留空自动在 Resources 找）")]
     public List<BuffDataSO> shopBuffs = new List<BuffDataSO>();
 
+    [Header("商店物体预制体（在预制体上挂 ShopItem 组件即可；留空则运行时自动生成一个简单 Shop 物体）")]
+    public GameObject shopPrefab;
+
     [Header("玩家参考")]
     public Transform playerTarget;
 
@@ -952,9 +955,23 @@ public class DungeonManager : MonoBehaviour
 
         // 整间商店房只生成一个交互点：玩家靠近后点击，弹出随机 3 个 Buff 供选择购买
         Vector3 pos = roomRoot.transform.position + new Vector3(0, 1f, 0);
-        GameObject shop = new GameObject("Shop");
-        shop.transform.position = pos;
-        shop.AddComponent<ShopItem>().Setup(buffs, this, 100);
+        GameObject shop;
+        if (shopPrefab != null)
+        {
+            // 使用你提供的商店预制体，并在房间中央生成
+            shop = Instantiate(shopPrefab, pos, Quaternion.identity);
+            shop.name = "Shop";
+            ShopItem item = shop.GetComponent<ShopItem>();
+            if (item != null) item.Setup(buffs, this, 100);
+            else Debug.LogWarning("[Dungeon] shopPrefab 上没有 ShopItem 组件，请在其上挂 ShopItem.cs");
+        }
+        else
+        {
+            // 兜底：运行时自动创建简单的 Shop 物体
+            shop = new GameObject("Shop");
+            shop.transform.position = pos;
+            shop.AddComponent<ShopItem>().Setup(buffs, this, 100);
+        }
         if (showDebugLogs) Debug.Log("[Dungeon] 商店已生成（靠近后点击打开，随机提供 3 个 Buff）");
     }
 
@@ -985,6 +1002,9 @@ public class DungeonManager : MonoBehaviour
     void OnRoomCleared()
     {
         roomCleared = true;
+
+        // 地牢（无尽）模式：累计已通关房间数（用于结算显示）
+        if (GameManager.Instance != null) GameManager.Instance.AddRoomCleared();
 
         // 开启除入口方向以外的所有出口（入口门在玩家背后，保持关闭）
         // 这样保证每个房间至少有 3 个门可走，且不会出现“背后就是出口”的情况

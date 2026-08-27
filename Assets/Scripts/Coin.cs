@@ -73,7 +73,8 @@ public class Coin : MonoBehaviour
     {
         if (player != null)
         {
-            player.AddCoin(coinValue);
+            int gain = Mathf.RoundToInt(coinValue * player.GetCoinMultiplier());
+            player.AddCoin(gain);
         }
         // 走 AudioManager 播放池：复用预建的 AudioSource，不产生临时对象 GC；
         // 音量读 AudioManager（PlayerPrefs 兜底，不依赖 SettingsManager 在场）

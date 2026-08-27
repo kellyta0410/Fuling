@@ -191,6 +191,14 @@ public class PlayerController : MonoBehaviour
     // ==================== BUFF 系统支持 ====================
     private float baseSpeed;
     private int baseAttack;
+    private float baseRange;
+    private int baseSkillDamage;
+    private float baseSkillRange;
+    private float baseSkillCooldown;
+    private float baseMaxHealth;
+    private float coinMultiplier = 1f;
+
+    public float GetCoinMultiplier() => coinMultiplier;
 
     // ==================== 属性 ====================
     public float HealthPercent => currentHealth / maxHealth;
@@ -328,6 +336,11 @@ public class PlayerController : MonoBehaviour
             Debug.LogWarning("未找到角色数据，使用 Inspector 默认属性");
             baseSpeed = speed;
             baseAttack = attackDamage;
+            baseRange = attackRange;
+            baseSkillDamage = skillDamage;
+            baseSkillRange = skillRange;
+            baseSkillCooldown = skillCooldown;
+            baseMaxHealth = maxHealth;
             return;
         }
 
@@ -392,6 +405,13 @@ public class PlayerController : MonoBehaviour
         {
             skillDamage = Mathf.RoundToInt(currentCharacterData.baseAttack * 2f);
         }
+
+        // ⭐ 记录各项"基础值"，供商店永久Buff从 0 层开始叠加（每次重算都基于 base）
+        baseRange = attackRange;
+        baseSkillDamage = skillDamage;
+        baseSkillRange = skillRange;
+        baseSkillCooldown = skillCooldown;
+        baseMaxHealth = maxHealth;
 
         Debug.Log($"加载角色: {currentCharacterData.characterName}，攻击: {attackDamage}，范围: {attackRange}，速度: {speed}，冷却: {attackCooldown}");
     }
@@ -1604,6 +1624,54 @@ public class PlayerController : MonoBehaviour
     {
         if (baseAttack <= 0) baseAttack = attackDamage;
         attackDamage = baseAttack + additive;
+    }
+
+    // ===== 商店永久Buff叠层（total = 当前层数 × 每层幅度，从 base 重算）=====
+    public void ApplyAttackRangeAdditive(float total)
+    {
+        if (baseRange <= 0f) baseRange = attackRange;
+        attackRange = baseRange + total;
+    }
+
+    public void ApplySkillDamageAdditive(int total)
+    {
+        if (baseSkillDamage <= 0) baseSkillDamage = skillDamage;
+        skillDamage = baseSkillDamage + total;
+    }
+
+    public void ApplySkillRangeAdditive(float total)
+    {
+        if (baseSkillRange <= 0f) baseSkillRange = skillRange;
+        skillRange = baseSkillRange + total;
+    }
+
+    public void ApplySkillCooldownMultiplier(float mult)
+    {
+        if (baseSkillCooldown <= 0f) baseSkillCooldown = skillCooldown;
+        skillCooldown = Mathf.Max(0.5f, baseSkillCooldown * mult);
+    }
+
+    public void ApplyCoinMultiplier(float mult)
+    {
+        coinMultiplier = mult;
+    }
+
+    public void ApplyMaxHealthAdditive(float total)
+    {
+        if (baseMaxHealth <= 0f) baseMaxHealth = maxHealth;
+        float newMax = baseMaxHealth + total;
+        float delta = newMax - maxHealth;       // 买到更高血量上限时，同步把当前血量补上这部分
+        maxHealth = newMax;
+        currentHealth = Mathf.Min(currentHealth + Mathf.Max(0f, delta), maxHealth);
+        if (uiManager != null) uiManager.UpdateHealthUI();
+    }
+
+    // Heal 半血：恢复到最大生命的一半（不低于当前血量）
+    public void HealToHalf()
+    {
+        float half = maxHealth * 0.5f;
+        if (currentHealth < half) currentHealth = half;
+        if (uiManager != null) uiManager.UpdateHealthUI();
     }
 
     // ==================== 原有方法 ====================
