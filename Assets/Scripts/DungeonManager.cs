@@ -29,8 +29,7 @@ public class DungeonManager : MonoBehaviour
     public float wallThickness = 1f;
     public float doorWidth = 3f;
 
-    [Header("门动画参数名（需与门 Animator 的 Bool/Trigger 参数一致）")]
-    [SerializeField] private string doorOpenAnimParam = "DoorOpen";
+    // 门开关完全由代码驱动（已移除 Animator 依赖，避免烘焙旋转在旋转后的父墙下摆错方向）
 
     [Header("敌人生成")]
     public float spawnInterval = 1f;    // 每隔多少秒生成一只（每秒一只）
@@ -104,7 +103,12 @@ public class DungeonManager : MonoBehaviour
     private int levelIndex = 0;          // 战斗关序号（商店房不计入，用于顶部“第N关”显示）
     private DungeonRoomType currentType;
     private GameObject roomRoot;
+    private Vector2Int currentCoord = Vector2Int.zero;
+    private Dictionary<Vector2Int, GameObject> roomRoots = new Dictionary<Vector2Int, GameObject>();
+    private bool[] deadWallDirs = new bool[4]; // 本房间哪些方向是“死墙”（无暗房、永久封死、不可走）
     private List<GameObject> aliveEnemies = new List<GameObject>();
+    private Color _origAmbient = Color.white;
+    private UnityEngine.Rendering.AmbientMode _origAmbientMode = UnityEngine.Rendering.AmbientMode.Flat;
 
     private List<List<GameObject>> doorBlockers = new List<List<GameObject>>();
     private Dictionary<GameObject, float> swingAngleFor = new Dictionary<GameObject, float>();
@@ -165,8 +169,17 @@ public class DungeonManager : MonoBehaviour
             Camera.main.backgroundColor = Color.black;
         }
 
+        // 压低环境光为“平涂暗色”，让相邻未点亮的暗房保持黑暗（房间内仍由房间点光源照明）
+        _origAmbientMode = RenderSettings.ambientMode;
+        _origAmbient = RenderSettings.ambientLight;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.06f, 0.06f, 0.06f);
+
+        // 地牢专属 BGM：覆盖普通游戏内 BGM
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayDungeonBGM();
+
         if (showDebugLogs) Debug.Log("[Dungeon] 地牢系统启动，生成第 1 个房间");
-        StartCoroutine(GenerateRoomRoutine(Vector3.zero, -1));
+        StartCoroutine(TransitionToCoord(Vector2Int.zero, -1));
     }
 
     void ResolveEnemyPrefabs()
@@ -218,22 +231,31 @@ public class DungeonManager : MonoBehaviour
     // ============================================================
     //  房间生成
     // ============================================================
-    IEnumerator GenerateRoomRoutine(Vector3 center, int entryDir)
+    IEnumerator TransitionToCoord(Vector2Int newCoord, int entryDir)
     {
         advancing = true;
         this.entryDir = entryDir;
 
+        // 清掉所有已有房间（当前房 + 周围暗房），旧房即被销毁，之后封闭不可返回
+        foreach (var kv in roomRoots) if (kv.Value != null) Destroy(kv.Value);
+        roomRoots.Clear();
         if (roomRoot != null) Destroy(roomRoot);
+        roomRoot = null;
+        foreach (var kv in doorSwingRoutine) if (kv.Value != null) StopCoroutine(kv.Value);
+        // 敌人未挂到 roomRoot 下（parent=null），必须显式销毁，否则会残留在旧房间坐标
+        foreach (var e in aliveEnemies) if (e != null) Destroy(e);
         aliveEnemies.Clear();
         doorBlockers.Clear();
+        doorSwingRoutine.Clear();
         doorClosedRot.Clear();
         swingAngleFor.Clear();
         swingAxisFor.Clear();
         roomCleared = false;
+        doorOpen = new bool[4];
 
         roomIndex++;
 
-        // 每 5 个战斗关之后插入一个商店房（物理房号 6/12/18…，商店不计入“关”序号）
+        // 每 6 个物理房间插入一个商店房（商店不计入“关”序号）
         if (roomIndex % 6 == 0)
             currentType = DungeonRoomType.Shop;
         else
@@ -242,23 +264,59 @@ public class DungeonManager : MonoBehaviour
             levelIndex++;
         }
 
-        roomRoot = new GameObject("DungeonRoom_" + roomIndex + "_" + currentType);
-        roomRoot.transform.position = center;
+        // 随机把部分“非入口”方向做成死墙（无暗房、永久封死），但保证至少留一个可开门
+        deadWallDirs = new bool[4];
+        if (entryDir >= 0)
+        {
+            List<int> cand = new List<int>();
+            for (int i = 0; i < 4; i++) if (i != entryDir) cand.Add(i);
+            int maxDead = Mathf.Min(2, cand.Count - 1); // 至多封死 2 个，至少留 1 个可开门
+            int deadCount = Random.Range(0, maxDead + 1);
+            for (int k = 0; k < deadCount; k++)
+            {
+                int pick = Random.Range(0, cand.Count);
+                deadWallDirs[cand[pick]] = true;
+                cand.RemoveAt(pick);
+            }
+        }
 
-        BuildFloor(roomRoot.transform);
-        BuildWalls(roomRoot.transform);
-        PlaceDecorations(roomRoot.transform);
-        PlaceWallDecorations(roomRoot.transform);
-        PlaceRoomLight(roomRoot.transform);
+        // —— 建当前（活动）房间 ——
+        GameObject root = new GameObject("DungeonRoom_" + roomIndex + "_" + currentType);
+        roomRoot = root;
+        roomRoots[newCoord] = root;
 
-        // 先在本帧内把玩家传送进新房间的地面安全点，再 yield。
-        // 否则“旧房已销毁、玩家还站在门口（新房边缘）”的那几帧里可能悬空/掉落。
+        BuildFloor(root.transform);                    // 先建地板（会按地板尺寸确定 roomSize）
+        root.transform.position = CoordToWorld(newCoord); // 再按当前 roomSize 摆放房间中心
+        BuildWalls(root.transform, doorBlockers);
+        PlaceDecorations(root.transform);
+        PlaceWallDecorations(root.transform);
+        PlaceRoomLight(root.transform);
+
+        // 门：
+        // 战斗/普通房：入口（你进来的那扇）打开（可回头），其余门先关，清完怪后由 OnRoomCleared 全部打开；
+        // 商店房：入口（通过的门）关闭，其余门一开始即开。
+        for (int i = 0; i < 4; i++)
+        {
+            if (deadWallDirs[i]) continue; // 死墙保持封死，不参与开关
+            if (currentType == DungeonRoomType.Shop)
+            {
+                if (i == entryDir) { doorOpen[i] = false; SetDoorBlocker(i, true); }  // 关通过的门
+                else { doorOpen[i] = true; SetDoorBlocker(i, false); }                // 其余开着
+            }
+            else
+            {
+                if (i == entryDir) { doorOpen[i] = true; SetDoorBlocker(i, false); }  // 入口打开（可回头）
+                else { doorOpen[i] = false; SetDoorBlocker(i, true); }                // 其余先关，清怪后开
+            }
+        }
+
+        // 先在本帧内把玩家传送进新房间的地面安全点，再 yield，避免悬空/掉落
         if (playerTarget != null)
         {
-            Vector3 playerPos = center;
+            Vector3 playerPos = CoordToWorld(newCoord);
             if (entryDir >= 0)
                 playerPos += DirVec[entryDir] * (roomSize * 0.5f - entryInset);
-            playerPos.y = 0.1f;
+            playerPos.y = 0.5f;
             playerTarget.position = playerPos;
             CharacterController cc = playerTarget.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = true;
@@ -268,28 +326,49 @@ public class DungeonManager : MonoBehaviour
         BuildNavMesh();
         yield return null;
 
+        currentCoord = newCoord;
+
         if (uiManager != null) uiManager.SetRoomDisplay(levelIndex, currentType == DungeonRoomType.Shop);
         if (GameManager.Instance != null) GameManager.Instance.SetDungeonRoom(roomIndex);
 
-        if (showDebugLogs) Debug.Log("[Dungeon] 生成房间 #" + roomIndex + " 类型=" + currentType + " 中心=" + center);
+        if (showDebugLogs) Debug.Log("[Dungeon] 生成房间 #" + roomIndex + " 类型=" + currentType + " 坐标=" + newCoord);
 
-        // 左右门进入时，先等相机转到玩家背面再开始刷怪/商店；正前/正后进入则直接进入。
+        // 生成四周暗房（仍黑暗、无怪），仅朝向当前房的门打开，便于玩家走过去后再激活
+        for (int d = 0; d < 4; d++)
+        {
+            int back = (entryDir + 2) % 4;
+            if (entryDir >= 0 && d == back) continue; // 来时方向是已销毁的旧房，不建暗房
+            if (deadWallDirs[d]) continue;            // 死墙方向：只是一堵封死的墙，不建暗房
+            Vector2Int nc = newCoord + DirVec2D(d);
+            if (roomRoots.ContainsKey(nc)) continue;
+            BuildShell(nc, (d + 2) % 4);
+        }
+
+        // 左右门进入时，先等相机转到玩家背面再开始刷怪/商店；正前/正后进入则直接进入
         BeginRoomContent(entryDir);
 
-        if (currentType != DungeonRoomType.Shop)
-        {
-            for (int i = 0; i < 4; i++) { doorOpen[i] = false; SetDoorBlocker(i, true); }
-        }
-        else
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                if (i == entryDir) { doorOpen[i] = false; SetDoorBlocker(i, true); } // 不开启玩家背后的入口门
-                else { doorOpen[i] = true; SetDoorBlocker(i, false); }
-            }
-        }
-
         advancing = false;
+    }
+
+    // 暗房：相邻拼接的“背景房间”，保持黑暗、不刷怪、不装饰。
+    // 朝向当前房的这面墙不建——由当前房提供，两房之间只有一堵共用墙，门自然对齐。
+    void BuildShell(Vector2Int coord, int facingDir)
+    {
+        GameObject root = new GameObject("DarkRoom_" + coord.x + "_" + coord.y);
+        roomRoots[coord] = root;
+
+        var doors = new List<List<GameObject>>();
+        BuildFloor(root.transform);
+        root.transform.position = CoordToWorld(coord);
+        BuildWalls(root.transform, doors, facingDir); // 跳过朝向当前房的那面墙
+        PlaceWallDecorations(root.transform); // 周围暗房也预先摆好墙面装饰
+
+        // 暗房其余三面墙封闭（纯背景墙，被墙挡住看不见里面，呈黑暗）
+        for (int d = 0; d < 4; d++)
+        {
+            if (d == facingDir) continue;
+            ApplyDoorBlocker(doors, d, true);
+        }
     }
 
     // 进入房间后启动内容（刷怪/商店）。左右门(entryDir 为 1=东 / 3=西)进入时，
@@ -323,6 +402,8 @@ public class DungeonManager : MonoBehaviour
         while (timer < camAlignMaxWait)
         {
             timer += Time.deltaTime;
+            // 每帧重新把玩家朝向房内，确保第三人称相机随之转过来、相机前向对齐到进入方向
+            if (playerTarget != null) playerTarget.rotation = Quaternion.LookRotation(intoRoom);
             if (Camera.main != null)
             {
                 Vector3 fwd = Camera.main.transform.forward;
@@ -415,19 +496,32 @@ public class DungeonManager : MonoBehaviour
             bc.size = new Vector3(roomSize, 0.1f, roomSize);
             bc.isTrigger = false;
         }
+
+        // 永远保留一块与房间等大的实心地面碰撞体（挂在 roomRoot 下，独立于地板预制体），
+        // 确保玩家/敌人无论地板预制体碰撞体是否正常，都绝不穿透坠落。
+        GameObject groundCol = new GameObject("GroundCollider");
+        groundCol.transform.SetParent(parent);
+        groundCol.transform.localPosition = new Vector3(0f, -0.05f, 0f);
+        BoxCollider gbc = groundCol.AddComponent<BoxCollider>();
+        gbc.size = new Vector3(roomSize, 0.1f, roomSize);
+        gbc.center = Vector3.zero;
+        gbc.isTrigger = false;
     }
 
-    void BuildWalls(Transform parent)
+    private Vector2Int DirVec2D(int dir) => new Vector2Int((int)Mathf.Round(DirVec[dir].x), (int)Mathf.Round(DirVec[dir].z));
+    private Vector3 CoordToWorld(Vector2Int c) => new Vector3(c.x * roomSize, 0f, c.y * roomSize);
+
+    void BuildWalls(Transform parent, List<List<GameObject>> doorOut, int skipDir = -1)
     {
         float half = roomSize * 0.5f;
         // 顺序必须严格是 N(0) / E(1) / S(2) / W(3)，与 DirVec、doorOpen 的索引一致
-        BuildWallWithDoor(parent, new Vector3(0, 0, half), Quaternion.identity, 0);
-        BuildWallWithDoor(parent, new Vector3(half, 0, 0), Quaternion.Euler(0, 90, 0), 1);
-        BuildWallWithDoor(parent, new Vector3(0, 0, -half), Quaternion.Euler(0, 180, 0), 2);
-        BuildWallWithDoor(parent, new Vector3(-half, 0, 0), Quaternion.Euler(0, -90, 0), 3);
+        if (skipDir != 0) BuildWallWithDoor(parent, new Vector3(0, 0, half), Quaternion.identity, 0, doorOut);
+        if (skipDir != 1) BuildWallWithDoor(parent, new Vector3(half, 0, 0), Quaternion.Euler(0, 90, 0), 1, doorOut);
+        if (skipDir != 2) BuildWallWithDoor(parent, new Vector3(0, 0, -half), Quaternion.Euler(0, 180, 0), 2, doorOut);
+        if (skipDir != 3) BuildWallWithDoor(parent, new Vector3(-half, 0, 0), Quaternion.Euler(0, -90, 0), 3, doorOut);
     }
 
-    void BuildWallWithDoor(Transform parent, Vector3 localPos, Quaternion localRot, int dirIndex)
+    void BuildWallWithDoor(Transform parent, Vector3 localPos, Quaternion localRot, int dirIndex, List<List<GameObject>> doorOut)
     {
         GameObject wallParent = new GameObject("Wall_" + dirIndex);
         wallParent.transform.SetParent(parent);
@@ -607,30 +701,25 @@ public class DungeonManager : MonoBehaviour
                 swingAxisFor[doorObj] = doorSwingAxis;
                 if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到 DoorMarker，已用兜底方块碰撞体（请在门的子物体上挂 DoorMarker）");
             }
-            doorBlockers.Add(leaves);
+            while (doorOut.Count <= dirIndex) doorOut.Add(null);
+            doorOut[dirIndex] = leaves;
             return;
         }
 
 
     }
 
-    void SetDoorBlocker(int dirIndex, bool block)
+    // 通用的门开/关：给定一组门的叶子列表（某房间/暗房的某方向），绕门“本地轴”旋转并开关碰撞/导航。
+    void ApplyDoorBlocker(List<List<GameObject>> blocks, int dirIndex, bool block)
     {
-        if (dirIndex < 0 || dirIndex >= doorBlockers.Count) return;
-        foreach (var b in doorBlockers[dirIndex])
+        if (dirIndex < 0 || dirIndex >= blocks.Count) return;
+        var list = blocks[dirIndex];
+        if (list == null) return;
+        foreach (var b in list)
         {
             if (b == null) continue;
 
-            // 代码驱动开门：禁用门自带的 DoorOpen 动画（其烘焙旋转在旋转后的父墙下会摆错方向），
-            // 改为协程绕门“本地轴”旋转（轴/角度每扇门叶可独立设置，支持双开门左右相反）。
-            foreach (var anim in b.GetComponentsInChildren<Animator>())
-            {
-                foreach (var p in anim.parameters)
-                {
-                    if (p.name == doorOpenAnimParam) { anim.enabled = false; break; }
-                }
-            }
-
+            // 代码驱动开门：协程绕门“本地轴”旋转（轴/角度每扇门叶可独立设置，支持双开门左右相反）。
             if (!doorClosedRot.ContainsKey(b))
                 doorClosedRot[b] = b.transform.localRotation;
 
@@ -649,6 +738,11 @@ public class DungeonManager : MonoBehaviour
             foreach (var obs in b.GetComponentsInChildren<NavMeshObstacle>())
                 obs.enabled = block;
         }
+    }
+
+    void SetDoorBlocker(int dirIndex, bool block)
+    {
+        ApplyDoorBlocker(doorBlockers, dirIndex, block);
     }
 
     IEnumerator DoorSwing(Transform t, Quaternion from, Quaternion to)
@@ -777,7 +871,7 @@ public class DungeonManager : MonoBehaviour
         float off = half - wallThickness - wallDecorationInset; // 距房间中心到墙面的内退位置
 
         // 每面墙都带门（门在墙正中 along≈0），避开门洞区域，避免装饰压在门前
-        float doorClear = doorWidth * 0.5f + wallThickness + 0.4f;
+        float doorClear = doorWidth * 0.5f + wallThickness + 1.5f;
         // 装饰中心目标高度：至少为墙高的 0.4 倍，避免贴地/过低
         float targetCenterY = parent.position.y + Mathf.Max(wallDecorationHeight, wallHeight * 0.4f);
 
@@ -826,20 +920,27 @@ public class DungeonManager : MonoBehaviour
         lightObj.name = "RoomLight";
         // 房间正中、略高于墙顶，向下照亮全房；随 roomRoot 销毁而一起销毁
         lightObj.transform.localPosition = new Vector3(0, wallHeight + roomLightHeightOffset, 0);
+        // 限制灯光范围（不越过共用墙漏到隔壁暗房），保证相邻房间保持黑暗
+        Light lt = lightObj.GetComponent<Light>();
+        if (lt != null) lt.range = Mathf.Min(lt.range, roomSize * 0.6f);
     }
 
     void BuildNavMesh()
     {
-        if (navMeshSurface == null) EnsureNavMeshSurface();
-        if (navMeshSurface == null || roomRoot == null) return;
-        // 只烘焙当前房间子树，避免敌人走到旧世界的大地面上
-        navMeshSurface.enabled = true;
-        navMeshSurface.collectObjects = CollectObjects.All;
-        // 只烤“Ground”层的网格（即地板），避免把场景里其它模型（如遗留的 Plane.003）一并卷进 NavMesh 烘焙
+        if (roomRoot == null) return;
+        // 每次都销毁旧 NavMeshSurface 并新建，避免跨房间残留 / 引用失效导致后续房间 NavMesh 不烘焙
+        if (navMeshSurface != null)
+        {
+            navMeshSurface.RemoveData();
+            Destroy(navMeshSurface.gameObject);
+            navMeshSurface = null;
+        }
         int groundLay = LayerMask.NameToLayer("Ground");
+        navMeshSurface = new GameObject("NavMeshSurface (Dungeon)").AddComponent<NavMeshSurface>();
         navMeshSurface.layerMask = (groundLay != -1) ? (1 << groundLay) : ~0;
+        navMeshSurface.collectObjects = CollectObjects.All;
+        navMeshSurface.defaultArea = 0;
         navMeshSurface.transform.SetParent(roomRoot.transform, false);
-        navMeshSurface.RemoveData(); // 清掉上一间房残留的 NavMeshData，避免多房间 NavMesh 叠加导致寻路错乱
         if (showDebugLogs) Debug.Log("[Dungeon] 烘焙 NavMesh…");
         navMeshSurface.BuildNavMesh();
     }
@@ -1063,11 +1164,11 @@ public class DungeonManager : MonoBehaviour
         // 地牢（无尽）模式：累计已通关房间数（用于结算显示）
         if (GameManager.Instance != null) GameManager.Instance.AddRoomCleared();
 
-        // 开启除入口方向以外的所有出口（入口门在玩家背后，保持关闭）
-        // 这样保证每个房间至少有 3 个门可走，且不会出现“背后就是出口”的情况
+        // 开启除入口方向（战斗房入口本就开着、可回头）、死墙方向以外的所有出口；死墙永久封死
         for (int i = 0; i < 4; i++)
         {
             if (i == entryDir) continue;
+            if (deadWallDirs[i]) continue; // 死墙清场也不开
             doorOpen[i] = true;
             SetDoorBlocker(i, false);
         }
@@ -1097,17 +1198,22 @@ public class DungeonManager : MonoBehaviour
     {
         if (advancing) return;
         if (showDebugLogs) Debug.Log("[Dungeon] 玩家从 " + dir + " 方向前往新房间");
-        // 新房间与当前房间“相邻拼接”（中心相距正好 roomSize），两间房的边线重合，
-        // 门口不再留 2m 空隙，玩家踏出门即落在下一间地板，不会掉进 void。
-        Vector3 newCenter = roomRoot.transform.position + DirVec[dir] * roomSize;
+        // 新房间按“网格坐标”相邻拼接（中心相距正好 roomSize），踏出门即落在下一间地板，不会掉进 void。
+        Vector2Int newCoord = currentCoord + DirVec2D(dir);
         int entryDir = (dir + 2) % 4; // 从对面墙进入新房间
-        StartCoroutine(GenerateRoomRoutine(newCenter, entryDir));
+        StartCoroutine(TransitionToCoord(newCoord, entryDir));
     }
 
     public int GetRoomIndex() => roomIndex;
 
     void OnDestroy()
     {
+        // 还原环境光设置
+        RenderSettings.ambientMode = _origAmbientMode;
+        RenderSettings.ambientLight = _origAmbient;
+
+        foreach (var kv in roomRoots) if (kv.Value != null) Destroy(kv.Value);
+        roomRoots.Clear();
         if (roomRoot != null) Destroy(roomRoot);
     }
 }

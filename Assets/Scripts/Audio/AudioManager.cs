@@ -28,6 +28,8 @@ public class AudioManager : MonoBehaviour
     public AudioClip menuBGM;
     [Tooltip("Easy / Medium 游戏内共用一段 BGM")]
     public AudioClip gameplayBGM;
+    [Tooltip("地牢模式专属 BGM（进入地牢时覆盖游戏内 BGM）")]
+    public AudioClip dungeonBGM;
 
     [Header("SFX 播放池")]
     [Tooltip("预创建多少个 AudioSource 循环复用，避免每次拾取/播放都 new 临时对象")]
@@ -192,6 +194,13 @@ public class AudioManager : MonoBehaviour
         bgmSource.clip = clip;
         bgmSource.volume = 1f;
         bgmSource.Play();
+    }
+
+    // 地牢模式专属 BGM：进入地牢时覆盖普通游戏内 BGM
+    public void PlayDungeonBGM()
+    {
+        if (dungeonBGM == null) dungeonBGM = Resources.Load<AudioClip>("Audio/BGM DUNGEON");
+        if (dungeonBGM != null) PlayBGM(dungeonBGM);
     }
 
     public void StopBGM()

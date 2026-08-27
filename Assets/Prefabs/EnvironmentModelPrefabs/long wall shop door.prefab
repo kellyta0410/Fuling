@@ -11,17 +11,17 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.9674437
+      value: 1.9379138
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.44439518
+      value: -0.5938741
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 2.4475243
+      value: 2.3635185
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
@@ -80,11 +80,11 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 4234097522356925623}
+      addedObject: {fileID: 3748285267031046772}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8b177b7a4feda334b9f6cf9a5091d3fd,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3748285267031046772}
+      addedObject: {fileID: 2374430463161170882}
   m_SourcePrefab: {fileID: 100100000, guid: 8b177b7a4feda334b9f6cf9a5091d3fd, type: 3}
 --- !u!4 &105139980714585469 stripped
 Transform:
@@ -98,7 +98,23 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 504175817535933078}
   m_PrefabAsset: {fileID: 0}
---- !u!65 &4234097522356925623
+--- !u!114 &3748285267031046772
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 738125168037033927}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8345c293629f13a44adbcec03c25c2a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  swingTarget: {fileID: 105139980714585469}
+  overrideSwing: 1
+  swingAngle: -90
+  swingAxis: {x: 0, y: 0, z: 1}
+--- !u!65 &2374430463161170882
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -117,24 +133,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.9503515, y: 0.17780028, z: 4.7279334}
-  m_Center: {x: -1.0026187, y: -0.1445072, z: -0.08355784}
---- !u!114 &3748285267031046772
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 738125168037033927}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8345c293629f13a44adbcec03c25c2a0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  swingTarget: {fileID: 105139980714585469}
-  overrideSwing: 1
-  swingAngle: -90
-  swingAxis: {x: 0, y: 0, z: 1}
+  m_Size: {x: 1.9503516, y: 0.17780046, z: 4.7279334}
+  m_Center: {x: -0.9730888, y: 0.0049717086, z: 0.00044798845}
 --- !u!1001 &1675791169718031728
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -314,17 +314,17 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -2.0063183
+      value: -2.003247
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.8269751
+      value: -0.6041529
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 2.5239189
+      value: 2.4614475
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
@@ -383,11 +383,11 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1380209056914725385}
+      addedObject: {fileID: 2235937480357905486}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 58ba414f707950a4297f759fa7856f85,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2235937480357905486}
+      addedObject: {fileID: 4346168678353876296}
   m_SourcePrefab: {fileID: 100100000, guid: 58ba414f707950a4297f759fa7856f85, type: 3}
 --- !u!1 &4974496179600180564 stripped
 GameObject:
@@ -395,7 +395,23 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 5316952611190372357}
   m_PrefabAsset: {fileID: 0}
---- !u!65 &1380209056914725385
+--- !u!114 &2235937480357905486
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4974496179600180564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8345c293629f13a44adbcec03c25c2a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  swingTarget: {fileID: 5639392148545282030}
+  overrideSwing: 1
+  swingAngle: 90
+  swingAxis: {x: 0, y: 0, z: 1}
+--- !u!65 &4346168678353876296
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -414,24 +430,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.9503516, y: 0.17780028, z: 4.7279334}
-  m_Center: {x: 0.9814947, y: 0.23807451, z: -0.15995215}
---- !u!114 &2235937480357905486
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4974496179600180564}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8345c293629f13a44adbcec03c25c2a0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  swingTarget: {fileID: 5639392148545282030}
-  overrideSwing: 1
-  swingAngle: 90
-  swingAxis: {x: 0, y: 0, z: 1}
+  m_Size: {x: 1.950353, y: 0.17781506, z: 4.7279334}
+  m_Center: {x: 0.97518677, y: 0.015296401, z: -0.097481}
 --- !u!4 &5639392148545282030 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 58ba414f707950a4297f759fa7856f85,
