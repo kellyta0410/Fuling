@@ -44,13 +44,12 @@ public class SceneSelectionManager : MonoBehaviour
     public TextMeshProUGUI normalCoinsText;
     public TextMeshProUGUI normalKillsText;
     public TextMeshProUGUI normalTimeText;
-    public TextMeshProUGUI infiniteCoinsText;
     public TextMeshProUGUI infiniteKillsText;
     public TextMeshProUGUI infiniteTimeText;
+    [Tooltip("无限模式的金币整行（含标签），在代码里隐藏")]
+    public GameObject infiniteCoinsRow;
     [Tooltip("记录翻页容器：每个子物体是一页，翻页时逐个切换显示（内容你自己加）")]
     public RectTransform recordsPagesContainer;
-    [Tooltip("记录页码文本（可选），例如 “1 / 3”")]
-    public TextMeshProUGUI recordsPageText;
     [Tooltip("上一页按钮：第一页时自动隐藏")]
     public Button recordsPrevButton;
     [Tooltip("下一页按钮：最后一页时自动隐藏")]
@@ -63,12 +62,6 @@ public class SceneSelectionManager : MonoBehaviour
     [Header("===== 角色详情面板（右侧）=====")]
     public CharacterDetailManager characterDetailManager;
 
-    [Header("===== 解锁确认面板 =====")]
-    public GameObject unlockConfirmPanel;
-    public TextMeshProUGUI unlockConfirmText;
-    public Button unlockConfirmButton;
-    public Button unlockCancelButton;
-
     [Header("===== 提示气泡（可选）=====")]
     [Tooltip("显示“未开放/金币不足”等提示的文本，留空则仅打印日志")]
     public TextMeshProUGUI hintToastText;
@@ -76,7 +69,6 @@ public class SceneSelectionManager : MonoBehaviour
     public GameObject hintToastPanel;
     private Coroutine hintToastCoroutine;
 
-    private CharacterData pendingUnlockCharacter;
     private int currentSelectedCharacterIndex = -1;
 
     void Start()
@@ -91,15 +83,6 @@ public class SceneSelectionManager : MonoBehaviour
         }
 
         gameDataManager.OnDataChanged += RefreshAllUI;
-
-        if (unlockConfirmPanel != null)
-            unlockConfirmPanel.SetActive(false);
-
-        if (unlockConfirmButton != null)
-            unlockConfirmButton.onClick.AddListener(ConfirmUnlock);
-
-        if (unlockCancelButton != null)
-            unlockCancelButton.onClick.AddListener(CancelUnlock);
 
         BindCharacterButtons();
 
@@ -260,18 +243,21 @@ public class SceneSelectionManager : MonoBehaviour
 
         UpdateRecordUI("简单", easyCoinsText, easyKillsText, easyTimeText);
         UpdateRecordUI("普通", normalCoinsText, normalKillsText, normalTimeText);
-        // 无限模式：不显示金币，用“通关数量”代替计时
-        UpdateRecordUI("无限", infiniteCoinsText, infiniteKillsText, infiniteTimeText,
-            showCoins: false, useRoomsInsteadOfTime: true);
+        // 无限模式：不显示金币（coin text 已移除），用“通关数量”代替计时
+        UpdateRecordUI("无限", null, infiniteKillsText, infiniteTimeText,
+            useRoomsInsteadOfTime: true);
+
+        // 直接把无限模式的金币整行（含标签）隐藏
+        if (infiniteCoinsRow != null) infiniteCoinsRow.SetActive(false);
     }
 
     void UpdateRecordUI(string difficultyName, TextMeshProUGUI coinsText, TextMeshProUGUI killsText, TextMeshProUGUI timeText,
-        bool showCoins = true, bool useRoomsInsteadOfTime = false)
+        bool useRoomsInsteadOfTime = false)
     {
         GameRecord record = gameDataManager.GetRecord(difficultyName);
 
         if (coinsText != null)
-            coinsText.text = (showCoins && record.HasRecord) ? record.bestCoins.ToString() : "";
+            coinsText.text = record.HasRecord ? record.bestCoins.ToString() : "--";
 
         if (killsText != null)
             killsText.text = record.HasRecord ? record.bestKills.ToString() : "--";
@@ -485,9 +471,6 @@ public class SceneSelectionManager : MonoBehaviour
         // 第一页隐藏“上一页”，最后一页隐藏“下一页”
         if (recordsPrevButton != null) recordsPrevButton.gameObject.SetActive(currentRecordsPage > 0);
         if (recordsNextButton != null) recordsNextButton.gameObject.SetActive(currentRecordsPage < total - 1);
-
-        if (recordsPageText != null)
-            recordsPageText.text = (currentRecordsPage + 1) + " / " + total;
     }
 
     // ==================== 返回主菜单 ====================
@@ -614,45 +597,7 @@ public class SceneSelectionManager : MonoBehaviour
             return;
         }
 
-        pendingUnlockCharacter = character;
-        //ShowUnlockConfirmPanel(character);
-    }
-
-    // ==================== 解锁确认面板 ====================
-
-    //void ShowUnlockConfirmPanel(CharacterData character)
-    //{
-        //if (unlockConfirmPanel == null)
-        //{
-            //UnlockCharacterDirect(character);
-            //return;
-        //}
-
-        //if (unlockConfirmText != null)
-        //{
-            //unlockConfirmText.text = $"是否花费 {character.unlockCost} 金币解锁\n<color=#FFD700>{character.characterName}</color>？";
-        //}
-
-        //unlockConfirmPanel.SetActive(true);
-    //}
-
-    void ConfirmUnlock()
-    {
-        if (pendingUnlockCharacter == null) return;
-
-        UnlockCharacterDirect(pendingUnlockCharacter);
-        pendingUnlockCharacter = null;
-
-        if (unlockConfirmPanel != null)
-            unlockConfirmPanel.SetActive(false);
-    }
-
-    void CancelUnlock()
-    {
-        pendingUnlockCharacter = null;
-
-        if (unlockConfirmPanel != null)
-            unlockConfirmPanel.SetActive(false);
+        UnlockCharacterDirect(character);
     }
 
     void UnlockCharacterDirect(CharacterData character)
