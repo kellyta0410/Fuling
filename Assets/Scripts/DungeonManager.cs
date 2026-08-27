@@ -41,6 +41,8 @@ public class DungeonManager : MonoBehaviour
     public int decorationMin = 3;
     public int decorationMax = 8;
     public float decorationClearRadius = 3f;
+    public float decorationWallMargin = 0.8f;  // 装饰与墙体之间额外留边，避免插进墙里
+    public float decorationDoorMargin = 1.2f;  // 装饰与门洞之间额外留边，避免卡住门/通行
 
     [Header("玩家进入房间的落点偏移（房间中心朝入口方向退后）")]
     public float entryInset = 4f;
@@ -104,11 +106,15 @@ public class DungeonManager : MonoBehaviour
     private GameObject roomRoot;
     private List<GameObject> aliveEnemies = new List<GameObject>();
 
-    private List<GameObject> doorBlockers = new List<GameObject>();
+    private List<List<GameObject>> doorBlockers = new List<List<GameObject>>();
+    private Dictionary<GameObject, float> swingAngleFor = new Dictionary<GameObject, float>();
+    private Dictionary<GameObject, Vector3> swingAxisFor = new Dictionary<GameObject, Vector3>();
     private Dictionary<GameObject, Coroutine> doorSwingRoutine = new Dictionary<GameObject, Coroutine>();
-    private Dictionary<GameObject, float> doorClosedAngle = new Dictionary<GameObject, float>();
+    private Dictionary<GameObject, Quaternion> doorClosedRot = new Dictionary<GameObject, Quaternion>();
     [Tooltip("代码驱动开门：门绕本地 Y 轴旋转的角度（父墙只绕 Y 旋转，本地 Y=世界 Y，四种墙方向一致）")]
     public float doorSwingAngle = 90f;
+    [Tooltip("门旋转绕的轴（门的本地空间）。普通竖直门绕 Y 轴；若模型朝向不同（如导入后铰链在 Z）则设为 Z。")]
+    public Vector3 doorSwingAxis = Vector3.forward;
     private bool[] doorOpen = new bool[4];
     private bool roomCleared = false;
     private bool spawningDone = false;
@@ -220,6 +226,9 @@ public class DungeonManager : MonoBehaviour
         if (roomRoot != null) Destroy(roomRoot);
         aliveEnemies.Clear();
         doorBlockers.Clear();
+        doorClosedRot.Clear();
+        swingAngleFor.Clear();
+        swingAxisFor.Clear();
         roomCleared = false;
 
         roomIndex++;
@@ -388,6 +397,24 @@ public class DungeonManager : MonoBehaviour
         }
         int groundLayer = LayerMask.NameToLayer("Ground");
         if (groundLayer != -1) floor.layer = groundLayer;
+
+        // 保险：确保地板有“实心”碰撞体，否则 CharacterController 会穿透地板掉进虚空
+        // （表现为“第2关直接坠落”）。对每个带网格的子物体：无碰撞体则就地补 MeshCollider，
+        // 已有碰撞体则强制非 Trigger。MeshCollider 必须加在“带 MeshFilter 的那个物体”上，否则碰撞体偏移。
+        foreach (var mf in floor.GetComponentsInChildren<MeshFilter>())
+        {
+            if (mf.sharedMesh == null) continue;
+            Collider col = mf.GetComponent<Collider>();
+            if (col == null) mf.gameObject.AddComponent<MeshCollider>();
+            else col.isTrigger = false;
+        }
+        // 兜底：地板整体没有任何网格时，给根物体补一个 BoxCollider 占位，避免完全无碰撞
+        if (floor.GetComponentsInChildren<MeshFilter>().Length == 0)
+        {
+            BoxCollider bc = floor.AddComponent<BoxCollider>();
+            bc.size = new Vector3(roomSize, 0.1f, roomSize);
+            bc.isTrigger = false;
+        }
     }
 
     void BuildWalls(Transform parent)
@@ -473,34 +500,46 @@ public class DungeonManager : MonoBehaviour
             if (addedObs && showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体部分网格缺少 NavMeshObstacle，已按网格自动补（建议预制体里给墙/门加 NavMeshObstacle）");
             // 用预制体里自带的“门”物体（带 DoorMarker 组件、自带 BoxCollider）来开关；不再单独造 DoorBlocker。
             // 关门 = 碰撞体在门洞处挡玩家；清场开门 = 播动画把门移开门洞，碰撞体随之离开，玩家即可穿过。
-            DoorMarker dm = wall.GetComponentInChildren<DoorMarker>();
-            // 自动量门洞宽度：门叶碰撞体在关门姿态下的包围盒跨度 ≈ 门洞宽，
+            // 支持单开门与双开门：预制体里可挂多个带 DoorMarker 的门叶，每叶独立旋转
+            DoorMarker[] dms = wall.GetComponentsInChildren<DoorMarker>();
+            List<GameObject> leaves = new List<GameObject>();
+
+            // 自动量门洞宽度：所有门叶碰撞体包围盒合并后的跨度 ≈ 门洞宽，
             // 这样每间房的 doorWidth 跟着各自带门墙预制体走，无需手填（仅作兜底/装饰避让用）。
-            if (dm != null)
+            if (dms.Length > 0)
             {
-                var dcols = dm.GetComponentsInChildren<Collider>();
-                if (dcols.Length > 0)
+                Bounds db = new Bounds();
+                bool firstBounds = true;
+                bool forcedSolid = false;
+                foreach (var dm in dms)
                 {
-                    Bounds db = dcols[0].bounds;
-                    for (int i = 1; i < dcols.Length; i++) db.Encapsulate(dcols[i].bounds);
+                    var dcols = dm.GetComponentsInChildren<Collider>();
+                    bool leafSolid = false;
+                    foreach (var c in dcols)
+                    {
+                        if (!c.isTrigger) leafSolid = true;
+                        if (firstBounds) { db = c.bounds; firstBounds = false; }
+                        else db.Encapsulate(c.bounds);
+                    }
+                    if (dcols.Length == 0)
+                    {
+                        var bc = dm.gameObject.AddComponent<BoxCollider>();
+                        bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                        bc.isTrigger = false;
+                        forcedSolid = true;
+                    }
+                    else if (!leafSolid)
+                    {
+                        foreach (var c in dcols) c.isTrigger = false;
+                        forcedSolid = true;
+                    }
+                }
+                if (!firstBounds)
+                {
                     float measured = Mathf.Max(db.size.x, db.size.z); // 墙旋转0/90/180/270，取世界X或Z较大者
                     if (measured > 0.1f) doorWidth = measured;
                 }
-                // 门碰撞体必须是实心才能挡玩家：若全是 Trigger 自动改为实心；若一个都没有则补一个实心方块
-                bool hasSolid = false;
-                foreach (var c in dcols) if (!c.isTrigger) { hasSolid = true; break; }
-                if (dcols.Length == 0)
-                {
-                    var bc = dm.gameObject.AddComponent<BoxCollider>();
-                    bc.size = new Vector3(doorWidth, wallHeight, wallThickness);
-                    bc.isTrigger = false;
-                    if (showDebugLogs) Debug.LogWarning("[Dungeon] 门未挂任何碰撞体，已自动补实心 BoxCollider（建议在门预制体上直接加）");
-                }
-                else if (!hasSolid)
-                {
-                    foreach (var c in dcols) c.isTrigger = false;
-                    if (showDebugLogs) Debug.LogWarning("[Dungeon] 门的碰撞体是 Trigger，已自动改为实心(Is Trigger=false)以挡玩家；若需要触发检测请另加碰撞体");
-                }
+                if (forcedSolid && showDebugLogs) Debug.LogWarning("[Dungeon] 门的碰撞体已是实心(Is Trigger=false)以挡玩家；若需要触发检测请另加碰撞体");
             }
 
             // 让墙严格对齐地板边缘：
@@ -537,11 +576,22 @@ public class DungeonManager : MonoBehaviour
                 }
             }
 
-            GameObject doorObj = dm != null ? dm.gameObject : null;
-            if (doorObj == null)
+            if (dms.Length > 0)
+            {
+                foreach (var dm in dms)
+                {
+                    GameObject doorObj = (dm.swingTarget != null) ? dm.swingTarget.gameObject : dm.gameObject;
+                    if (doorObj == null) continue;
+                    leaves.Add(doorObj);
+                    doorClosedRot[doorObj] = doorObj.transform.localRotation;
+                    swingAngleFor[doorObj] = dm.overrideSwing ? dm.swingAngle : doorSwingAngle;
+                    swingAxisFor[doorObj] = dm.overrideSwing ? dm.swingAxis : doorSwingAxis;
+                }
+            }
+            else
             {
                 // 兜底：预制体里没挂 DoorMarker 时，才补一个方块碰撞体挡住（正常不应走到这）
-                doorObj = new GameObject("DoorColliderFallback");
+                GameObject doorObj = new GameObject("DoorColliderFallback");
                 doorObj.transform.SetParent(wallParent.transform);
                 doorObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
                 var bcFallback = doorObj.AddComponent<BoxCollider>();
@@ -551,10 +601,13 @@ public class DungeonManager : MonoBehaviour
                 noFallback.carving = true;
                 noFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
                 noFallback.center = Vector3.zero;
+                leaves.Add(doorObj);
+                doorClosedRot[doorObj] = doorObj.transform.localRotation;
+                swingAngleFor[doorObj] = doorSwingAngle;
+                swingAxisFor[doorObj] = doorSwingAxis;
                 if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体未找到 DoorMarker，已用兜底方块碰撞体（请在门的子物体上挂 DoorMarker）");
             }
-            doorBlockers.Add(doorObj);
-            doorClosedAngle[doorObj] = doorObj.transform.localEulerAngles.y;
+            doorBlockers.Add(leaves);
             return;
         }
 
@@ -564,48 +617,52 @@ public class DungeonManager : MonoBehaviour
     void SetDoorBlocker(int dirIndex, bool block)
     {
         if (dirIndex < 0 || dirIndex >= doorBlockers.Count) return;
-        GameObject b = doorBlockers[dirIndex];
-        if (b == null) return;
-
-        // 代码驱动开门：禁用门自带的 DoorOpen 动画（其烘焙旋转在旋转后的父墙下会摆错方向），
-        // 改为协程绕门“本地 Y 轴”旋转——父墙只绕 Y 旋转，故本地 Y = 世界 Y，四种墙方向表现一致。
-        foreach (var anim in b.GetComponentsInChildren<Animator>())
+        foreach (var b in doorBlockers[dirIndex])
         {
-            foreach (var p in anim.parameters)
+            if (b == null) continue;
+
+            // 代码驱动开门：禁用门自带的 DoorOpen 动画（其烘焙旋转在旋转后的父墙下会摆错方向），
+            // 改为协程绕门“本地轴”旋转（轴/角度每扇门叶可独立设置，支持双开门左右相反）。
+            foreach (var anim in b.GetComponentsInChildren<Animator>())
             {
-                if (p.name == doorOpenAnimParam) { anim.enabled = false; break; }
+                foreach (var p in anim.parameters)
+                {
+                    if (p.name == doorOpenAnimParam) { anim.enabled = false; break; }
+                }
             }
+
+            if (!doorClosedRot.ContainsKey(b))
+                doorClosedRot[b] = b.transform.localRotation;
+
+            if (doorSwingRoutine.ContainsKey(b) && doorSwingRoutine[b] != null)
+                StopCoroutine(doorSwingRoutine[b]);
+
+            float ang = swingAngleFor.ContainsKey(b) ? swingAngleFor[b] : doorSwingAngle;
+            Vector3 ax = swingAxisFor.ContainsKey(b) ? swingAxisFor[b] : doorSwingAxis;
+            Quaternion from = b.transform.localRotation;
+            Quaternion to = block ? doorClosedRot[b] : doorClosedRot[b] * Quaternion.AngleAxis(ang, ax);
+            doorSwingRoutine[b] = StartCoroutine(DoorSwing(b.transform, from, to));
+
+            // 碰撞体 / 导航障碍：关门启用（挡人），开门禁用（放行）
+            foreach (var col in b.GetComponentsInChildren<Collider>())
+                col.enabled = block;
+            foreach (var obs in b.GetComponentsInChildren<NavMeshObstacle>())
+                obs.enabled = block;
         }
-
-        if (!doorClosedAngle.ContainsKey(b))
-            doorClosedAngle[b] = b.transform.localEulerAngles.y;
-
-        if (doorSwingRoutine.ContainsKey(b) && doorSwingRoutine[b] != null)
-            StopCoroutine(doorSwingRoutine[b]);
-
-        float from = b.transform.localEulerAngles.y;
-        float to = block ? doorClosedAngle[b] : doorClosedAngle[b] + doorSwingAngle;
-        doorSwingRoutine[b] = StartCoroutine(DoorSwing(b.transform, from, to));
-
-        // 碰撞体 / 导航障碍：关门启用（挡人），开门禁用（放行）
-        foreach (var col in b.GetComponentsInChildren<Collider>())
-            col.enabled = block;
-        foreach (var obs in b.GetComponentsInChildren<NavMeshObstacle>())
-            obs.enabled = block;
     }
 
-    IEnumerator DoorSwing(Transform t, float from, float to)
+    IEnumerator DoorSwing(Transform t, Quaternion from, Quaternion to)
     {
         float dur = 0.4f;
         float el = 0f;
         while (el < dur)
         {
             el += Time.deltaTime;
-            float a = Mathf.LerpAngle(from, to, Mathf.SmoothStep(0f, 1f, el / dur));
-            t.localEulerAngles = new Vector3(t.localEulerAngles.x, a, t.localEulerAngles.z);
+            float k = Mathf.SmoothStep(0f, 1f, el / dur);
+            t.localRotation = Quaternion.Slerp(from, to, k);
             yield return null;
         }
-        t.localEulerAngles = new Vector3(t.localEulerAngles.x, to, t.localEulerAngles.z);
+        t.localRotation = to;
         if (doorSwingRoutine.ContainsKey(t.gameObject)) doorSwingRoutine[t.gameObject] = null;
     }
 
@@ -621,7 +678,7 @@ public class DungeonManager : MonoBehaviour
 
         int count = Random.Range(decorationMin, decorationMax + 1);
         float half = roomSize * 0.5f;
-        float limit = half - wallThickness; // 仅避开墙体；中心留白由下面的 magnitude 判断处理
+        float limit = half - wallThickness - decorationWallMargin; // 额外留边，避免装饰体积插进墙体
 
         int placed = 0;
         int tries = 0;
@@ -642,7 +699,7 @@ public class DungeonManager : MonoBehaviour
             for (int d = 0; d < 4; d++)
             {
                 Vector3 doorLocal = DirVec[d] * half;
-                if (Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(doorLocal.x, 0, doorLocal.z)) < doorWidth * 0.6f)
+                if (Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(doorLocal.x, 0, doorLocal.z)) < doorWidth * 0.5f + decorationDoorMargin)
                 { nearDoor = true; break; }
             }
             if (nearDoor && tries < maxTries * 0.7f) continue;
