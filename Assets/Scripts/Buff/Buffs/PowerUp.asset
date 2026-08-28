@@ -12,13 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d2d14a15a027a478b4c3156d6e1514, type: 3}
   m_Name: PowerUp
   m_EditorClassIdentifier: 
-  buffType: 1
+  buffType: 2
   buffName: "\u653B\u51FB\u529B\u63D0\u53475\u79D2"
   icon: {fileID: 0}
+  description: 
   isInstantEffect: 0
-  duration: 5
-  maxStack: 5
-  isFullRestore: 0
   effectValue: 10
+  isFullRestore: 0
+  isHalfRestore: 0
+  shopCost: 40
+  maxStack: 5
+  duration: 5
   pickupPrefab: {fileID: 4403053903349146177, guid: b85a1d48e83964d49b831f8d78070fe7,
     type: 3}

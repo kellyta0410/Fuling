@@ -8408,7 +8408,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2144329823}
-  - component: {fileID: 2144329824}
   m_Layer: 0
   m_Name: RecordManager
   m_TagString: Untagged
@@ -8431,28 +8430,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 476317497}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2144329824
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2144329822}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ee54f4b79f29ecd49af46739c0f7d6be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  easyCoinsText: {fileID: 7486791892213708814}
-  easyKillsText: {fileID: 6060827709995323404}
-  easyTimeText: {fileID: 5862386435075435761}
-  normalCoinsText: {fileID: 2784668650021957500}
-  normalKillsText: {fileID: 4779451097727831230}
-  normalTimeText: {fileID: 1038200427198589874}
-  infiniteCoinsText: {fileID: 0}
-  infiniteKillsText: {fileID: 1768692141}
-  infiniteTimeText: {fileID: 2042166972}
-  autoRefreshOnEnable: 1
 --- !u!1 &192991975056163150
 GameObject:
   m_ObjectHideFlags: 0

@@ -262,7 +262,9 @@ public class DungeonManager : MonoBehaviour
     IEnumerator TransitionToCoord(Vector2Int newCoord, int entryDir)
     {
         advancing = true;
-        this.entryDir = entryDir;
+        try
+        {
+            this.entryDir = entryDir;
 
         // 清掉所有已有房间（当前房 + 周围暗房），旧房即被销毁，之后封闭不可返回
         foreach (var kv in roomRoots) if (kv.Value != null) Destroy(kv.Value);
@@ -379,8 +381,16 @@ public class DungeonManager : MonoBehaviour
 
         // 左右门进入时，先等相机转到玩家背面再开始刷怪/商店；正前/正后进入则直接进入
         BeginRoomContent(entryDir);
-
-        advancing = false;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[Dungeon] 房间切换异常，已重置状态避免卡死：" + ex.Message);
+            Debug.LogException(ex);
+        }
+        finally
+        {
+            advancing = false;
+        }
     }
 
     // 暗房：相邻拼接的“背景房间”，保持黑暗、不刷怪、不装饰。

@@ -251,6 +251,27 @@ public class SceneSelectionManager : MonoBehaviour
         if (infiniteCoinsRow != null) infiniteCoinsRow.SetActive(false);
     }
 
+    public void ClearAllRecords()
+    {
+        if (gameDataManager == null) return;
+
+        string[] difficulties = { "简单", "普通", "无限" };
+        foreach (string diff in difficulties)
+        {
+            PlayerPrefs.DeleteKey(diff + "_BestCoins");
+            PlayerPrefs.DeleteKey(diff + "_BestKills");
+            PlayerPrefs.DeleteKey(diff + "_BestTime");
+            PlayerPrefs.DeleteKey(diff + "_BestRooms");   // 通关数量
+            PlayerPrefs.DeleteKey(diff + "_RecordCoins");
+            PlayerPrefs.DeleteKey(diff + "_RecordKills");
+            PlayerPrefs.DeleteKey(diff + "_RecordTime");
+            PlayerPrefs.DeleteKey(diff + "_RecordRooms");
+        }
+        PlayerPrefs.Save();
+        RefreshRecordsDisplay();
+        Debug.Log("所有记录已清空");
+    }
+
     void UpdateRecordUI(string difficultyName, TextMeshProUGUI coinsText, TextMeshProUGUI killsText, TextMeshProUGUI timeText,
         bool useRoomsInsteadOfTime = false)
     {

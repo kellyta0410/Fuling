@@ -12,13 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d2d14a15a027a478b4c3156d6e1514, type: 3}
   m_Name: Heal
   m_EditorClassIdentifier: 
-  buffType: 2
+  buffType: 0
   buffName: "\u6CBB\u7597"
   icon: {fileID: 0}
+  description: 
   isInstantEffect: 1
-  duration: 5
-  maxStack: 1
-  isFullRestore: 0
   effectValue: 50
+  isFullRestore: 0
+  isHalfRestore: 0
+  shopCost: 40
+  maxStack: 1
+  duration: 5
   pickupPrefab: {fileID: 4823333273514622846, guid: 5491be85c4aa15942b943150129d2d21,
     type: 3}
