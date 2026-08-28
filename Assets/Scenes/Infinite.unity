@@ -816,7 +816,7 @@ Light:
   serializedVersion: 10
   m_Type: 1
   m_Shape: 0
-  m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
+  m_Color: {r: 1, g: 0.90938795, b: 0.6622641, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
@@ -964,9 +964,6 @@ MonoBehaviour:
   wallDecorations:
   - {fileID: 904270830473403253, guid: 2b3d4b7f1effca349ad09e7f64e79c81, type: 3}
   - {fileID: 6808609255011687451, guid: 97e4f9c399c908f4492af659d073b52a, type: 3}
-  roomLightPrefab: {fileID: 2708115536176529193, guid: 9b6fc28c1d4b3894f960da49153b967f,
-    type: 3}
-  roomLightHeightOffset: 1
   darkLayer: 8
   blackOutside: 1
   shopBuffs:
@@ -998,7 +995,12 @@ MonoBehaviour:
     type: 3}
   shopFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
     type: 3}
-  solidWallPrefab: {fileID: 0}
+  snakeSolidWallPrefab: {fileID: 6448541869407925655, guid: 1a006f4b13e18864cad73d5cd1fceb5b,
+    type: 3}
+  zombieSolidWallPrefab: {fileID: 112881848992718368, guid: 4eac3f2f6c962154c886968ce4aa46ef,
+    type: 3}
+  shopSolidWallPrefab: {fileID: 8542337993107196511, guid: d872558c92668de4fb21e31ac56b341c,
+    type: 3}
   doorSwingAngle: 90
   doorSwingAxis: {x: 0, y: 0, z: 1}
   difficulty:

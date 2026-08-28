@@ -53,7 +53,7 @@ public class JiangshiEnemy : EnemyAI
 
     [Header("冲撞攻击参数")]
     [Tooltip("冲撞冲刺速度(米/秒)")]
-    public float chargeSpeed = 18f;
+    public float chargeSpeed = 34f;
     [Tooltip("冲撞终点超过玩家当前位置的距离(米)：红条会越过玩家，冲过去")]
     public float chargeOvershoot = 3f;
     [Tooltip("冲撞命中玩家的判定半径(米)")]
