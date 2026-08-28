@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 // 商店房间：玩家走近房间中央的商店触发范围时，
 // 在 3D 空间里显示一个朝向相机的可点击 UI 提示（世界空间 Canvas + 按钮），
@@ -82,9 +83,9 @@ public class ShopItem : MonoBehaviour
         btnImg.color = new Color(0.2f, 0.6f, 0.9f, 1f);
         var button = btn.AddComponent<Button>();
         button.targetGraphic = btnImg;
-        var txt = btn.AddComponent<Text>();
+        var txt = btn.AddComponent<TextMeshProUGUI>();
         txt.text = "打开商店";
-        txt.alignment = TextAnchor.MiddleCenter;
+        txt.alignment = TextAlignmentOptions.Center;
         txt.fontSize = 30;
         txt.color = Color.white;
         button.onClick.AddListener(OpenShop);

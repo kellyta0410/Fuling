@@ -320,6 +320,7 @@ public class DungeonManager : MonoBehaviour
 
         BuildFloor(root.transform);                    // 先建地板（会按地板尺寸确定 roomSize）
         root.transform.position = CoordToWorld(newCoord); // 再按当前 roomSize 摆放房间中心
+        if (showDebugLogs) Debug.Log("[Dungeon] roomSize=" + roomSize.ToString("F2") + " 房间世界坐标=" + root.transform.position);
         BuildWalls(root.transform, doorBlockers, -1, true);
         PlaceDecorations(root.transform);
         PlaceWallDecorations(root.transform);
@@ -380,12 +381,7 @@ public class DungeonManager : MonoBehaviour
         }
 
         // 左右门进入时，先等相机转到玩家背面再开始刷怪/商店；正前/正后进入则直接进入
-        BeginRoomContent(entryDir);
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError("[Dungeon] 房间切换异常，已重置状态避免卡死：" + ex.Message);
-            Debug.LogException(ex);
+            BeginRoomContent(entryDir);
         }
         finally
         {
@@ -551,7 +547,11 @@ public class DungeonManager : MonoBehaviour
                 {
                     Bounds fb = rends[0].bounds;
                     for (int i = 1; i < rends.Length; i++) fb.Encapsulate(rends[i].bounds);
-                    roomSize = Mathf.Max(fb.size.x, fb.size.z);
+                    float measured = Mathf.Max(fb.size.x, fb.size.z);
+                    // 地板包围盒退化（size 为 0）时不能清零 roomSize，否则所有房间塌缩到原点、
+                    // 地面碰撞体变 0 尺寸 -> 表现为“第2关叠在第1关位置上并穿门坠落”。
+                    if (measured > 0.01f) roomSize = measured;
+                    else Debug.LogWarning("[Dungeon] 地板(" + floor.name + ")包围盒尺寸为 0，沿用上次 roomSize=" + roomSize.ToString("F2"));
                 }
             }
             // 把地板几何 x/z 居中，并让“顶面”落在房间地面高度(parent.position.y)，
@@ -595,7 +595,7 @@ public class DungeonManager : MonoBehaviour
         if (floor.GetComponentsInChildren<MeshFilter>().Length == 0)
         {
             BoxCollider bc = floor.AddComponent<BoxCollider>();
-            bc.size = new Vector3(roomSize, 0.1f, roomSize);
+            bc.size = new Vector3(Mathf.Max(roomSize, 0.1f), 0.1f, Mathf.Max(roomSize, 0.1f));
             bc.isTrigger = false;
         }
 
@@ -605,7 +605,7 @@ public class DungeonManager : MonoBehaviour
         groundCol.transform.SetParent(parent);
         groundCol.transform.localPosition = new Vector3(0f, -0.05f, 0f);
         BoxCollider gbc = groundCol.AddComponent<BoxCollider>();
-        gbc.size = new Vector3(roomSize, 0.1f, roomSize);
+        gbc.size = new Vector3(Mathf.Max(roomSize, 0.1f), 0.1f, Mathf.Max(roomSize, 0.1f));
         gbc.center = Vector3.zero;
         gbc.isTrigger = false;
     }
@@ -828,6 +828,10 @@ public class DungeonManager : MonoBehaviour
                         groundY + b2.size.y * 0.5f,
                         wallParent.transform.position.z);
                     wall.transform.position += (desiredCenter - b2.center);
+                    if (showDebugLogs) Debug.Log("[Dungeon] 墙 dir=" + dirIndex
+                        + " wallParent=" + wallParent.transform.position.ToString("F2")
+                        + " 墙世界中心=" + b2.center.ToString("F2")
+                        + " 尺寸=" + b2.size.ToString("F2"));
                 }
             }
 
@@ -865,29 +869,8 @@ public class DungeonManager : MonoBehaviour
             while (doorOut.Count <= dirIndex) doorOut.Add(null);
             doorOut[dirIndex] = leaves;
 
-            // 让门洞精确居中：若预制体里的门偏离几何中心，相邻房间的门会左右错开对不上，
-            // 玩家从这一侧走出去会落进隔壁暗房（黑屏）。这里把整面墙平移，使门对齐墙中线，
-            // 两边房间的门就重合了，且退出检测(CheckExit)的“门口中心”也正好对上视觉门口。
-            if (leaves.Count > 0)
-            {
-                Bounds dbc = new Bounds();
-                bool f = true;
-                foreach (var lf in leaves)
-                {
-                    var lrs = lf.GetComponentsInChildren<Renderer>();
-                    foreach (var r in lrs)
-                    {
-                        if (f) { dbc = r.bounds; f = false; }
-                        else dbc.Encapsulate(r.bounds);
-                    }
-                }
-                if (!f)
-                {
-                    Vector3 localOffset = wallParent.transform.InverseTransformPoint(dbc.center);
-                    localOffset.y = 0f;
-                    wall.transform.localPosition -= localOffset;
-                }
-            }
+            // 门不必强制居中：只保证四面墙各自按边线中点对齐（见上方“重新对齐”逻辑），
+            // 墙角/墙边自然闭合。门留在预制体原本的位置即可，不再整体平移墙体，避免墙被推歪。
             return;
         }
 
