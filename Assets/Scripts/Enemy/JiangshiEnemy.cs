@@ -515,6 +515,9 @@ public class JiangshiEnemy : EnemyAI
                 {
                     DealChargeHit();
                     hasHitPlayer = true;
+                    // 命中即结束冲撞并进入冷却：只撞开玩家一次，绝不连撞/顶着人继续冲
+                    EndCharge();
+                    return;
                 }
             }
         }
@@ -528,10 +531,17 @@ public class JiangshiEnemy : EnemyAI
         if (player == null || player.IsDead()) return;
         float dmg = chargeBaseDamage * currentDamageMultiplier;
         player.TakeDamage(Mathf.RoundToInt(dmg));
-        Vector3 away = player.transform.position - transform.position;
-        away.y = 0f;
-        if (away.sqrMagnitude < 1e-4f) away = -lockedFacingDir;
-        player.AddKnockback(away.normalized, chargeKnockback);
+        Vector3 toPlayer = player.transform.position - transform.position;
+        toPlayer.y = 0f;
+        Vector3 fwd = lockedFacingDir; fwd.y = 0f;
+        // 击退方向改成“往旁边”：取玩家相对僵尸的位置在垂直于冲撞方向平面上的分量，
+        // 把玩家甩离冲撞中线，而不是沿僵尸前进方向一路往前顶（避免连续推着走）。
+        Vector3 lateral = toPlayer - fwd * Vector3.Dot(toPlayer, fwd);
+        if (lateral.sqrMagnitude < 1e-4f)
+            lateral = Vector3.Cross(fwd, Vector3.up).normalized; // 玩家正好在冲撞中线上时随便选一侧
+        else
+            lateral.Normalize();
+        player.AddKnockback(lateral, chargeKnockback);
         if (attackSFX != null && AudioManager.Instance != null)
             AudioManager.Instance.PlaySFX(attackSFX, transform.position);
     }

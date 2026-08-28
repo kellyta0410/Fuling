@@ -23,6 +23,10 @@ public class CinemachineWallXRay : MonoBehaviour
     // 当前所有已切换到 X-Ray 的墙（支持多面墙同时半透明，且都能恢复）
     private Dictionary<Transform, WallData> activeWalls = new Dictionary<Transform, WallData>();
 
+    // 连续命中/未命中计数：达到 hysteresisFrames 帧才切换，避免墙角等临界几何疯狂闪烁
+    private Dictionary<Transform, int> hitStreak = new Dictionary<Transform, int>();
+    private Dictionary<Transform, int> missStreak = new Dictionary<Transform, int>();
+
     private class WallData
     {
         public Renderer renderer;
@@ -37,9 +41,10 @@ public class CinemachineWallXRay : MonoBehaviour
         if (player == null) return;
 
         Vector3 camPos = transform.position;
-        Dictionary<Transform, int> hitCounts = new Dictionary<Transform, int>();
 
-        // 用 RaycastAll：射线可穿过相机自己所在的墙，命中后面所有墙
+        // 用 RaycastAll：射线可穿过相机自己所在的墙，命中后面所有墙。
+        // 先汇总本帧“应淡入”的墙（达到 minHitsToFade 的射线命中）。
+        HashSet<Transform> fadeSet = new HashSet<Transform>();
         foreach (Vector3 offset in playerOffsets)
         {
             Vector3 targetPoint = player.position + player.TransformDirection(offset);
@@ -48,6 +53,7 @@ public class CinemachineWallXRay : MonoBehaviour
             if (dist < 0.0001f) continue;
 
             RaycastHit[] hits = Physics.RaycastAll(camPos, dir / dist, dist, wallLayer);
+            Dictionary<Transform, int> counts = new Dictionary<Transform, int>();
             foreach (RaycastHit hit in hits)
             {
                 if (!hit.collider.CompareTag("Wall")) continue;
@@ -59,47 +65,68 @@ public class CinemachineWallXRay : MonoBehaviour
                 if (IsPointInsideCollider(hit.collider, camPos)) continue;
 
                 Transform wall = hit.transform;
-                if (!hitCounts.ContainsKey(wall))
-                    hitCounts[wall] = 0;
-                hitCounts[wall]++;
+                if (!counts.ContainsKey(wall))
+                    counts[wall] = 0;
+                counts[wall]++;
             }
+            foreach (var kvp in counts)
+                if (kvp.Value >= minHitsToFade)
+                    fadeSet.Add(kvp.Key);
         }
 
-        // 1) 不再被命中的墙：平滑恢复（透明度回 1），完成后切回原 shader 并移除
-        List<Transform> toRemove = new List<Transform>();
+        // 更新连续命中/未命中计数（迟滞防抖）
+        foreach (var w in fadeSet)
+        {
+            missStreak[w] = 0;
+            int h = hitStreak.ContainsKey(w) ? hitStreak[w] : 0;
+            hitStreak[w] = h + 1;
+        }
         foreach (var kvp in activeWalls)
         {
-            if (!hitCounts.ContainsKey(kvp.Key))
+            if (!fadeSet.Contains(kvp.Key))
             {
-                RestoreWallSmooth(kvp.Value);
-                if (kvp.Value.currentAlpha > 0.99f)
-                {
-                    RestoreWallNow(kvp.Value);
-                    toRemove.Add(kvp.Key);
-                }
+                hitStreak[kvp.Key] = 0;
+                int m = missStreak.ContainsKey(kvp.Key) ? missStreak[kvp.Key] : 0;
+                missStreak[kvp.Key] = m + 1;
             }
         }
-        foreach (Transform t in toRemove)
-            activeWalls.Remove(t);
 
-        // 2) 被命中的墙：不存在则初始化，已存在则保持/淡入到 targetAlpha
-        foreach (var kvp in hitCounts)
+        // 达到迟滞帧数才进入/保持半透明
+        foreach (var w in fadeSet)
         {
-            if (kvp.Value < minHitsToFade) continue;
-
-            if (!activeWalls.TryGetValue(kvp.Key, out WallData data))
+            if (hitStreak[w] < hysteresisFrames) continue; // 还没稳定命中，先不切换（防抖）
+            if (!activeWalls.TryGetValue(w, out WallData data))
             {
-                data = TryInitWall(kvp.Key);
+                data = TryInitWall(w);
                 if (data == null) continue;
-                activeWalls[kvp.Key] = data;
+                activeWalls[w] = data;
             }
-
             data.currentAlpha = Mathf.Lerp(
                 data.currentAlpha,
                 Mathf.Max(targetAlpha, 0.01f),
                 Time.deltaTime * fadeSpeed
             );
             ApplyAlpha(data);
+        }
+
+        // 达到迟滞帧数未命中才平滑恢复（透明度回 1 后切回原 shader 并移除）
+        List<Transform> toRemove = new List<Transform>();
+        foreach (var kvp in activeWalls)
+        {
+            if (fadeSet.Contains(kvp.Key)) continue;       // 仍在命中（可能未达迟滞）→ 保持当前，不恢复
+            if (missStreak[kvp.Key] < hysteresisFrames) continue; // 未达迟滞 → 不恢复（防抖）
+            RestoreWallSmooth(kvp.Value);
+            if (kvp.Value.currentAlpha > 0.99f)
+            {
+                RestoreWallNow(kvp.Value);
+                toRemove.Add(kvp.Key);
+            }
+        }
+        foreach (Transform t in toRemove)
+        {
+            activeWalls.Remove(t);
+            hitStreak.Remove(t);
+            missStreak.Remove(t);
         }
     }
 

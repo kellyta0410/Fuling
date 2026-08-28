@@ -323,6 +323,14 @@ public class DungeonManager : MonoBehaviour
         root.transform.position = CoordToWorld(coord);
         if (showDebugLogs) Debug.Log("[Dungeon] roomSize=" + roomSize.ToString("F2") + " 房间世界坐标=" + root.transform.position);
         BuildRoomWalls(room);
+        // 相邻房已存在时，把对方在共享边上的实心墙改成门，保证房间之间可通行（避免四面全是死墙）
+        for (int d = 0; d < 4; d++)
+        {
+            Vector2Int nc = room.coord + DirVec2D(d);
+            Room nb;
+            if (rooms.TryGetValue(nc, out nb) && nb != null && nb != room)
+                ConvertEdgeToDoor(nb, (d + 2) % 4);
+        }
         PlaceDecorations(root.transform);
         PlaceWallDecorations(root.transform);
         PlaceRoomLight(root.transform);
@@ -391,11 +399,26 @@ public class DungeonManager : MonoBehaviour
         };
         foreach (var c in corners)
         {
+            // 共享墙角处相邻房间会在同一世界坐标各放一根柱，多根重合会互相 z-fighting 疯狂闪烁。
+            // 放置前先清掉该位置已有的 CornerPillar（邻居已放 / 本房重建都覆盖），保证每个角只有一根。
+            Vector3 worldXZ = new Vector3(room.root.transform.position.x + c.x, 0f, room.root.transform.position.z + c.z);
+            foreach (var go in GameObject.FindObjectsOfType<GameObject>())
+            {
+                if (go.name == "CornerPillar" &&
+                    Mathf.Abs(go.transform.position.x - worldXZ.x) < wt * 0.5f &&
+                    Mathf.Abs(go.transform.position.z - worldXZ.z) < wt * 0.5f)
+                {
+                    Destroy(go);
+                }
+            }
+
             GameObject pil = GameObject.CreatePrimitive(PrimitiveType.Cube);
             pil.name = "CornerPillar";
             pil.transform.SetParent(room.root.transform);
             pil.transform.localPosition = new Vector3(c.x, h * 0.5f, c.z);
-            pil.transform.localScale = new Vector3(wt, h, wt);
+            // 比墙角缺口(wt)略大，把四面墙的端面“包”进柱体内部，
+            // 彻底消除柱面与墙端面共面 z-fighting，且不留裂缝（避免邻居墙从缝里穿出）。
+            pil.transform.localScale = new Vector3(wt * 1.06f, h, wt * 1.06f);
             pil.GetComponent<Renderer>().sharedMaterial = blackPillarMat;
             pil.tag = "Wall";
             var mf = pil.GetComponent<MeshFilter>();
@@ -411,6 +434,33 @@ public class DungeonManager : MonoBehaviour
                 obs.size = Vector3.one;
                 obs.center = Vector3.zero;
             }
+        }
+        }
+
+    // 把某房间在指定方向上的“已建实心墙”替换为带门墙：相邻房出现后，把原本封堵的共享边改成可通行门。
+    // 幂等：该方向若是门(doorBlockers 已登记)则跳过。
+    void ConvertEdgeToDoor(Room owner, int dir)
+    {
+        if (owner == null || owner.root == null) return;
+        while (owner.doorBlockers.Count <= dir) owner.doorBlockers.Add(null);
+        if (owner.doorBlockers[dir] != null) return; // 已是门，跳过
+
+        float half = roomSize * 0.5f;
+        Vector3 localPos; Quaternion localRot;
+        if (dir == 0) { localPos = new Vector3(0, 0, half); localRot = Quaternion.identity; }
+        else if (dir == 1) { localPos = new Vector3(half, 0, 0); localRot = Quaternion.Euler(0, 90, 0); }
+        else if (dir == 2) { localPos = new Vector3(0, 0, -half); localRot = Quaternion.Euler(0, 180, 0); }
+        else { localPos = new Vector3(-half, 0, 0); localRot = Quaternion.Euler(0, -90, 0); }
+
+        BuildWallWithDoor(owner.root.transform, localPos, localRot, dir, owner.doorBlockers);
+
+        // 只有成功登记了门才移除旧实心墙；否则保留实心墙（缺带门墙预制体时退回封堵，避免留洞）
+        if (owner.doorBlockers[dir] != null)
+        {
+            var existing = owner.root.transform.Find("SolidWall_" + dir);
+            if (existing != null) Destroy(existing.gameObject);
+            // 门默认关闭（挡人）；若房间已通关(cleared)则直接开启，否则按“清完怪再开门”规则保持关闭
+            ApplyDoorBlocker(owner.doorBlockers[dir], !owner.cleared);
         }
     }
 
@@ -476,12 +526,12 @@ public class DungeonManager : MonoBehaviour
                 BuildNavMesh();
             }
 
-            // 玩家刚离开的上一间房：入口门已在身后关上（CloseEntryDoor），这里把它恢复黑暗（关灯）。
-            // 已通关的房间因此会一直亮着，直到玩家前往下一个关卡、门关闭后才灭灯。
+            // 玩家刚离开的上一间房：入口门已在身后关上（CloseEntryDoor），这里只关灯（变暗但不全黑）。
+            // 玩家只点亮“当前所在关卡”；进入新关卡、门关之后，前关卡才变暗。
             Room prev;
-            if (rooms.TryGetValue(fromCoord, out prev) && prev != null && prev.root != null && prev != room)
+            if (rooms.TryGetValue(fromCoord, out prev) && prev != null && prev != room)
             {
-                SetRoomDark(prev);
+                SetRoomDim(prev);
                 if (prev.type == DungeonRoomType.Shop && prev.visited) CloseRoomDoors(prev);
             }
             // 确保当前所在房间处于点亮状态（也覆盖重新进入已离开过的房间）
@@ -507,6 +557,14 @@ public class DungeonManager : MonoBehaviour
 
         BuildFloor(room.root.transform);
         BuildRoomWalls(room);
+        // 相邻房已存在时，把对方在共享边上的实心墙改成门，保证房间之间可通行
+        for (int d = 0; d < 4; d++)
+        {
+            Vector2Int nc = room.coord + DirVec2D(d);
+            Room nb;
+            if (rooms.TryGetValue(nc, out nb) && nb != null && nb != room)
+                ConvertEdgeToDoor(nb, (d + 2) % 4);
+        }
         PlaceDecorations(room.root.transform);
         PlaceWallDecorations(room.root.transform);
         PlaceRoomLight(room.root.transform);
@@ -536,12 +594,19 @@ public class DungeonManager : MonoBehaviour
         SetLayerRecursively(room.root, 0);
         SetRoomLights(room, true);
     }
+    // 仅关灯、不切暗房层：房间仍受方向光(环境光为黑，仅有方向光)照射，呈“变暗”而非“全黑”。
+    // 用于玩家刚离开的已通关房——按需求“只是关灯，不用整个变黑”。
+    void SetRoomDim(Room room)
+    {
+        if (room.root == null) return;
+        SetRoomLights(room, false);
+    }
     void SetRoomLights(Room room, bool on)
     {
         foreach (var lt in room.root.GetComponentsInChildren<Light>(true))
         {
             if (decoLights.Contains(lt))
-                lt.enabled = on;                  // 墙饰自带灯：仅开关，亮度/范围/颜色保留预制体设定
+                lt.enabled = on;                  // 墙饰自带灯：随房间明暗开关（离房/门关后熄灭），亮度/范围/颜色保留预制体设定
             else
                 lt.intensity = on ? 25f : 0f;     // 房间照明灯：统一亮度
         }
@@ -756,10 +821,12 @@ public class DungeonManager : MonoBehaviour
         }
         if (addedObs && showDebugLogs) Debug.LogWarning("[Dungeon] 实心墙预制体部分网格缺少 NavMeshObstacle，已按网格自动补");
 
-        // 统一缩放使墙“长度”= roomSize − 2×墙厚（与墙角柱配合，无重叠、无空洞、无门）
+        // 统一缩放使墙“长度”= 整条边 roomSize：不管用哪种墙预制体(snake/zombie/shop/mixed)，
+        // 四面墙都精确抵达墙角，避免不同预制体缩放后长度不一（有的对齐柱子、有的超出柱子）。
+        // 墙角上交叠的端部由墙角柱(略大于墙厚)整体包住，既无穿模也无闪烁。
         if (wallWidth > 0.001f)
         {
-            float s = Mathf.Clamp(roomSize / (wallWidth + 2f * wt), 0.1f, 10f);
+            float s = Mathf.Clamp(roomSize / wallWidth, 0.1f, 10f);
             if (Mathf.Abs(s - 1f) > 0.01f)
             {
                 mesh.transform.localScale = new Vector3(s, s, s);
@@ -787,9 +854,35 @@ public class DungeonManager : MonoBehaviour
             if (outDir != Vector3.zero)
                 wallParent.transform.localPosition = localPos - outDir * (wallThickness * 0.5f);
         }
-        // 补一个兜底碰撞体（仅当预制体自带碰撞体缺失时），保证实心墙一定能挡住玩家/敌人
-        if (mesh.GetComponentsInChildren<Collider>().Length == 0)
-            mesh.AddComponent<BoxCollider>();
+        // 确保墙是“实心可挡”的：
+        // ① 预制体自带碰撞体一律设为非触发器（触发器不挡 CharacterController，会被敌人推穿墙）；
+        // ② 若预制体完全没有碰撞体，按网格包围盒补一个尺寸正确的盒子（默认 1×1×1 小盒挡不住整面墙）。
+        var wallCols = mesh.GetComponentsInChildren<Collider>();
+        if (wallCols.Length == 0)
+        {
+            var bc = mesh.AddComponent<BoxCollider>();
+            Bounds wb = new Bounds();
+            bool has = false;
+            foreach (var r in mesh.GetComponentsInChildren<Renderer>())
+            {
+                if (!has) { wb = r.bounds; has = true; }
+                else wb.Encapsulate(r.bounds);
+            }
+            if (has)
+            {
+                Vector3 s = mesh.transform.localScale;
+                s.x = Mathf.Abs(s.x) < 1e-5f ? 1f : s.x;
+                s.y = Mathf.Abs(s.y) < 1e-5f ? 1f : s.y;
+                s.z = Mathf.Abs(s.z) < 1e-5f ? 1f : s.z;
+                bc.center = mesh.transform.InverseTransformPoint(wb.center);
+                bc.size = new Vector3(wb.size.x / s.x, wb.size.y / s.y, wb.size.z / s.z);
+            }
+            bc.isTrigger = false;
+        }
+        else
+        {
+            foreach (var c in wallCols) c.isTrigger = false;
+        }
         // 实心墙无门：不注册 doorBlockers（门机制对死路墙停用）
     }
 
@@ -909,10 +1002,9 @@ public class DungeonManager : MonoBehaviour
             // 若预制体长度与中心已正确，s≈1 且偏移≈0，无副作用。
             if (wallWidth > 0.001f)
             {
-                // 墙长 = roomSize − 2×墙厚：两端正好抵到墙角柱（见下方 BuildCornerPillars）的内侧面，
-                // 墙与墙之间不再在墙角交叠（之前满长 roomSize 会在每个墙角交叠出 墙厚² 的方块造成穿模）。
-                // 与墙角柱配合后，既无重叠也无空洞。
-                float s = Mathf.Clamp(roomSize / (wallWidth + 2f * wt), 0.1f, 10f);
+                // 墙长 = 整条边 roomSize：不管用哪种墙预制体，四面墙都精确抵达墙角，
+                // 避免不同预制体缩放后长度不一（有的对齐柱子、有的超出柱子）。墙角上交叠的端部由墙角柱(略大于墙厚)整体包住。
+                float s = Mathf.Clamp(roomSize / wallWidth, 0.1f, 10f);
                 if (Mathf.Abs(s - 1f) > 0.01f)
                 {
                     wall.transform.localScale = new Vector3(s, s, s);
