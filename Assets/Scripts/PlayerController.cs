@@ -267,15 +267,12 @@ public class PlayerController : MonoBehaviour
 
         currentHealth = maxHealth;
 
+        // 地牢里房间地板会被光照系统从 "Ground" 层改到 Default(0)（或 darkLayer），
+        // 所以玩家的落地检测必须包含 Default 层，否则射线打不到地板 → 误判离地 → 移动降为半速。
         int groundLayerIndex = LayerMask.NameToLayer("Ground");
-        if (groundLayerIndex != -1)
-        {
-            groundLayer = 1 << groundLayerIndex;
-        }
-        else
-        {
-            groundLayer = ~0;
-        }
+        int mask = (1 << 0); // Default 层：地牢点亮房/普通模式地板所在层
+        if (groundLayerIndex != -1) mask |= (1 << groundLayerIndex);
+        groundLayer = mask;
 
 #if UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         if (actionButton != null) actionButton.onClick.AddListener(PerformAction);
