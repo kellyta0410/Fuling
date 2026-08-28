@@ -53,6 +53,10 @@ public class UIManager : MonoBehaviour
     public GameObject shopPanel;
     public GameObject shopButtonPrefab;
     public Transform shopButtonContainer;
+
+    [Header("调试：开局直接开商店（测试用，正式发布请关闭）")]
+    public bool openShopOnStart = false;
+    public List<BuffDataSO> debugShopBuffs = new List<BuffDataSO>();
     private List<BuffDataSO> currentOffers = new List<BuffDataSO>(); // 当前展示的 3 个商品
     private List<GameObject> shopCards = new List<GameObject>();     // 对应的 3 张卡 GameObject
     private bool refreshedThisVisit = false;                         // 本间商店是否已刷新过（限一次）
@@ -111,6 +115,10 @@ public class UIManager : MonoBehaviour
 
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
+        if (openShopOnStart && debugShopBuffs.Count > 0)
+            OpenShop(debugShopBuffs, 100);
+        else if (shopPanel != null)
+            shopPanel.SetActive(false);
 
         if (healthSlider != null && healthFillImage == null)
         {
@@ -851,7 +859,7 @@ public class UIManager : MonoBehaviour
         var nameT = card.transform.Find("Name");
         if (nameT != null) { var t = nameT.GetComponent<TextMeshProUGUI>(); if (t != null) t.text = buff.buffName; }
         var descT = card.transform.Find("Desc");
-        if (descT != null) { var t = descT.GetComponent<TextMeshProUGUI>(); if (t != null) t.text = buff.description ?? ""; }
+        if (descT != null) { var t = descT.GetComponent<TextMeshProUGUI>(); if (t != null) t.text = string.IsNullOrEmpty(buff.description) ? buff.GetDefaultDescription() : buff.description; }
         UpdateCardPrice(card, buff, index);
     }
 
