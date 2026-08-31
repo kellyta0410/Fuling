@@ -303,7 +303,6 @@ public class DungeonManager : MonoBehaviour
         bool makeShop = pendingShopCoords.Contains(coord);
         pendingShopCoords.Remove(coord);
         if (makeShop) room.type = DungeonRoomType.Shop;
-        else if (roomCounter == 1) room.type = DungeonRoomType.Shop; // 测试：第一间强制商店
         else room.type = (DungeonRoomType)Random.Range(0, 3);
         levelCounter++; room.levelIndex = levelCounter;
 
@@ -439,9 +438,10 @@ public class DungeonManager : MonoBehaviour
     // 幂等：该方向若是门(doorBlockers 已登记)则跳过。
     void ConvertEdgeToDoor(Room owner, int dir)
     {
-        if (owner == null || owner.root == null) return;
+        if (owner == null || owner.root == null) { Debug.LogWarning("[Dungeon] ConvertEdgeToDoor 早退: owner=" + owner); return; }
         while (owner.doorBlockers.Count <= dir) owner.doorBlockers.Add(null);
-        if (owner.doorBlockers[dir] != null) return; // 已是门，跳过
+        if (owner.doorBlockers[dir] != null) { Debug.LogWarning("[Dungeon] ConvertEdgeToDoor 跳过: 已有门 room=" + owner.roomIndex + " dir=" + dir); return; } // 已是门，跳过
+        Debug.Log("[Dungeon] ConvertEdgeToDoor 执行: room=" + owner.roomIndex + " dir=" + dir + " prefab=" + (wallWithDoorPrefab != null));
 
         float half = roomSize * 0.5f;
         Vector3 localPos; Quaternion localRot;
@@ -510,20 +510,21 @@ public class DungeonManager : MonoBehaviour
                 SetRoomLightUp(room);
                 if (room.type == DungeonRoomType.Shop)
                 {
-                    // 商店：只关“入口那扇门”（归属邻居，关上后不能原路返回），
-                    // 本房其余门保持开启，玩家可任选一门离开。
+                    // 商店：所有门永开，玩家可自由进出，不关入口门。
                     OpenRoomDoors(room);
-                    CloseEntryDoor(fromCoord, entryDir);
                 }
                 else
                 {
-                    // 战斗房：进门即锁门——先关本房“拥有”的门，再关入口那扇归属邻居的门，
+                    // 战斗房：进门即锁门——先关本房"拥有"的门，再关入口那扇归属邻居的门，
                     // 怪被锁在房内、玩家暂时不能退；清场后再统一开门（见 OnRoomCleared）。
                     CloseRoomDoors(room);
                     CloseEntryDoor(fromCoord, entryDir);
                 }
                 BeginRoomContent(room, entryDir);
                 ExpandRoom(room);
+                // 商店：ExpandRoom 可能新建了邻居共墙上的门（ConvertEdgeToDoor 默认关闭），
+                // 再次开门确保所有出口畅通。
+                if (room.type == DungeonRoomType.Shop) OpenRoomDoors(room);
                 BuildNavMesh();
             }
 
@@ -533,7 +534,7 @@ public class DungeonManager : MonoBehaviour
             if (rooms.TryGetValue(fromCoord, out prev) && prev != null && prev != room)
             {
                 SetRoomDim(prev);
-                if (prev.type == DungeonRoomType.Shop && prev.visited) CloseRoomDoors(prev);
+                // 商店门永开，离开时不关门
             }
             // 确保当前所在房间处于点亮状态（也覆盖重新进入已离开过的房间）
             SetRoomLightUp(room);
@@ -897,6 +898,7 @@ public class DungeonManager : MonoBehaviour
 
     void BuildWallWithDoor(Transform parent, Vector3 localPos, Quaternion localRot, int dirIndex, List<List<GameObject>> doorOut)
     {
+        Debug.Log("[Dungeon] BuildWallWithDoor: dirIndex=" + dirIndex + " prefab=" + (wallWithDoorPrefab != null) + " parent=" + parent.name);
         GameObject wallParent = new GameObject("Wall_" + dirIndex);
         wallParent.transform.SetParent(parent);
         wallParent.transform.localPosition = localPos;
