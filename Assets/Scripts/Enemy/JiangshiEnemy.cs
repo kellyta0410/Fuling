@@ -86,6 +86,13 @@ public class JiangshiEnemy : EnemyAI
     // 动画 root motion 的 Y（跳跃离地）会作用在子模型上；根节点 XZ 由 NavMeshAgent 驱动。
     private Transform visualModel;
 
+    [Header("手动跳跃补偿")]
+    [Tooltip("动画 root motion Y 不足时，手动叠加的跳跃高度（米）")]
+    public float manualJumpHeight = 0.5f;
+    [Tooltip("手动跳跃频率（次/秒）")]
+    public float manualJumpSpeed = 3f;
+    private float jumpTimer = 0f;
+
     [Header("落地音效")]
     [Tooltip("视觉模型离地超过此高度视为'在空中'(米)")]
     public float airborneThreshold = 0.08f;
@@ -642,8 +649,25 @@ public class JiangshiEnemy : EnemyAI
             jumpBaseValid = true;
         }
 
+        // 动画 root motion 的 Y
+        float animY = animator.rootPosition.y - jumpBaseRootY;
+
+        // 手动跳跃补偿：追击/蓄力/冲撞时叠加正弦波跳跃，频率与移动速度成正比
+        // 非追击时重置 Y=0，避免 idle 状态视觉模型漂浮
+        if (isChasing && !isDead)
+        {
+            float speedRatio = (agent != null && agent.speed > 0.1f) ? (agent.velocity.magnitude / agent.speed) : 1f;
+            jumpTimer += Time.deltaTime * manualJumpSpeed * Mathf.Max(speedRatio, 0.3f);
+            float manualY = Mathf.Abs(Mathf.Sin(jumpTimer)) * manualJumpHeight;
+            animY += manualY;
+        }
+        else
+        {
+            animY = 0f;
+        }
+
         Vector3 lp = visualModel.localPosition;
-        lp.y = animator.rootPosition.y - jumpBaseRootY;
+        lp.y = animY;
         visualModel.localPosition = lp;
     }
 

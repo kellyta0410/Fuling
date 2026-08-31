@@ -12648,20 +12648,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1a4812ea6d7228c45ad25d0a030ed768, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  player: {fileID: 0}
+  player: {fileID: 910754486}
   fadeSpeed: 15
   targetAlpha: 0.1
   hysteresisFrames: 6
-  playerOffsets:
-  - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 0.5, z: 0}
-  - {x: 0, y: -0.5, z: 0}
-  - {x: 0.3, y: 0, z: 0}
-  - {x: -0.3, y: 0, z: 0}
-  minHitsToFade: 2
-  wallLayer:
-    serializedVersion: 2
-    m_Bits: 64
+  maxDistance: 100
 --- !u!108 &1121559768825916174
 Light:
   m_ObjectHideFlags: 0
@@ -16456,6 +16447,8 @@ MonoBehaviour:
   shopPanel: {fileID: 0}
   shopButtonPrefab: {fileID: 0}
   shopButtonContainer: {fileID: 0}
+  openShopOnStart: 0
+  debugShopBuffs: []
   buffIconContainer: {fileID: 0}
   buffIconPrefab: {fileID: 0}
   buffHudToggle: {fileID: 0}

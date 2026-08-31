@@ -9,17 +9,6 @@ public class CinemachineWallXRay : MonoBehaviour
     public float targetAlpha = 0.15f;
     public int hysteresisFrames = 6;
 
-    public Vector3[] playerOffsets = new Vector3[]
-    {
-        Vector3.zero,
-        new Vector3(0, 0.5f, 0),
-        new Vector3(0, -0.5f, 0),
-        new Vector3(0.3f, 0, 0),
-        new Vector3(-0.3f, 0, 0)
-    };
-    public int minHitsToFade = 2;
-    public LayerMask wallLayer = -1;
-
     // 当前所有已切换到 X-Ray 的墙（支持多面墙同时半透明，且都能恢复）
     private Dictionary<Transform, WallData> activeWalls = new Dictionary<Transform, WallData>();
 
@@ -41,46 +30,11 @@ public class CinemachineWallXRay : MonoBehaviour
         if (player == null) return;
 
         Vector3 camPos = transform.position;
+        Vector3 playerPos = player.position;
 
-        // 用 RaycastAll：射线可穿过相机自己所在的墙，命中后面所有墙。
-        // 先汇总本帧"应淡入"的墙（达到 minHitsToFade 的射线命中）。
+        // 射线检测：从相机到玩家，检查是否被 Wall 标签的物体挡住
         HashSet<Transform> fadeSet = new HashSet<Transform>();
-        int totalRayHits = 0;
-        int wallHits = 0;
-        foreach (Vector3 offset in playerOffsets)
-        {
-            Vector3 targetPoint = player.position + player.TransformDirection(offset);
-            Vector3 dir = targetPoint - camPos;
-            float dist = dir.magnitude;
-            if (dist < 0.0001f) continue;
-
-            RaycastHit[] hits = Physics.RaycastAll(camPos, dir / dist, dist, wallLayer);
-            totalRayHits += hits.Length;
-            Dictionary<Transform, int> counts = new Dictionary<Transform, int>();
-            foreach (RaycastHit hit in hits)
-            {
-                if (!hit.collider.CompareTag("Wall")) continue;
-                if (hit.collider.GetComponentInParent<EnemyAI>() != null) continue;
-                wallHits++;
-
-                // 排除相机自身所在的墙（相机在该墙碰撞体内）。
-                // 相机在墙内时会一直命中它（射线从内部穿出表面），导致其永不恢复，
-                // 且相机在墙内时透明化该墙本身也没有意义。
-                if (IsPointInsideCollider(hit.collider, camPos)) continue;
-
-                Transform wall = hit.transform;
-                if (!counts.ContainsKey(wall))
-                    counts[wall] = 0;
-                counts[wall]++;
-            }
-            foreach (var kvp in counts)
-                if (kvp.Value >= minHitsToFade)
-                    fadeSet.Add(kvp.Key);
-        }
-
-        // 调试：每 60 帧输出一次射线命中统计
-        if (Time.frameCount % 60 == 0)
-            Debug.Log($"[XRay] frame={Time.frameCount} totalRayHits={totalRayHits} wallTaggedHits={wallHits} fadeSetCount={fadeSet.Count} activeWalls={activeWalls.Count} player={player.name} cam={Camera.main != null}");
+        CheckWallsByRaycast(camPos, playerPos, fadeSet);
 
         // 更新连续命中/未命中计数（迟滞防抖）
         foreach (var w in fadeSet)
@@ -102,7 +56,7 @@ public class CinemachineWallXRay : MonoBehaviour
         // 达到迟滞帧数才进入/保持半透明
         foreach (var w in fadeSet)
         {
-            if (hitStreak[w] < hysteresisFrames) continue; // 还没稳定命中，先不切换（防抖）
+            if (hitStreak[w] < hysteresisFrames) continue;
             if (!activeWalls.TryGetValue(w, out WallData data))
             {
                 data = TryInitWall(w);
@@ -117,12 +71,12 @@ public class CinemachineWallXRay : MonoBehaviour
             ApplyAlpha(data);
         }
 
-        // 达到迟滞帧数未命中才平滑恢复（透明度回 1 后切回原 shader 并移除）
+        // 达到迟滞帧数未命中才平滑恢复
         List<Transform> toRemove = new List<Transform>();
         foreach (var kvp in activeWalls)
         {
-            if (fadeSet.Contains(kvp.Key)) continue;       // 仍在命中（可能未达迟滞）→ 保持当前，不恢复
-            if (missStreak[kvp.Key] < hysteresisFrames) continue; // 未达迟滞 → 不恢复（防抖）
+            if (fadeSet.Contains(kvp.Key)) continue;
+            if (missStreak[kvp.Key] < hysteresisFrames) continue;
             RestoreWallSmooth(kvp.Value);
             if (kvp.Value.currentAlpha > 0.99f)
             {
@@ -138,24 +92,40 @@ public class CinemachineWallXRay : MonoBehaviour
         }
     }
 
-    /// <summary>点是否在碰撞体内部（含恰好贴表）。</summary>
-    bool IsPointInsideCollider(Collider collider, Vector3 point)
+    /// <summary>
+    /// 射线检测：从相机高度(y=2)到玩家高度(y=2)发射射线，
+    /// 水平方向检测墙是否挡在相机和玩家之间。
+    /// 用 y=2 是因为墙壁碰撞体仅 wallHeight≈4 高，从相机实际位置(y≈12)发射射线会越过墙顶。
+    /// </summary>
+    void CheckWallsByRaycast(Vector3 camPos, Vector3 playerPos, HashSet<Transform> fadeSet)
     {
-        Vector3 closest = collider.ClosestPoint(point);
-        return (closest - point).sqrMagnitude < 0.0001f;
+        Vector3 rayStart = new Vector3(camPos.x, 2f, camPos.z);
+        Vector3 rayEnd = new Vector3(playerPos.x, 2f, playerPos.z);
+        Vector3 dir = rayEnd - rayStart;
+        float dist = dir.magnitude;
+        if (dist < 0.001f) return;
+
+        RaycastHit[] hits = Physics.RaycastAll(rayStart, dir.normalized, dist);
+        foreach (var hit in hits)
+        {
+            if (hit.collider != null && hit.collider.CompareTag("Wall"))
+            {
+                fadeSet.Add(hit.collider.transform);
+            }
+        }
     }
 
     WallData TryInitWall(Transform wall)
     {
         Renderer renderer = wall.GetComponent<Renderer>();
-        if (renderer == null) return null;
+        if (renderer == null)
+        {
+            renderer = wall.GetComponentInParent<Renderer>();
+            if (renderer == null) return null;
+        }
 
         Shader xrayShader = Shader.Find("Custom/XRayWall");
-        if (xrayShader == null)
-        {
-            Debug.LogWarning("[CinemachineWallXRay] 找不到 Shader: Custom/XRayWall，跳过");
-            return null;
-        }
+        if (xrayShader == null) return null;
 
         Material mat = renderer.material;
         WallData data = new WallData

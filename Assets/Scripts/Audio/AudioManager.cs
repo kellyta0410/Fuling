@@ -30,6 +30,8 @@ public class AudioManager : MonoBehaviour
     public AudioClip gameplayBGM;
     [Tooltip("地牢模式专属 BGM（进入地牢时覆盖游戏内 BGM）")]
     public AudioClip dungeonBGM;
+    [Tooltip("商店 BGM（打开商店时切换，关闭后恢复地牢 BGM）")]
+    public AudioClip shopBGM;
 
     [Header("SFX 播放池")]
     [Tooltip("预创建多少个 AudioSource 循环复用，避免每次拾取/播放都 new 临时对象")]
@@ -201,6 +203,12 @@ public class AudioManager : MonoBehaviour
     {
         if (dungeonBGM == null) dungeonBGM = Resources.Load<AudioClip>("Audio/BGM DUNGEON");
         if (dungeonBGM != null) PlayBGM(dungeonBGM);
+    }
+
+    // 商店 BGM：打开商店时切换，关闭后恢复地牢 BGM
+    public void PlayShopBGM()
+    {
+        if (shopBGM != null) PlayBGM(shopBGM);
     }
 
     public void StopBGM()

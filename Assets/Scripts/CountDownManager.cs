@@ -8,15 +8,30 @@ public class CountdownManager : MonoBehaviour
     public TextMeshProUGUI countdownText;
     public GameObject countdownPanel;
 
+    [Header("教程面板（无尽模式专用）")]
+    [Tooltip("进入无尽模式时先显示教程面板，关闭后才开始倒计时")]
+    public GameObject tutorialPanel;
+
     [Header("设置")]
     public float countdownDuration = 3f;
     public bool enableCountdown = true;
 
     private bool isCountingDown = false;
     private bool gameStarted = false;
+    private bool tutorialDone = false;
 
     void Start()
     {
+        // 无尽模式 + 有教程面板：先显示教程，冻结游戏
+        if (tutorialPanel != null && IsInfiniteMode())
+        {
+            tutorialPanel.SetActive(true);
+            if (countdownPanel != null) countdownPanel.SetActive(false);
+            FreezeGame();
+            return;
+        }
+
+        // 非无尽模式或无教程面板：直接走倒计时或直接开始
         if (enableCountdown)
         {
             if (countdownPanel != null)
@@ -31,31 +46,52 @@ public class CountdownManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 教程面板关闭按钮调用此方法（UnityEvent / Button.OnClick 绑定）
+    /// </summary>
+    public void CloseTutorial()
+    {
+        if (tutorialPanel != null)
+            tutorialPanel.SetActive(false);
+
+        tutorialDone = true;
+
+        if (enableCountdown)
+        {
+            if (countdownPanel != null)
+                countdownPanel.SetActive(true);
+            StartCoroutine(StartCountdown());
+        }
+        else
+        {
+            StartGameImmediately();
+        }
+    }
+
+    void FreezeGame()
+    {
+        PlayerController player = FindObjectOfType<PlayerController>();
+        if (player != null) player.SetCanMove(false);
+        Time.timeScale = 0f;
+    }
+
     IEnumerator StartCountdown()
     {
         isCountingDown = true;
 
-        // ⭐ 1. 冻结玩家
         PlayerController player = FindObjectOfType<PlayerController>();
         if (player != null) player.SetCanMove(false);
 
-        // ⭐ 2. 禁用所有敌人生成器
         DisableAllSpawners();
 
-        // ⭐ 3. 冻结场景中原有的敌人
         EnemyAI[] allEnemies = FindObjectsOfType<EnemyAI>();
         foreach (EnemyAI enemy in allEnemies)
         {
-            if (enemy != null)
-            {
-                enemy.enabled = false;
-            }
+            if (enemy != null) enemy.enabled = false;
         }
 
-        // ⭐ 4. 暂停物理和时间
         Time.timeScale = 0f;
 
-        // ⭐ 5. 倒计时循环
         for (int i = (int)countdownDuration; i > 0; i--)
         {
             if (countdownText != null)
@@ -68,7 +104,6 @@ public class CountdownManager : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(0.5f);
 
-        // ⭐ 6. 恢复游戏
         Time.timeScale = 1f;
         isCountingDown = false;
         gameStarted = true;
@@ -78,23 +113,17 @@ public class CountdownManager : MonoBehaviour
 
         if (player != null) player.SetCanMove(true);
 
-        // ⭐ 7. 启动游戏
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
 
-        // ⭐ 8. 启用所有生成器
         EnableAllSpawners();
 
-        // ⭐ 9. 恢复敌人AI
         foreach (EnemyAI enemy in allEnemies)
         {
-            if (enemy != null)
-            {
-                enemy.enabled = true;
-            }
+            if (enemy != null) enemy.enabled = true;
         }
 
-        Debug.Log("✅ 倒计时结束，游戏开始！");
+        Debug.Log("倒计时结束，游戏开始！");
     }
 
     void StartGameImmediately()
@@ -103,6 +132,8 @@ public class CountdownManager : MonoBehaviour
 
         PlayerController player = FindObjectOfType<PlayerController>();
         if (player != null) player.SetCanMove(true);
+
+        Time.timeScale = 1f;
 
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
@@ -113,23 +144,23 @@ public class CountdownManager : MonoBehaviour
     private void DisableAllSpawners()
     {
         EnemySpawner normal = FindObjectOfType<EnemySpawner>();
-        if (normal != null)
-        {
-            normal.StopSpawning();
-        }
+        if (normal != null) normal.StopSpawning();
     }
 
     private void EnableAllSpawners()
     {
-        // 地牢模式：房间生成与敌人刷新完全由 DungeonManager 接管，不要启用旧生成器
         if (GameManager.Instance != null && GameManager.Instance.IsDungeonMode())
-        {
             return;
-        }
 
-        // 开放世界无限模式已移除；非地牢模式统一启用普通生成器（EnemySpawner）
         EnemySpawner normal = FindObjectOfType<EnemySpawner>();
         if (normal != null) normal.StartSpawning();
+    }
+
+    private bool IsInfiniteMode()
+    {
+        if (GameManager.Instance != null)
+            return GameManager.Instance.IsInfiniteMode();
+        return false;
     }
 
     public bool IsGameStarted() => gameStarted;

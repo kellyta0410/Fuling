@@ -64,10 +64,11 @@ public class DungeonManager : MonoBehaviour
     [Header("墙壁装饰（所有战斗房通用；随机上某面墙，正面朝向房间内；商店房不放）")]
     public int wallDecorationMin = 3;
     public int wallDecorationMax = 5;
-    public float wallDecorationHeight = 1.5f;     // 离地高度
+    public float wallDecorationHeight = 5f;     // 离地高度
     public float wallDecorationInset = 0.25f;   // 距墙面往房内退一点，避免嵌进墙里
     public List<GameObject> wallDecorations = new List<GameObject>();
     private HashSet<Light> decoLights = new HashSet<Light>();   // 墙饰自带的灯：只开关、亮度/范围/颜色保留预制体设定
+    private List<Bounds> placedBounds = new List<Bounds>();    // 已摆放装饰的世界包围盒，墙壁装饰与地面装饰共用，防穿模
     private Material blackPillarMat = null;                    // 墙角柱共用的纯黑无贴图材质
 
     [Tooltip("周围暗房（邻居）放到的 Layer 索引；该层会被房间灯光排除，使邻居保持黑暗。请确保该 Layer 在 Layer 设置里存在（如 Layer 8）。当前活动房间仍用原层，不影响碰撞。")]
@@ -186,6 +187,7 @@ public class DungeonManager : MonoBehaviour
         {
             var xray = Camera.main.gameObject.AddComponent<CinemachineWallXRay>();
             xray.player = playerTarget;
+            Debug.Log("[Dungeon] XRay added to Camera.main, player=" + (playerTarget != null ? playerTarget.name : "NULL"));
         }
         // 难度直接读取 Inspector 上挂的 DungeonDifficulty 资产（与 GameManager 的普通/Buff 难度解耦）
 
@@ -331,6 +333,7 @@ public class DungeonManager : MonoBehaviour
             if (rooms.TryGetValue(nc, out nb) && nb != null && nb != room)
                 ConvertEdgeToDoor(nb, (d + 2) % 4);
         }
+        placedBounds.Clear();
         PlaceDecorations(root.transform);
         PlaceWallDecorations(root.transform);
         PlaceRoomLight(root.transform);
@@ -603,13 +606,25 @@ public class DungeonManager : MonoBehaviour
     }
     void SetRoomLights(Room room, bool on)
     {
+        int decoCount = 0, roomCount = 0;
         foreach (var lt in room.root.GetComponentsInChildren<Light>(true))
         {
             if (decoLights.Contains(lt))
-                lt.enabled = on;                  // 墙饰自带灯：随房间明暗开关（离房/门关后熄灭），亮度/范围/颜色保留预制体设定
+            {
+                lt.enabled = on;
+                decoCount++;
+            }
             else
-                lt.intensity = on ? 25f : 0f;     // 房间照明灯：统一亮度
+            {
+                lt.intensity = on ? 25f : 0f;
+                roomCount++;
+            }
         }
+        Debug.Log("[Lights] SetRoomLights room=" + room.root.name
+            + " on=" + on
+            + " decoLights=" + decoCount
+            + " roomLights=" + roomCount
+            + " decoHashSetTotal=" + decoLights.Count);
     }
 
     void RefreshRoomUI(Room room)
@@ -857,6 +872,7 @@ public class DungeonManager : MonoBehaviour
         // 确保墙是“实心可挡”的：
         // ① 预制体自带碰撞体一律设为非触发器（触发器不挡 CharacterController，会被敌人推穿墙）；
         // ② 若预制体完全没有碰撞体，按网格包围盒补一个尺寸正确的盒子（默认 1×1×1 小盒挡不住整面墙）。
+        // 确保墙是"实心可挡"的
         var wallCols = mesh.GetComponentsInChildren<Collider>();
         if (wallCols.Length == 0)
         {
@@ -1203,7 +1219,6 @@ public class DungeonManager : MonoBehaviour
         int placed = 0;
         int tries = 0;
         int maxTries = count * 100;   // 提高重试上限，保底能摆到 decorationMin 个
-        List<Bounds> placedBounds = new List<Bounds>(); // 已摆放装饰的世界包围盒，用于互相避让（防穿模）
         while (placed < count && tries < maxTries)
         {
             tries++;
@@ -1241,9 +1256,14 @@ public class DungeonManager : MonoBehaviour
             }
 
             // 避免与已摆放的装饰互相穿模：用世界包围盒做相交检测，重叠则重摆
+            // 垂直方向扩展到覆盖整个房间高度，确保墙壁装饰(Y≈5)与地面装饰(Y≈0)也能检测 XZ 重叠
             if (r != null)
             {
                 Bounds b = r.bounds;
+                float roomMinY = parent.position.y - 1f;
+                float roomMaxY = parent.position.y + wallHeight + 2f;
+                b.Encapsulate(new Vector3(b.center.x, roomMinY, b.center.z));
+                b.Encapsulate(new Vector3(b.center.x, roomMaxY, b.center.z));
                 bool overlap = false;
                 foreach (var pb in placedBounds)
                 {
@@ -1341,8 +1361,12 @@ public class DungeonManager : MonoBehaviour
             deco.transform.localRotation = rot * authored;
             EnsureLightsEnabled(deco);
             // 记录墙饰自带的灯：SetRoomLights 里只对它们做开关，不动亮度/范围/颜色
+            // 若预制体默认亮度太低，统一提升到可感知水平
             foreach (var dl in deco.GetComponentsInChildren<Light>(true))
+            {
+                if (dl.intensity < 5f) dl.intensity = 8f;
                 decoLights.Add(dl);
+            }
 
             // 按装饰自身实际深度，把中心往房内退，使“背面正好贴在内墙面内侧”，避免插进墙里（穿模）
             Renderer r = deco.GetComponentInChildren<Renderer>();
@@ -1369,6 +1393,27 @@ public class DungeonManager : MonoBehaviour
             {
                 float dy = targetCenterY - r.bounds.center.y;
                 if (Mathf.Abs(dy) > 0.001f) deco.transform.position += Vector3.up * dy;
+            }
+            // 避免与已摆放的装饰互相穿模：用世界包围盒做相交检测，重叠则重摆
+            // 垂直方向扩展到覆盖整个房间高度，确保墙壁装饰与地面装饰也能检测 XZ 重叠
+            if (r != null)
+            {
+                Bounds b = r.bounds;
+                float roomMinY = parent.position.y - 1f;
+                float roomMaxY = parent.position.y + wallHeight + 2f;
+                b.Encapsulate(new Vector3(b.center.x, roomMinY, b.center.z));
+                b.Encapsulate(new Vector3(b.center.x, roomMaxY, b.center.z));
+                bool overlap = false;
+                foreach (var pb in placedBounds)
+                {
+                    if (b.Intersects(pb)) { overlap = true; break; }
+                }
+                if (overlap)
+                {
+                    Destroy(deco);
+                    continue;
+                }
+                placedBounds.Add(b);
             }
             if (deco.GetComponent<Collider>() == null) deco.AddComponent<BoxCollider>();
             placed++;
@@ -1420,8 +1465,20 @@ public class DungeonManager : MonoBehaviour
     void EnsureLightsEnabled(GameObject go)
     {
         if (go == null) return;
-        foreach (var lt in go.GetComponentsInChildren<Light>(true))
+        var lights = go.GetComponentsInChildren<Light>(true);
+        foreach (var lt in lights)
+        {
             lt.enabled = true;
+            Debug.Log("[Lights] EnsureLightsEnabled: " + go.name
+                + " light=" + lt.gameObject.name
+                + " type=" + lt.type
+                + " intensity=" + lt.intensity
+                + " range=" + lt.range
+                + " color=" + lt.color
+                + " enabled=" + lt.enabled
+                + " cullingMask=" + lt.renderingLayerMask
+                + " layer=" + lt.gameObject.layer);
+        }
     }
 
     void BuildNavMesh()

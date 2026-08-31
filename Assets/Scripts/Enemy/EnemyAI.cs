@@ -940,7 +940,7 @@ Vector3 center = player.transform.position;
     {
         currentSpeedMultiplier = newSpeedMultiplier;
 
-        if (isAgentValid && !useDirectChase && agent != null)
+        if (isAgentValid && agent != null)
         {
             agent.speed = baseSpeed * currentSpeedMultiplier;
         }
@@ -960,7 +960,7 @@ Vector3 center = player.transform.position;
 
         UpdateHealthBar();
 
-        if (isAgentValid && !useDirectChase && agent != null)
+        if (isAgentValid && agent != null)
         {
             agent.speed = baseSpeed * currentSpeedMultiplier;
         }

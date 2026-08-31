@@ -800,6 +800,7 @@ public class UIManager : MonoBehaviour
         }
 
         shopPanel.SetActive(true);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayShopBGM();
     }
 
     // 从池里随机抽取 3 个不重复的商品
@@ -1011,6 +1012,7 @@ public class UIManager : MonoBehaviour
     public void CloseShop()
     {
         if (shopPanel != null) shopPanel.SetActive(false);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayDungeonBGM();
     }
 
     public void RefreshBuffIcons()
@@ -1055,13 +1057,15 @@ public class UIManager : MonoBehaviour
     {
         if (buffIconContainer == null) return;
         int n = buffIconContainer.childCount;
+        // 往左展开：折叠时只显示最右边的 icon（最后一个子物体）
         for (int i = 0; i < n; i++)
-            buffIconContainer.GetChild(i).gameObject.SetActive(buffHudExpanded || i == 0);
+            buffIconContainer.GetChild(i).gameObject.SetActive(buffHudExpanded || i == n - 1);
 
         if (buffHudArrow != null)
         {
-            buffHudArrow.SetActive(n > 1); // 只有一个/没有时不显示箭头
-            buffHudArrow.transform.localEulerAngles = new Vector3(0f, 0f, buffHudExpanded ? -90f : 0f);
+            buffHudArrow.SetActive(n > 1);
+            // 折叠时箭头朝左 ◀，展开时朝右 ▶
+            buffHudArrow.transform.localEulerAngles = new Vector3(0f, 0f, buffHudExpanded ? 0f : 180f);
         }
     }
 
