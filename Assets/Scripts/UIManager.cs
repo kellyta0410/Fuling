@@ -742,6 +742,26 @@ public class UIManager : MonoBehaviour
         if (!buffToastShowing) StartCoroutine(ProcessBuffToastQueue());
     }
 
+    /// <summary>
+    /// 常驻提示：显示后不自动消失，直到调用 HidePersistentToast
+    /// </summary>
+    public void ShowPersistentToast(string message)
+    {
+        TextMeshProUGUI toast = GetBuffToast();
+        if (toast != null)
+        {
+            toast.gameObject.SetActive(true);
+            toast.text = message;
+            toast.color = Color.yellow;
+        }
+    }
+
+    public void HidePersistentToast()
+    {
+        if (buffToastText != null)
+            buffToastText.gameObject.SetActive(false);
+    }
+
     // ==================== 商店 ====================
     // ⭐ 规则：列出商店池内所有 Buff；每种最多叠 maxStack 层（默认5）；
     // 价格随下一层递进：30 / 65 / 105 / 150 / 200；即时恢复(Heal)按各自 shopCost。

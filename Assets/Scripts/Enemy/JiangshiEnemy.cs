@@ -152,11 +152,10 @@ public class JiangshiEnemy : EnemyAI
         }
     }
 
-    // 被击中/击退会中断蓄力与冲撞（恢复分离推挤，回到冷却）
+    // 被击中/击退：击退位移照常（base），但蓄力/冲撞不中断
     protected override void OnKnockback()
     {
         base.OnKnockback();
-        InterruptCharge();
     }
 
     // 僵尸跳着走：检测视觉模型从"离地"落到"贴地"的下降沿，落地瞬间播放一次 moveSFX。
