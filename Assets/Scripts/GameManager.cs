@@ -137,10 +137,6 @@ public class GameManager : MonoBehaviour
         scalingTimer = 0f;
         gameStartTime = Time.time;
 
-        // 防万一：开局时强制关闭商店面板
-        UIManager ui = FindObjectOfType<UIManager>();
-        if (ui != null) ui.CloseShop();
-
         if (currentDifficulty != null)
         {
             timeLimit = currentDifficulty.timeLimit;
@@ -165,7 +161,6 @@ public class GameManager : MonoBehaviour
                     UIManager uiManager = FindObjectOfType<UIManager>();
                     if (uiManager != null)
                     {
-                        uiManager.CloseShop();
                         uiManager.SetTimerMode(false);
                         uiManager.SetRoomDisplay(1);
                     }

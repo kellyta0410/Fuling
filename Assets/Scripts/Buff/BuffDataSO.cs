@@ -50,13 +50,24 @@ public class BuffDataSO : ScriptableObject
     // 当资产未填写 description 时，按类型自动生成一句说明（供商店卡片展示），并列出数值/层数
     public string GetDefaultDescription()
     {
-        float pct = effectValue * 100f;
+        // 加算型（固定数值）vs 乘算型（百分比），按类型判断
+        bool isAdditive = buffType == BuffType.PowerUp
+                       || buffType == BuffType.SkillPowerUp
+                       || buffType == BuffType.AttackRangeUp
+                       || buffType == BuffType.SkillRangeUp
+                       || buffType == BuffType.SkillCooldownUp
+                       || buffType == BuffType.MaxHealthUp;
+        string unit = buffType == BuffType.SkillCooldownUp ? "秒" : "点";
+        string perLayer = isAdditive
+            ? ("每层+" + effectValue.ToString("G") + unit)
+            : ("每层+" + (effectValue * 100f).ToString("F0") + "%");
+
         switch (buffType)
         {
             case BuffType.Heal:
-                if (isFullRestore) return "立即将生命值回满。";
+                if (isFullRestore) return "立即生命值回满。";
                 if (isHalfRestore) return "立即恢复一半生命值。";
-                return effectValue > 0 ? ("立即恢复 " + effectValue.ToString("F0") + " 点生命值。") : "立即恢复生命值。";
+                return effectValue > 0 ? ("立即恢复" + effectValue.ToString("F0") + "点生命值。") : "立即恢复生命值。";
         }
 
         string baseText;
@@ -76,11 +87,14 @@ public class BuffDataSO : ScriptableObject
         if (isInstantEffect) return baseText + "。";
 
         if (maxStack <= 1)
-            return baseText + (pct > 0 ? ("（+" + pct.ToString("F0") + "%）。") : "。");
+            return baseText + "(" + perLayer + ")。";
 
-        string info = "（最高 " + maxStack + " 层";
-        if (pct > 0) info += "，每层 +" + pct.ToString("F0") + "%，满级共 +" + (pct * maxStack).ToString("F0") + "%";
-        info += "）。";
-        return baseText + info;
+        string total;
+        if (isAdditive)
+            total = "，满级共+" + (effectValue * maxStack).ToString("G") + unit;
+        else
+            total = "，满级共+" + (effectValue * maxStack * 100f).ToString("F0") + "%";
+
+        return baseText + "(最高" + maxStack + "层，" + perLayer + total + ")。";
     }
 }

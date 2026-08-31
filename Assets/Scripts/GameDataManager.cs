@@ -210,6 +210,12 @@ public class GameDataManager : MonoBehaviour
         get => GetRecord("简单").HasRecord;
     }
 
+    // 无尽模式解锁条件：玩过一局"普通"（普通难度有任意记录）
+    public bool IsInfiniteUnlocked
+    {
+        get => GetRecord("普通").HasRecord;
+    }
+
     public void UpdateRecord(string difficultyName, int coins, int kills, float time, int rooms = 0)
     {
         GameRecord currentBest = GetRecord(difficultyName);

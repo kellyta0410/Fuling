@@ -103,7 +103,7 @@ public class BuffHandler : MonoBehaviour
             case BuffType.SkillRangeUp:
                 player.ApplySkillRangeAdditive(n * data.effectValue); break;
             case BuffType.SkillCooldownUp:
-                player.ApplySkillCooldownMultiplier(1f - n * data.effectValue); break;
+                player.ApplySkillCooldownAdditive(n * data.effectValue); break;
             case BuffType.CoinMultUp:
                 player.ApplyCoinMultiplier(1f + n * data.effectValue); break;
             case BuffType.MaxHealthUp:

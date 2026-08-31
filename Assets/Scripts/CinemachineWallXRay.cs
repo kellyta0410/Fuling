@@ -43,8 +43,10 @@ public class CinemachineWallXRay : MonoBehaviour
         Vector3 camPos = transform.position;
 
         // 用 RaycastAll：射线可穿过相机自己所在的墙，命中后面所有墙。
-        // 先汇总本帧“应淡入”的墙（达到 minHitsToFade 的射线命中）。
+        // 先汇总本帧"应淡入"的墙（达到 minHitsToFade 的射线命中）。
         HashSet<Transform> fadeSet = new HashSet<Transform>();
+        int totalRayHits = 0;
+        int wallHits = 0;
         foreach (Vector3 offset in playerOffsets)
         {
             Vector3 targetPoint = player.position + player.TransformDirection(offset);
@@ -53,11 +55,13 @@ public class CinemachineWallXRay : MonoBehaviour
             if (dist < 0.0001f) continue;
 
             RaycastHit[] hits = Physics.RaycastAll(camPos, dir / dist, dist, wallLayer);
+            totalRayHits += hits.Length;
             Dictionary<Transform, int> counts = new Dictionary<Transform, int>();
             foreach (RaycastHit hit in hits)
             {
                 if (!hit.collider.CompareTag("Wall")) continue;
                 if (hit.collider.GetComponentInParent<EnemyAI>() != null) continue;
+                wallHits++;
 
                 // 排除相机自身所在的墙（相机在该墙碰撞体内）。
                 // 相机在墙内时会一直命中它（射线从内部穿出表面），导致其永不恢复，
@@ -73,6 +77,10 @@ public class CinemachineWallXRay : MonoBehaviour
                 if (kvp.Value >= minHitsToFade)
                     fadeSet.Add(kvp.Key);
         }
+
+        // 调试：每 60 帧输出一次射线命中统计
+        if (Time.frameCount % 60 == 0)
+            Debug.Log($"[XRay] frame={Time.frameCount} totalRayHits={totalRayHits} wallTaggedHits={wallHits} fadeSetCount={fadeSet.Count} activeWalls={activeWalls.Count} player={player.name} cam={Camera.main != null}");
 
         // 更新连续命中/未命中计数（迟滞防抖）
         foreach (var w in fadeSet)

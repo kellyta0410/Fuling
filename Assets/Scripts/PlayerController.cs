@@ -913,6 +913,7 @@ public class PlayerController : MonoBehaviour
         // 实现稳定的 360° 范围技：不再因延迟期间的移动/击退而漏掉部分敌人。
         foreach (Collider hit in hitColliders)
         {
+            if (hit == null) continue;
             EnemyAI enemy = hit.GetComponentInParent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
             {
@@ -1646,6 +1647,12 @@ public class PlayerController : MonoBehaviour
     {
         if (baseSkillCooldown <= 0f) baseSkillCooldown = skillCooldown;
         skillCooldown = Mathf.Max(0.5f, baseSkillCooldown * mult);
+    }
+
+    public void ApplySkillCooldownAdditive(float reduction)
+    {
+        if (baseSkillCooldown <= 0f) baseSkillCooldown = skillCooldown;
+        skillCooldown = Mathf.Max(0.5f, baseSkillCooldown - reduction);
     }
 
     public void ApplyCoinMultiplier(float mult)

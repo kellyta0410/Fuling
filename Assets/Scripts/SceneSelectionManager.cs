@@ -18,6 +18,8 @@ public class SceneSelectionManager : MonoBehaviour
     public DifficultySettings infiniteConfig;
     [Tooltip("普通模式按钮（未开放，启动时置灰但仍可点击弹提示）")]
     public Button normalModeButton;
+    [Tooltip("无尽模式按钮（需通关普通模式才解锁）")]
+    public Button infiniteModeButton;
 
     [Header("===== UI 面板 =====")]
     public GameObject mainPanel;
@@ -87,6 +89,7 @@ public class SceneSelectionManager : MonoBehaviour
         BindCharacterButtons();
 
         SetupNormalModeButton();
+        SetupInfiniteModeButton();
 
         ShowMainPanel();
         RefreshAllUI();
@@ -111,6 +114,7 @@ public class SceneSelectionManager : MonoBehaviour
         {
             RefreshAllUI();
             SetupNormalModeButton(); // 游戏结束返回时刷新普通按钮解锁状态
+            SetupInfiniteModeButton(); // 刷新无尽按钮解锁状态
         }
     }
 
@@ -531,6 +535,12 @@ public class SceneSelectionManager : MonoBehaviour
 
     public void SelectInfinite()
     {
+        if (gameDataManager == null) return;
+        if (!gameDataManager.IsInfiniteUnlocked)
+        {
+            ShowHint("先完成一局【普通】模式即可解锁！");
+            return;
+        }
         SelectDifficulty(infiniteConfig, "无限");
     }
 
@@ -702,6 +712,22 @@ public class SceneSelectionManager : MonoBehaviour
         normalModeButton.interactable = true;
         if (normalModeButton.targetGraphic != null)
             normalModeButton.targetGraphic.color = unlocked
+                ? new Color(1f, 1f, 1f, 1f)
+                : new Color(0.55f, 0.55f, 0.55f, 0.7f);
+    }
+
+    void SetupInfiniteModeButton()
+    {
+        if (infiniteModeButton == null) return;
+
+        infiniteModeButton.onClick.RemoveListener(SelectInfinite);
+        infiniteModeButton.onClick.AddListener(SelectInfinite);
+
+        bool unlocked = gameDataManager != null && gameDataManager.IsInfiniteUnlocked;
+
+        infiniteModeButton.interactable = true;
+        if (infiniteModeButton.targetGraphic != null)
+            infiniteModeButton.targetGraphic.color = unlocked
                 ? new Color(1f, 1f, 1f, 1f)
                 : new Color(0.55f, 0.55f, 0.55f, 0.7f);
     }
