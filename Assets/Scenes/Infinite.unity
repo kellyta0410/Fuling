@@ -911,27 +911,22 @@ MonoBehaviour:
   - {fileID: 11400000, guid: f4d5304d33465344c82cbf2117aabfda, type: 2}
   shopPrefab: {fileID: 5698931878998845775, guid: 85675fbbaa79f894f84a3fcc3bcb852d,
     type: 3}
+  shopButtonPrefab: {fileID: 4397965473501251976, guid: 86f0c5fd1bf1cf14fa9bb55ff7a18974,
+    type: 3}
+  shopButtonParent: {fileID: 1018603856487360757}
   playerTarget: {fileID: 6886525407605860346}
   showDebugLogs: 1
-  snakeWallWithDoorPrefab: {fileID: 2705507838271533520, guid: 3464a0e48fbf4ec42a133572173a29b3,
+  wallWithDoorPrefab: {fileID: 6448541869407925655, guid: 1a006f4b13e18864cad73d5cd1fceb5b,
+    type: 3}
+  solidWallPrefab: {fileID: 2705507838271533520, guid: 3464a0e48fbf4ec42a133572173a29b3,
     type: 3}
   snakeFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
-    type: 3}
-  zombieWallWithDoorPrefab: {fileID: 745232564564278100, guid: cf550e8ce51e4324a864e0a9d008b8e4,
     type: 3}
   zombieFloorPrefab: {fileID: 447929316062128568, guid: cda8598b214c65b4a9f1633a7d3204a1,
     type: 3}
   mixedFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
     type: 3}
-  shopWallWithDoorPrefab: {fileID: 1981850885445822497, guid: 31a2e77f769ebd045b49267dc8b0346b,
-    type: 3}
-  shopFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
-    type: 3}
-  snakeSolidWallPrefab: {fileID: 6448541869407925655, guid: 1a006f4b13e18864cad73d5cd1fceb5b,
-    type: 3}
-  zombieSolidWallPrefab: {fileID: 112881848992718368, guid: 4eac3f2f6c962154c886968ce4aa46ef,
-    type: 3}
-  shopSolidWallPrefab: {fileID: 8542337993107196511, guid: d872558c92668de4fb21e31ac56b341c,
+  shopFloorPrefab: {fileID: 447929316062128568, guid: 1aa05aebf296b2e498ab8537caad7839,
     type: 3}
   doorSwingAngle: 90
   doorSwingAxis: {x: 0, y: 0, z: 1}
@@ -1552,16 +1547,16 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 413846459}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 3360664246604732540}
+  m_Father: {fileID: 1018603856487360757}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -295, y: -90}
+  m_AnchoredPosition: {x: -294.99982, y: -90}
   m_SizeDelta: {x: 300, y: 80}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &413846461
@@ -2326,13 +2321,13 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 738554347}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 773567492}
-  m_Father: {fileID: 3360664246604732540}
+  m_Father: {fileID: 1018603856487360757}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
@@ -9887,6 +9882,8 @@ RectTransform:
   - {fileID: 1942504965882022870}
   - {fileID: 2489231555071357589}
   - {fileID: 4211359649479999421}
+  - {fileID: 413846460}
+  - {fileID: 738554348}
   m_Father: {fileID: 3360664246604732540}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -12312,8 +12309,6 @@ RectTransform:
   - {fileID: 3281026911027862935}
   - {fileID: 7600866444095068376}
   - {fileID: 2761071821329202280}
-  - {fileID: 413846460}
-  - {fileID: 738554348}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -19130,7 +19125,6 @@ MonoBehaviour:
   gameManager: {fileID: 8194553614850778318}
   buffToastText: {fileID: 7884111085241587443}
   shopPanel: {fileID: 859632904}
-  shopButtonPrefab: {fileID: 0}
   shopButtonContainer: {fileID: 192905483}
   openShopOnStart: 0
   debugShopBuffs:

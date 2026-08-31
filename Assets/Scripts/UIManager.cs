@@ -51,7 +51,6 @@ public class UIManager : MonoBehaviour
 
     [Header("商店面板")]
     public GameObject shopPanel;
-    public GameObject shopButtonPrefab;
     public Transform shopButtonContainer;
 
     [Header("调试：开局直接开商店（测试用，正式发布请关闭）")]
@@ -115,6 +114,9 @@ public class UIManager : MonoBehaviour
 
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
+        // 没有 buff 时隐藏 HUD
+        if (buffIconContainer != null) buffIconContainer.gameObject.SetActive(false);
+        if (buffHudToggle != null) buffHudToggle.gameObject.SetActive(false);
         if (openShopOnStart && debugShopBuffs.Count > 0)
             OpenShop(debugShopBuffs, 100);
         else if (shopPanel != null)
@@ -1053,6 +1055,9 @@ public class UIManager : MonoBehaviour
 
         foreach (Transform c in buffIconContainer) Destroy(c.gameObject);
         var owned = bh.GetOwnedBuffs();
+        // 有 buff 才显示 HUD
+        buffIconContainer.gameObject.SetActive(owned.Count > 0);
+        if (buffHudToggle != null) buffHudToggle.gameObject.SetActive(owned.Count > 0);
         foreach (var o in owned)
         {
             if (o.data == null || o.data.isInstantEffect) continue; // 不显示治疗/恢复

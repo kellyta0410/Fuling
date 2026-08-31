@@ -82,6 +82,10 @@ public class DungeonManager : MonoBehaviour
 
     [Header("商店物体预制体（在预制体上挂 ShopItem 组件即可；留空则运行时自动生成一个简单 Shop 物体）")]
     public GameObject shopPrefab;
+    [Header("商店按钮预制体（拖入你的按钮图片，需有 Button 组件）")]
+    public GameObject shopButtonPrefab;
+    [Header("商店按钮父物体（拖入你想放按钮的 Panel）")]
+    public Transform shopButtonParent;
 
     [Header("玩家参考")]
     public Transform playerTarget;
@@ -91,25 +95,15 @@ public class DungeonManager : MonoBehaviour
 
     [Header("门识别：在带门墙预制体的门子物体上挂 DoorMarker 组件即可（运行时自动查找）")]
 
-    [Header("蛇房间（墙 + 地板）")]
-    public GameObject snakeWallWithDoorPrefab;
+    [Header("墙壁（所有房间统一用同一套）")]
+    public GameObject wallWithDoorPrefab;
+    public GameObject solidWallPrefab;
+
+    [Header("地板（按房间类型区分）")]
     public GameObject snakeFloorPrefab;
-
-    [Header("僵尸房间（墙 + 地板）")]
-    public GameObject zombieWallWithDoorPrefab;
     public GameObject zombieFloorPrefab;
-
-    [Header("混合房间（只用地板；墙随机取蛇房或僵尸房）")]
     public GameObject mixedFloorPrefab;
-
-    [Header("商店房间（墙 + 地板）")]
-    public GameObject shopWallWithDoorPrefab;
     public GameObject shopFloorPrefab;
-
-    [Header("死墙（封死的实心墙，无门；按房间类型区分外观）")]
-    public GameObject snakeSolidWallPrefab;
-    public GameObject zombieSolidWallPrefab;
-    public GameObject shopSolidWallPrefab;
 
     // ============================================================
     //  房间实例（持久存在于房间图，不再随切换销毁）
@@ -309,6 +303,7 @@ public class DungeonManager : MonoBehaviour
         bool makeShop = pendingShopCoords.Contains(coord);
         pendingShopCoords.Remove(coord);
         if (makeShop) room.type = DungeonRoomType.Shop;
+        else if (roomCounter == 1) room.type = DungeonRoomType.Shop; // 测试：第一间强制商店
         else room.type = (DungeonRoomType)Random.Range(0, 3);
         levelCounter++; room.levelIndex = levelCounter;
 
@@ -777,13 +772,8 @@ public class DungeonManager : MonoBehaviour
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 按房间类型选实心墙预制体（不同外观）；都未配置时退化为程序生成的实心方块
-        GameObject sp = null;
-        if (currentType == DungeonRoomType.Snake) sp = snakeSolidWallPrefab;
-        else if (currentType == DungeonRoomType.Zombie) sp = zombieSolidWallPrefab;
-        else if (currentType == DungeonRoomType.Mixed)
-            sp = (roomTheme == DungeonRoomType.Zombie) ? zombieSolidWallPrefab : snakeSolidWallPrefab;
-        else if (currentType == DungeonRoomType.Shop) sp = shopSolidWallPrefab;
+        // 统一用同一套墙壁预制体，避免相邻房间材质不同
+        GameObject sp = solidWallPrefab;
 
         GameObject mesh = null;
         if (sp != null)
@@ -912,19 +902,8 @@ public class DungeonManager : MonoBehaviour
         wallParent.transform.localPosition = localPos;
         wallParent.transform.localRotation = localRot;
 
-        // 按房间类型直接选各自的带门墙预制体（墙/门几何全部来自预制体）
-        GameObject wwd = null;
-        if (currentType == DungeonRoomType.Snake) wwd = snakeWallWithDoorPrefab;
-        else if (currentType == DungeonRoomType.Zombie) wwd = zombieWallWithDoorPrefab;
-        else if (currentType == DungeonRoomType.Mixed)
-        {
-            // 混合房墙随机取蛇房或僵尸房的带门墙（混合房自己只配地板）
-            wwd = (Random.value < 0.5f) ? snakeWallWithDoorPrefab : zombieWallWithDoorPrefab;
-        }
-        else if (currentType == DungeonRoomType.Shop) wwd = shopWallWithDoorPrefab;
-
-        // 兜底：该类型未配带门墙时，借用蛇房墙，避免空墙
-        if (wwd == null) wwd = snakeWallWithDoorPrefab;
+        // 统一用同一套带门墙预制体
+        GameObject wwd = wallWithDoorPrefab;
 
         // 优先：使用“带门墙”预制体
         if (wwd != null)
@@ -1668,7 +1647,7 @@ public class DungeonManager : MonoBehaviour
         if (buffs.Count == 0) return;
 
         // 整间商店房只生成一个交互点：玩家靠近后点击，弹出随机 3 个 Buff 供选择购买
-        Vector3 pos = room.root.transform.position + new Vector3(0, 1f, 0);
+        Vector3 pos = room.root.transform.position;
         GameObject shop;
         if (shopPrefab != null)
         {
@@ -1676,7 +1655,7 @@ public class DungeonManager : MonoBehaviour
             shop = Instantiate(shopPrefab, pos, Quaternion.identity);
             shop.name = "Shop";
             ShopItem item = shop.GetComponent<ShopItem>();
-            if (item != null) item.Setup(buffs, this, 100);
+            if (item != null) item.Setup(buffs, this, 100, shopButtonPrefab, shopButtonParent);
             else Debug.LogWarning("[Dungeon] shopPrefab 上没有 ShopItem 组件，请在其上挂 ShopItem.cs");
         }
         else
@@ -1684,7 +1663,7 @@ public class DungeonManager : MonoBehaviour
             // 兜底：运行时自动创建简单的 Shop 物体
             shop = new GameObject("Shop");
             shop.transform.position = pos;
-            shop.AddComponent<ShopItem>().Setup(buffs, this, 100);
+            shop.AddComponent<ShopItem>().Setup(buffs, this, 100, shopButtonPrefab, shopButtonParent);
         }
         if (showDebugLogs) Debug.Log("[Dungeon] 商店已生成（靠近后点击打开，随机提供 3 个 Buff）");
     }
