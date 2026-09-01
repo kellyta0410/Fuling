@@ -1867,6 +1867,16 @@ public class PlayerController : MonoBehaviour
             if (col != null && !col.isTrigger) col.enabled = true;
         }
 
+        // 重置所有技能冷却，复活后可立即使用
+        attackCooldownTimer = 0f;
+        canAttack = true;
+        skillCooldownTimer = 0f;
+        canUseSkill = true;
+        isUsingSkill = false;
+        dodgeCooldownTimer = 0f;
+        canDodge = true;
+        isDodging = false;
+
         // 动画复位：从死亡状态回到正常移动
         if (animator != null)
         {

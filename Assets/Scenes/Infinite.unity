@@ -749,7 +749,7 @@ Light:
   m_Type: 1
   m_Shape: 0
   m_Color: {r: 1, g: 0.7760016, b: 0.6627451, a: 1}
-  m_Intensity: 0.8
+  m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -807,13 +807,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 203844586}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.62088513, y: -0.19826688, z: 0.16636564, w: 0.7399422}
+  m_LocalRotation: {x: 0.55403227, y: -0.21201213, z: 0.14845248, w: 0.79124016}
   m_LocalPosition: {x: -0.8, y: 13.5, z: -2.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 80, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 70, y: -30, z: 0}
 --- !u!1 &218836107
 GameObject:
   m_ObjectHideFlags: 0
@@ -916,9 +916,9 @@ MonoBehaviour:
   shopButtonParent: {fileID: 1018603856487360757}
   playerTarget: {fileID: 6886525407605860346}
   showDebugLogs: 1
-  wallWithDoorPrefab: {fileID: 6448541869407925655, guid: 1a006f4b13e18864cad73d5cd1fceb5b,
+  wallWithDoorPrefab: {fileID: 2705507838271533520, guid: 3464a0e48fbf4ec42a133572173a29b3,
     type: 3}
-  solidWallPrefab: {fileID: 2705507838271533520, guid: 3464a0e48fbf4ec42a133572173a29b3,
+  solidWallPrefab: {fileID: 6448541869407925655, guid: 1a006f4b13e18864cad73d5cd1fceb5b,
     type: 3}
   snakeFloorPrefab: {fileID: 447929316062128568, guid: 64784f413ecfee143b12078b615cecb8,
     type: 3}
@@ -11195,31 +11195,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2169161476076787554
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6500083972641839265}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 250b0199153b95840a11e4622e38e5c3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  buffPool:
-  - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
-    weight: 7
-  - buffData: {fileID: 11400000, guid: 39f9cbad25868594995bb6e95c34d343, type: 2}
-    weight: 5
-  - buffData: {fileID: 11400000, guid: b3c100088aec0a9448b1bd543780eae5, type: 2}
-    weight: 10
-  buffKillInterval: 3
-  defaultBuffSFX: {fileID: 8300000, guid: 1e511d6671ea4134399acdc4c54f5319, type: 3}
-  player: {fileID: 6886525407605860346}
-  despawnDistance: 30
-  buffLifeTime: 30
-  cleanupInterval: 2
 --- !u!224 &2194467758154030754
 RectTransform:
   m_ObjectHideFlags: 0
@@ -11516,21 +11491,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &2543949849538844603
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6500083972641839265}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7421121859857493202}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2618590119744081927
 GameObject:
   m_ObjectHideFlags: 0
@@ -19658,23 +19618,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!1 &6500083972641839265
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2543949849538844603}
-  - component: {fileID: 2169161476076787554}
-  m_Layer: 0
-  m_Name: BuffManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
 --- !u!114 &6504884820225766741
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20813,7 +20756,6 @@ Transform:
   - {fileID: 2412070481754076445}
   - {fileID: 5254368155062799955}
   - {fileID: 3960337231167649840}
-  - {fileID: 2543949849538844603}
   - {fileID: 218836108}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

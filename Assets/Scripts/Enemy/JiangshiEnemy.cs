@@ -130,11 +130,18 @@ public class JiangshiEnemy : EnemyAI
 
     protected override void Update()
     {
+        // 蓄力/冲撞期间锁定朝向：base.Update() 中的"半就位带"RotateTowardsPlayer
+        // 会在玩家靠近时把僵尸转向玩家，覆盖蓄力锁定方向。先保存朝向，base 跑完再恢复。
+        bool chargeActive = (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging);
+        Quaternion savedRotation = chargeActive ? transform.rotation : Quaternion.identity;
+
         base.Update();
-        // 冲撞/蓄力每帧由这里驱动：即使 base 在攻击范围内提前 return 跳过 HandleMovement，
-        // 也能保证蓄力读条不被普通攻击打断（"不打断瞬移"）。
-        if (blinkState == BlinkState.Preparing || blinkState == BlinkState.Charging)
+
+        if (chargeActive)
+        {
+            transform.rotation = savedRotation;
             DriveSpecial();
+        }
         UpdateLandSFX();
     }
 
@@ -152,9 +159,10 @@ public class JiangshiEnemy : EnemyAI
         }
     }
 
-    // 被击中/击退：击退位移照常（base），但蓄力/冲撞不中断
+    // 被击中/击退：击退位移照常（base），同时中断蓄力/冲撞
     protected override void OnKnockback()
     {
+        InterruptCharge();
         base.OnKnockback();
     }
 
