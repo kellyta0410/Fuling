@@ -225,8 +225,31 @@ public class DungeonManager : MonoBehaviour
         visitedRoomNumber = 1; // 起始房算作玩家第 1 次进入（战斗房），第 5/10/15… 次进入才是商店
         currentRoom = start;
         currentCoord = Vector2Int.zero;
-        BeginRoomContent(start, -1);
-        ExpandRoom(start);
+        Debug.Log("[Dungeon] === Start: room#1 built, doorBlockers count=" + start.doorBlockers.Count
+            + " [0]=" + (start.doorBlockers.Count > 0 ? (start.doorBlockers[0] == null ? "null" : "obj") : "N/A")
+            + " [1]=" + (start.doorBlockers.Count > 1 ? (start.doorBlockers[1] == null ? "null" : "obj") : "N/A")
+            + " [2]=" + (start.doorBlockers.Count > 2 ? (start.doorBlockers[2] == null ? "null" : "obj") : "N/A")
+            + " [3]=" + (start.doorBlockers.Count > 3 ? (start.doorBlockers[3] == null ? "null" : "obj") : "N/A"));
+        try
+        {
+            Debug.Log("[Dungeon] === Start: calling BeginRoomContent ===");
+            BeginRoomContent(start, -1);
+            Debug.Log("[Dungeon] === Start: BeginRoomContent done ===");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[Dungeon] === Start: BeginRoomContent EXCEPTION: " + e);
+        }
+        try
+        {
+            Debug.Log("[Dungeon] === Start: calling ExpandRoom ===");
+            ExpandRoom(start);
+            Debug.Log("[Dungeon] === Start: ExpandRoom done, rooms count=" + rooms.Count);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[Dungeon] === Start: ExpandRoom EXCEPTION: " + e);
+        }
         BuildNavMesh();
         RefreshRoomUI(start);
         if (playerTarget != null)
@@ -324,8 +347,13 @@ public class DungeonManager : MonoBehaviour
         {
             Vector2Int nc = room.coord + DirVec2D(d);
             Room nb;
-            if (rooms.TryGetValue(nc, out nb) && nb != null && nb != room)
+            bool found = rooms.TryGetValue(nc, out nb);
+            Debug.Log("[Dungeon] BuildRoom #" + room.roomIndex + " coord=" + room.coord + " 检查d=" + d + " nc=" + nc + " found=" + found + " nb=" + (nb != null ? "" + nb.roomIndex : "null") + " sameRoom=" + (nb == room));
+            if (found && nb != null && nb != room)
+            {
+                Debug.Log("[Dungeon] BuildRoom #" + room.roomIndex + " → ConvertEdgeToDoor(owner=room#" + nb.roomIndex + " coord=" + nb.coord + ", dir=" + ((d + 2) % 4) + ")");
                 ConvertEdgeToDoor(nb, (d + 2) % 4);
+            }
         }
         placedBounds.Clear();
         PlaceDecorations(root.transform);
@@ -438,6 +466,7 @@ public class DungeonManager : MonoBehaviour
     // 幂等：该方向若是门(doorBlockers 已登记)则跳过。
     void ConvertEdgeToDoor(Room owner, int dir)
     {
+        Debug.Log("[Dungeon] ConvertEdgeToDoor ENTER: owner.roomIndex=" + (owner != null ? owner.roomIndex : -1) + " dir=" + dir + " owner.root=" + (owner != null && owner.root != null ? owner.root.name : "null"));
         if (owner == null || owner.root == null) { Debug.LogWarning("[Dungeon] ConvertEdgeToDoor 早退: owner=" + owner); return; }
         while (owner.doorBlockers.Count <= dir) owner.doorBlockers.Add(null);
         if (owner.doorBlockers[dir] != null) { Debug.LogWarning("[Dungeon] ConvertEdgeToDoor 跳过: 已有门 room=" + owner.roomIndex + " dir=" + dir); return; } // 已是门，跳过
@@ -580,8 +609,27 @@ public class DungeonManager : MonoBehaviour
         for (int d = 0; d < 4; d++)
         {
             Vector2Int nc = room.coord + DirVec2D(d);
-            if (!rooms.ContainsKey(nc)) BuildRoom(nc, false);
+            bool exists = rooms.ContainsKey(nc);
+            Debug.Log("[Dungeon] ExpandRoom room=" + room.roomIndex + " coord=" + room.coord + " d=" + d + " nc=" + nc + " exists=" + exists);
+            if (!exists)
+            {
+                try
+                {
+                    Room nb = BuildRoom(nc, false);
+                    Debug.Log("[Dungeon] ExpandRoom: BuildRoom(" + nc + ") done, room#" + nb.roomIndex
+                        + " doorBlockers count=" + nb.doorBlockers.Count
+                        + " [0]=" + (nb.doorBlockers.Count > 0 ? (nb.doorBlockers[0] == null ? "null" : "list(" + nb.doorBlockers[0].Count + ")") : "N/A")
+                        + " [1]=" + (nb.doorBlockers.Count > 1 ? (nb.doorBlockers[1] == null ? "null" : "list(" + nb.doorBlockers[1].Count + ")") : "N/A")
+                        + " [2]=" + (nb.doorBlockers.Count > 2 ? (nb.doorBlockers[2] == null ? "null" : "list(" + nb.doorBlockers[2].Count + ")") : "N/A")
+                        + " [3]=" + (nb.doorBlockers.Count > 3 ? (nb.doorBlockers[3] == null ? "null" : "list(" + nb.doorBlockers[3].Count + ")") : "N/A"));
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[Dungeon] ExpandRoom: BuildRoom(" + nc + ") EXCEPTION: " + e);
+                }
+            }
         }
+        Debug.Log("[Dungeon] ExpandRoom: total rooms=" + rooms.Count + " after expanding from room#" + room.roomIndex);
     }
 
     void SetRoomDark(Room room)

@@ -57,7 +57,7 @@ MonoBehaviour:
   deathSFX: {fileID: 8300000, guid: 952fac87cd6fcb345b52ce734cdd3077, type: 3}
   healthBarPrefab: {fileID: 9201157394884386374, guid: 00df3f13a5b376744bcea37cdf631e4b,
     type: 3}
-  healthBarOffset: {x: 0, y: 4, z: 0}
+  healthBarOffset: {x: 0, y: 5, z: 0}
   fullHealthColor: {r: 0, g: 1, b: 0, a: 1}
   midHealthColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   lowHealthColor: {r: 1, g: 0, b: 0, a: 1}
@@ -98,9 +98,7 @@ MonoBehaviour:
   logStuckDetection: 0
   logPathCorners: 0
   logNavMeshLoss: 1
-  ownerTile: {fileID: 0}
   prepareDistance: 6
-  blinkStepDistance: 6
   prepareDuration: 2
   prepareDurationJitter: 0.8
   directAttackDistance: 2
@@ -108,11 +106,18 @@ MonoBehaviour:
   blinkObstacleMask:
     serializedVersion: 2
     m_Bits: 1088
+  chargeSpeed: 34
+  chargeOvershoot: 3
+  chargeHitRadius: 2
+  chargeKnockback: 2.5
+  chargeBaseDamage: 8
   showGroundIndicator: 1
   endColor: {r: 1, g: 0, b: 0, a: 1}
   indicatorSize: 1
   indicatorHeight: 0.05
   frameLineWidth: 0.06
+  manualJumpHeight: 0.5
+  manualJumpSpeed: 3
   airborneThreshold: 0.08
   landThreshold: 0.03
 --- !u!95 &2289995692221569591
