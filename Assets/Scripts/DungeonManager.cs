@@ -123,8 +123,7 @@ public class DungeonManager : MonoBehaviour
         public int levelIndex;    // 显示关号（仅由 visitedRoomNumber 赋值，保证与进入顺序一致）
         public int entryDir = -1;
         public bool[] deadWallDirs = new bool[4]; // 本房间哪些方向是"死路"（实心墙、且不再向外生房）
-        public GameObject shopObject; // 商店交互点（每次进入刷新）
-        public bool shopSpawned; // 商店是否已生成过（用于区分首次/再次进入）
+        public GameObject shopObject; // 商店交互点
     }
 
     // ---------- 运行时状态（连通式持久房间图） ----------
@@ -524,12 +523,6 @@ public class DungeonManager : MonoBehaviour
                 // 商店：ExpandRoom 可能新建了邻居（共享边自动建带门墙），再次开门确保所有出口畅通。
                 if (room.type == DungeonRoomType.Shop) OpenRoomDoors(room);
                 BuildNavMesh();
-            }
-
-            // 商店每次进入都刷新 Buff（重新生成商店交互点）
-            if (room.type == DungeonRoomType.Shop && room.shopSpawned)
-            {
-                StartRoomContent(room);
             }
 
             // 玩家刚离开的上一间房：入口门已在身后关上（DelayCloseEntryDoor），这里只关灯（变暗但不全黑）。
@@ -1831,7 +1824,6 @@ public class DungeonManager : MonoBehaviour
             shop.AddComponent<ShopItem>().Setup(buffs, this, 100, shopButtonPrefab, shopButtonParent);
         }
         room.shopObject = shop;
-        room.shopSpawned = true;
         if (showDebugLogs) Debug.Log("[Dungeon] 商店已生成（靠近后点击打开，随机提供 3 个 Buff）");
     }
 

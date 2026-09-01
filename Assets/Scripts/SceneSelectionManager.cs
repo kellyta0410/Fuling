@@ -248,7 +248,7 @@ public class SceneSelectionManager : MonoBehaviour
         UpdateRecordUI("简单", easyCoinsText, easyKillsText, easyTimeText);
         UpdateRecordUI("普通", normalCoinsText, normalKillsText, normalTimeText);
         // 无限模式：不显示金币（coin text 已移除），用“通关数量”代替计时
-        UpdateRecordUI("无限", null, infiniteKillsText, infiniteTimeText,
+        UpdateRecordUI("无限模式", null, infiniteKillsText, infiniteTimeText,
             useRoomsInsteadOfTime: true);
 
         // 直接把无限模式的金币整行（含标签）隐藏
@@ -259,7 +259,7 @@ public class SceneSelectionManager : MonoBehaviour
     {
         if (gameDataManager == null) return;
 
-        string[] difficulties = { "简单", "普通", "无限" };
+        string[] difficulties = { "简单", "普通", "无限模式" };
         foreach (string diff in difficulties)
         {
             PlayerPrefs.DeleteKey(diff + "_BestCoins");
@@ -541,7 +541,7 @@ public class SceneSelectionManager : MonoBehaviour
             ShowHint("先完成一局【普通】模式即可解锁！");
             return;
         }
-        SelectDifficulty(infiniteConfig, "无限");
+        SelectDifficulty(infiniteConfig, "无限模式");
     }
 
     void SelectDifficulty(DifficultySettings difficulty, string difficultyName)
