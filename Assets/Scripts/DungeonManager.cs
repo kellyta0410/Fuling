@@ -134,6 +134,9 @@ public class DungeonManager : MonoBehaviour
     private DungeonRoomType currentType;  // 构建当前房间时临时使用（选地板/墙/装饰）
     private DungeonRoomType roomTheme;     // 混合房视觉主题：随机取蛇或僵尸，整间房（地板+墙）统一
     private Vector2Int currentCoord = Vector2Int.zero;
+    private Vector2Int prevCoord = Vector2Int.zero;       // 上一帧玩家所在网格坐标，用于检测跨房
+    private Vector2Int pendingFromCoord;                   // 玩家离开的房间坐标，等待穿墙后触发 EnterRoom
+    private bool hasPending = false;                       // 是否有待处理的跨房事件
     private Room currentRoom = null;
     private Dictionary<Vector2Int, Room> rooms = new Dictionary<Vector2Int, Room>();
     private bool advancing = false;
@@ -520,15 +523,13 @@ public class DungeonManager : MonoBehaviour
                 SetRoomLightUp(room);
                 if (room.type == DungeonRoomType.Shop)
                 {
-                    // 商店：出口门永开，入口门延迟关闭（等玩家完全进入）
+                    // 商店：出口门永开
                     OpenRoomDoors(room);
-                    StartCoroutine(DelayCloseEntryDoor(room));
                 }
                 else
                 {
-                    // 战斗房：锁出口门，延迟关入口门（等玩家完全进入）
+                    // 战斗房：锁出口门（入口门由 Update 穿墙后关闭）
                     CloseRoomDoors(room);
-                    StartCoroutine(DelayCloseEntryDoor(room));
                 }
                 BeginRoomContent(room, entryDir);
                 ExpandRoom(room, fromCoord);
@@ -1327,7 +1328,7 @@ public class DungeonManager : MonoBehaviour
         if (room.entryDir < 0) yield break;
         Vector3 center = room.root.transform.position;
         float half = roomSize * 0.5f;
-        float margin = 1.5f;
+        float margin = 2f;
         while (true)
         {
             yield return null;
@@ -1860,23 +1861,59 @@ public class DungeonManager : MonoBehaviour
     {
         if (advancing || playerTarget == null) return;
 
-        // 检测玩家当前所在房间（按世界坐标取整到网格），跨房即“走进”新房间
         Vector2Int pc = WorldToCoord(playerTarget.position);
+
         if (pc != currentCoord)
         {
-            if (rooms.ContainsKey(pc))
+            if (!hasPending)
             {
-                Vector2Int from = currentCoord;
-                int entryDir = -1;
-                if (rooms.ContainsKey(from))
-                {
-                    int d = DirFromDelta(pc - from);
-                    if (d >= 0) entryDir = (d + 2) % 4;
-                }
-                EnterRoom(rooms[pc], from, entryDir);
+                hasPending = true;
+                pendingFromCoord = currentCoord;
             }
-            // 若不在任何房间（异常掉出），不处理
+
+            if (hasPending && rooms.ContainsKey(pc))
+            {
+                Room target = rooms[pc];
+                if (target != null && target.root != null)
+                {
+                    Vector3 center = target.root.transform.position;
+                    float half = roomSize * 0.5f;
+                    float margin = 2f;
+                    Vector3 pp = playerTarget.position;
+                    Vector2Int delta = pc - pendingFromCoord;
+                    bool crossed = false;
+
+                    if (delta.x == 1) crossed = pp.x > center.x - half + margin;
+                    else if (delta.x == -1) crossed = pp.x < center.x + half - margin;
+                    else if (delta.y == 1) crossed = pp.z > center.z - half + margin;
+                    else if (delta.y == -1) crossed = pp.z < center.z + half - margin;
+
+                    if (crossed)
+                    {
+                        int entryDir = -1;
+                        int d = DirFromDelta(delta);
+                        if (d >= 0) entryDir = (d + 2) % 4;
+                        EnterRoom(target, pendingFromCoord, entryDir);
+
+                        if (entryDir >= 0 && currentRoom != null
+                            && currentRoom.doorBlockers.Count > entryDir
+                            && currentRoom.doorBlockers[entryDir] != null)
+                        {
+                            ApplyDoorBlocker(currentRoom.doorBlockers[entryDir], true);
+                        }
+
+                        hasPending = false;
+                    }
+                }
+            }
+
+            if (hasPending && pc == currentCoord)
+            {
+                hasPending = false;
+            }
         }
+
+        prevCoord = pc;
 
         if (currentRoom == null) return;
 
