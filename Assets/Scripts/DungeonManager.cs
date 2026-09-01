@@ -120,14 +120,14 @@ public class DungeonManager : MonoBehaviour
         public int spawnedCount = 0;
         public List<GameObject> aliveEnemies = new List<GameObject>();
         public int roomIndex;     // 物理序号（每建一间 +1）
-        public int levelIndex;    // 战斗关序号（商店房为 0）
+        public int levelIndex;    // 显示关号（仅由 visitedRoomNumber 赋值，保证与进入顺序一致）
         public int entryDir = -1;
         public bool[] deadWallDirs = new bool[4]; // 本房间哪些方向是“死路”（实心墙、且不再向外生房）
     }
 
     // ---------- 运行时状态（连通式持久房间图） ----------
     private int roomCounter = 0;          // 物理房间序号累加器（每建一间 +1）
-    private int levelCounter = 0;         // 战斗关序号（商店房不计入）
+    private int battleLevel = 0;          // 战斗关序号（商店房不计入，用于 UI 显示）
     private int visitedRoomNumber = 0;    // 玩家“第几次进入房间”的序号（用于决定第 5/10/15… 间为商店）
     private HashSet<Vector2Int> pendingShopCoords = new HashSet<Vector2Int>(); // 预标记为商店、待生成的房间坐标
     private DungeonRoomType currentType;  // 构建当前房间时临时使用（选地板/墙/装饰）
@@ -224,10 +224,12 @@ public class DungeonManager : MonoBehaviour
         Room start = BuildRoom(Vector2Int.zero, true);
         start.entryDir = -1; // 起始房无入口方向
         visitedRoomNumber = 1; // 起始房算作玩家第 1 次进入（战斗房），第 5/10/15… 次进入才是商店
+        battleLevel = 1;
+        start.levelIndex = battleLevel;
         currentRoom = start;
         currentCoord = Vector2Int.zero;
         BeginRoomContent(start, -1);
-        ExpandRoom(start);
+        ExpandRoom(start, new Vector2Int(int.MinValue, int.MinValue));
         BuildNavMesh();
         RefreshRoomUI(start);
         if (playerTarget != null)
@@ -305,7 +307,6 @@ public class DungeonManager : MonoBehaviour
         pendingShopCoords.Remove(coord);
         if (makeShop) room.type = DungeonRoomType.Shop;
         else room.type = (DungeonRoomType)Random.Range(0, 3);
-        levelCounter++; room.levelIndex = levelCounter;
 
         currentType = room.type;
         // 混合房随机取“蛇”或“僵尸”作为整间房的视觉主题（地板+墙统一），其余类型主题即自身
@@ -468,10 +469,9 @@ public class DungeonManager : MonoBehaviour
                 // 与生成顺序无关，避免提前在暗房邻居里生成商店导致一进去跳关。
                 visitedRoomNumber++;
                 int vn = visitedRoomNumber;
-                room.levelIndex = vn;                       // 显示关号与进入顺序一致，商店不再显示 0（跳关）
 
                 // 提前判定：玩家处在第 4/9/14… 间时，把其四周邻居（含已存在的暗房与尚未生成的）
-                // 全部标为商店，确保“下一步进入的第 5/10/15… 间”必为商店，且以商店主题正确生成。
+                // 全部标为商店，确保"下一步进入的第 5/10/15… 间"必为商店，且以商店主题正确生成。
                 if (vn % 5 == 4)
                 {
                     for (int d = 0; d < 4; d++)
@@ -491,6 +491,13 @@ public class DungeonManager : MonoBehaviour
 
                 if (vn % 5 == 0) room.type = DungeonRoomType.Shop;
 
+                // 战斗关号仅在战斗房递增，商店不计入，UI 显示连续关号
+                if (room.type != DungeonRoomType.Shop)
+                {
+                    battleLevel++;
+                    room.levelIndex = battleLevel;
+                }
+
                 SetRoomLightUp(room);
                 if (room.type == DungeonRoomType.Shop)
                 {
@@ -504,7 +511,7 @@ public class DungeonManager : MonoBehaviour
                     StartCoroutine(DelayCloseEntryDoor(room));
                 }
                 BeginRoomContent(room, entryDir);
-                ExpandRoom(room);
+                ExpandRoom(room, fromCoord);
                 CleanupFarRooms(room.coord, 3);
                 // 商店：ExpandRoom 可能新建了邻居（共享边自动建带门墙），再次开门确保所有出口畅通。
                 if (room.type == DungeonRoomType.Shop) OpenRoomDoors(room);
@@ -555,28 +562,50 @@ public class DungeonManager : MonoBehaviour
     }
 
     // 展开：把尚未存在的相邻房间建为黑暗房（保留“未开启关卡保持黑暗”），它们会跳过与本房共用的那面墙
-    void ExpandRoom(Room room)
+    void ExpandRoom(Room room, Vector2Int fromCoord)
     {
         List<int> candidates = new List<int>();
         for (int d = 0; d < 4; d++)
         {
             Vector2Int nc = room.coord + DirVec2D(d);
+            if (nc == fromCoord) continue;
             Room nb;
             if (rooms.TryGetValue(nc, out nb) && nb != null)
             {
-                // 邻居已清完且无存活敌人 → 销毁重建，腾出新出口
                 if (nb.cleared && nb.aliveEnemies.Count == 0 && nb != currentRoom)
                 {
                     DestroyRoom(nb);
                     candidates.Add(d);
                 }
-                // 否则跳过（未清完/有敌人/当前房间）
             }
             else
             {
                 candidates.Add(d);
             }
         }
+
+        if (candidates.Count == 0)
+        {
+            List<int> forced = new List<int>();
+            for (int d = 0; d < 4; d++)
+            {
+                Vector2Int nc = room.coord + DirVec2D(d);
+                if (nc == fromCoord) continue;
+                Room nb;
+                if (rooms.TryGetValue(nc, out nb) && nb != null && nb != currentRoom
+                    && nb.aliveEnemies.Count == 0)
+                    forced.Add(d);
+            }
+            if (forced.Count > 0)
+            {
+                int pick = forced[Random.Range(0, forced.Count)];
+                Vector2Int nc = room.coord + DirVec2D(pick);
+                Room nb;
+                if (rooms.TryGetValue(nc, out nb) && nb != null) DestroyRoom(nb);
+                candidates.Add(pick);
+            }
+        }
+
         if (candidates.Count == 0) return;
 
         int exitCount = Random.Range(1, Mathf.Min(candidates.Count, 3) + 1);
@@ -1831,29 +1860,46 @@ public class DungeonManager : MonoBehaviour
         if (GameManager.Instance != null) GameManager.Instance.AddRoomCleared();
         Debug.Log("[Dungeon] OnRoomCleared room=" + room.roomIndex + " entryDir=" + room.entryDir);
 
-        // 开启本房间拥有的出口门（跳过入口方向）
+        bool openedAny = false;
+
         for (int d = 0; d < 4; d++)
         {
             if (d == room.entryDir) continue;
             if (room.doorBlockers.Count <= d) continue;
             if (room.doorBlockers[d] == null) continue;
             ApplyDoorBlocker(room.doorBlockers[d], false);
+            openedAny = true;
             Debug.Log("[Dungeon] OnRoomCleared: open OWN door room=" + room.roomIndex + " d=" + d);
         }
 
-        // 开启邻居面向本房间的门（本房间不拥有的共享边，门归邻居所有）
         for (int d = 0; d < 4; d++)
         {
             if (d == room.entryDir) continue;
-            if (room.doorBlockers.Count > d && room.doorBlockers[d] != null) continue; // 本房已拥有，上面已开
+            if (room.doorBlockers.Count > d && room.doorBlockers[d] != null) continue;
             Vector2Int nc = room.coord + DirVec2D(d);
             Room nb;
             if (!rooms.TryGetValue(nc, out nb) || nb == null) continue;
             int opposite = (d + 2) % 4;
             if (nb.doorBlockers.Count > opposite && nb.doorBlockers[opposite] != null)
             {
-                Debug.Log("[Dungeon] OnRoomCleared: open NB door room=" + room.roomIndex + " d=" + d + " nb=" + nb.roomIndex + " opposite=" + opposite);
+                Debug.Log("[Dungeon] OnRoomCleared: open NB door room=" + room.roomIndex + " d=" + d + " nb=" + nb.roomIndex);
                 ApplyDoorBlocker(nb.doorBlockers[opposite], false);
+                openedAny = true;
+            }
+        }
+
+        if (!openedAny && room.entryDir >= 0)
+        {
+            Vector2Int nc = room.coord + DirVec2D(room.entryDir);
+            Room nb;
+            if (rooms.TryGetValue(nc, out nb) && nb != null)
+            {
+                int opposite = (room.entryDir + 2) % 4;
+                if (nb.doorBlockers.Count > opposite && nb.doorBlockers[opposite] != null)
+                {
+                    Debug.Log("[Dungeon] OnRoomCleared: no exits, fallback open entry nb=" + nb.roomIndex);
+                    ApplyDoorBlocker(nb.doorBlockers[opposite], false);
+                }
             }
         }
 

@@ -4439,14 +4439,6 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 136399407}
-    - targetCorrespondingSourceObject: {fileID: -516098083770646512, guid: eccb59230cc33ad4999f6ac15a46c1c4,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1035706509}
-    - targetCorrespondingSourceObject: {fileID: -516098083770646512, guid: eccb59230cc33ad4999f6ac15a46c1c4,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1035706508}
     - targetCorrespondingSourceObject: {fileID: -2045257923548263128, guid: eccb59230cc33ad4999f6ac15a46c1c4,
         type: 3}
       insertIndex: -1
@@ -4621,12 +4613,6 @@ GameObject:
 --- !u!1 &803900825 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -2045257923548263128, guid: eccb59230cc33ad4999f6ac15a46c1c4,
-    type: 3}
-  m_PrefabInstance: {fileID: 803900807}
-  m_PrefabAsset: {fileID: 0}
---- !u!1 &803900826 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: -516098083770646512, guid: eccb59230cc33ad4999f6ac15a46c1c4,
     type: 3}
   m_PrefabInstance: {fileID: 803900807}
   m_PrefabAsset: {fileID: 0}
@@ -6160,43 +6146,6 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1031155950}
   m_PrefabAsset: {fileID: 0}
---- !u!208 &1035706508
-NavMeshObstacle:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 803900826}
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Shape: 1
-  m_Extents: {x: 12.347, y: 6.1340003, z: 2.1330001}
-  m_MoveThreshold: 0.1
-  m_Carve: 1
-  m_CarveOnlyStationary: 1
-  m_Center: {x: 0, y: 6.1340003, z: 0.15300001}
-  m_TimeToStationary: 0.5
---- !u!65 &1035706509
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 803900826}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 24.693945, y: 12.267151, z: 4.2666163}
-  m_Center: {x: 0, y: 6.1335754, z: 0.1533429}
 --- !u!65 &1063374013
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -9199,6 +9148,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   countdownText: {fileID: 1942357951}
   countdownPanel: {fileID: 1942357952}
+  tutorialPanel: {fileID: 0}
   countdownDuration: 3
   enableCountdown: 1
 --- !u!1001 &1726586552
@@ -12652,7 +12602,6 @@ MonoBehaviour:
   fadeSpeed: 15
   targetAlpha: 0.1
   hysteresisFrames: 6
-  maxDistance: 100
 --- !u!108 &1121559768825916174
 Light:
   m_ObjectHideFlags: 0
@@ -13698,7 +13647,7 @@ MonoBehaviour:
     weight: 1
   - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
     weight: 1
-  buffKillInterval: 3
+  buffKillInterval: 5
   defaultBuffSFX: {fileID: 8300000, guid: 1e511d6671ea4134399acdc4c54f5319, type: 3}
   player: {fileID: 910754486}
   despawnDistance: 30
@@ -16445,7 +16394,6 @@ MonoBehaviour:
   gameManager: {fileID: 1673762878305393417}
   buffToastText: {fileID: 1812330831}
   shopPanel: {fileID: 0}
-  shopButtonPrefab: {fileID: 0}
   shopButtonContainer: {fileID: 0}
   openShopOnStart: 0
   debugShopBuffs: []

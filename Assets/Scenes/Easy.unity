@@ -9129,6 +9129,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   countdownText: {fileID: 4049324328271393570}
   countdownPanel: {fileID: 6344507028916333527}
+  tutorialPanel: {fileID: 0}
   countdownDuration: 3
   enableCountdown: 1
 --- !u!1001 &1656801805
@@ -13459,7 +13460,7 @@ MonoBehaviour:
     weight: 1
   - buffData: {fileID: 11400000, guid: 54655f0123c589345b0d0e8e8f045ae7, type: 2}
     weight: 1
-  buffKillInterval: 3
+  buffKillInterval: 5
   defaultBuffSFX: {fileID: 8300000, guid: 1e511d6671ea4134399acdc4c54f5319, type: 3}
   player: {fileID: 2025463718}
   despawnDistance: 30
@@ -16306,14 +16307,19 @@ MonoBehaviour:
   gameManager: {fileID: 1673762878305393417}
   buffToastText: {fileID: 8501159831358509469}
   shopPanel: {fileID: 0}
-  shopButtonPrefab: {fileID: 0}
   shopButtonContainer: {fileID: 0}
+  openShopOnStart: 0
+  debugShopBuffs: []
   buffIconContainer: {fileID: 0}
   buffIconPrefab: {fileID: 0}
+  buffHudToggle: {fileID: 0}
+  buffHudArrow: {fileID: 0}
   revivePanel: {fileID: 1034811413516316707}
   reviveHint: {fileID: 1034811413516316708}
   reviveButton: {fileID: 1034811413516316706}
   reviveEndButton: {fileID: 1034811413516316705}
+  shopRefreshButton: {fileID: 0}
+  shopCloseButton: {fileID: 0}
 --- !u!23 &8498299488319272728
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -16384,16 +16390,6 @@ MonoBehaviour:
   fadeSpeed: 15
   targetAlpha: 0.1
   hysteresisFrames: 6
-  playerOffsets:
-  - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 0.5, z: 0}
-  - {x: 0, y: -0.5, z: 0}
-  - {x: 0.3, y: 0, z: 0}
-  - {x: -0.3, y: 0, z: 0}
-  minHitsToFade: 2
-  wallLayer:
-    serializedVersion: 2
-    m_Bits: 64
 --- !u!114 &8521478189872722373 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 8155648241908039364, guid: df1b8993df715424faf8912ca9f10098,
