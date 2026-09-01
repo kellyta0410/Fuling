@@ -16,6 +16,7 @@ public class UIManager : MonoBehaviour
     public GameObject settingsPanel;
     public GameObject pausemenu;
     public TextMeshProUGUI coinText;
+    public TextMeshProUGUI shopCoinText;
     public TextMeshProUGUI enemyCountText;
     public TextMeshProUGUI finalCoinText;
     public TextMeshProUGUI finalKillText;
@@ -426,6 +427,8 @@ public class UIManager : MonoBehaviour
     {
         if (player != null && coinText != null)
             coinText.text = $"{player.GetCoins()}";
+        if (player != null && shopCoinText != null)
+            shopCoinText.text = $"{player.GetCoins()}";
     }
 
     public void UpdateKillUI()
@@ -800,9 +803,11 @@ public class UIManager : MonoBehaviour
         }
         shopPool = pool;
         refreshedThisVisit = false;
+        if (player == null) player = FindObjectOfType<PlayerController>();
 
         PickOffers();
         PrepareCards();
+        UpdateCoinUI();
 
         if (shopCloseButton != null)
         {
