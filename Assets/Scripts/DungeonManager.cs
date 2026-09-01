@@ -377,9 +377,22 @@ public class DungeonManager : MonoBehaviour
     void DestroyNeighborSolidWall(Room neighbor, int dir)
     {
         if (neighbor == null || neighbor.root == null) return;
-        string wallName = "SolidWall_" + dir;
-        Transform wall = neighbor.root.transform.Find(wallName);
-        if (wall != null) Destroy(wall.gameObject);
+        string solidName = "SolidWall_" + dir;
+        Transform wall = neighbor.root.transform.Find(solidName);
+        if (wall != null)
+        {
+            Destroy(wall.gameObject);
+            return;
+        }
+        // 商店会在所有方向建带门墙（确保出口畅通），邻居建房时也须销毁，避免两面墙重叠挡路
+        string wallName = "Wall_" + dir;
+        wall = neighbor.root.transform.Find(wallName);
+        if (wall != null)
+        {
+            Destroy(wall.gameObject);
+            if (dir >= 0 && neighbor.doorBlockers.Count > dir)
+                neighbor.doorBlockers[dir] = null;
+        }
     }
 
     // 在每个房间 4 个墙角放一根 墙厚×墙高 的方柱，补齐因墙缩短而在墙角留下的空洞，
@@ -1266,6 +1279,19 @@ public class DungeonManager : MonoBehaviour
             if (room.doorBlockers[d] == null) continue;
             ApplyDoorBlocker(room.doorBlockers[d], false);
         }
+        // 商店的共享墙由邻居拥有，需同时开启邻居朝向本店的门，否则玩家无法走出商店
+        if (room.type == DungeonRoomType.Shop)
+        {
+            for (int d = 0; d < 4; d++)
+            {
+                Vector2Int nc = room.coord + DirVec2D(d);
+                Room nb;
+                if (!rooms.TryGetValue(nc, out nb) || nb == null) continue;
+                int opposite = (d + 2) % 4;
+                if (nb.doorBlockers.Count > opposite && nb.doorBlockers[opposite] != null)
+                    ApplyDoorBlocker(nb.doorBlockers[opposite], false);
+            }
+        }
     }
 
     // 关闭某房间“拥有”的所有门（战斗进入时锁房）
@@ -1940,6 +1966,49 @@ public class DungeonManager : MonoBehaviour
         }
         rooms.Clear();
         decoLights.Clear();
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (currentRoom == null || currentRoom.root == null) return;
+        if (currentRoom.entryDir < 0) return;
+
+        Vector3 center = currentRoom.root.transform.position;
+        float half = roomSize * 0.5f;
+        float margin = 1.5f;
+        float y = 0.5f;
+
+        Gizmos.color = Color.red;
+        Vector3 doorPos = Vector3.zero;
+        Vector3 lineStart = Vector3.zero;
+        Vector3 lineEnd = Vector3.zero;
+
+        switch (currentRoom.entryDir)
+        {
+            case 0: // +Z
+                doorPos = center + new Vector3(0, y, half);
+                lineStart = center + new Vector3(-half, y, half - margin);
+                lineEnd = center + new Vector3(half, y, half - margin);
+                break;
+            case 1: // +X
+                doorPos = center + new Vector3(half, y, 0);
+                lineStart = center + new Vector3(half - margin, y, -half);
+                lineEnd = center + new Vector3(half - margin, y, half);
+                break;
+            case 2: // -Z
+                doorPos = center + new Vector3(0, y, -half);
+                lineStart = center + new Vector3(-half, y, -half + margin);
+                lineEnd = center + new Vector3(half, y, -half + margin);
+                break;
+            case 3: // -X
+                doorPos = center + new Vector3(-half, y, 0);
+                lineStart = center + new Vector3(-half + margin, y, -half);
+                lineEnd = center + new Vector3(-half + margin, y, half);
+                break;
+        }
+
+        Gizmos.DrawLine(lineStart, lineEnd);
+        Gizmos.DrawWireSphere(doorPos, 0.3f);
     }
 }
 
