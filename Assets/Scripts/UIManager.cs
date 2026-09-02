@@ -957,17 +957,6 @@ public class UIManager : MonoBehaviour
         if (img != null) img.color = canBuy ? new Color(0.2f, 0.6f, 0.9f) : new Color(0.4f, 0.4f, 0.45f);
     }
 
-        // 字体颜色：金币不够→红色；已满级→灰白；可买→白
-        if (txt != null)
-        {
-            if (!afford) txt.color = Color.red;
-            else if (maxed) txt.color = new Color(0.75f, 0.75f, 0.75f);
-            else txt.color = Color.white;
-        }
-
-        if (img != null) img.color = canBuy ? new Color(0.2f, 0.6f, 0.9f) : new Color(0.4f, 0.4f, 0.45f);
-    }
-
     // 兜底：未拖刷新按钮时自动在面板底部创建一个
     private void EnsureRefreshButton()
     {
