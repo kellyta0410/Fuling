@@ -58,7 +58,9 @@ public class UIManager : MonoBehaviour
     public bool openShopOnStart = false;
     public List<BuffDataSO> debugShopBuffs = new List<BuffDataSO>();
     private List<BuffDataSO> currentOffers = new List<BuffDataSO>(); // 当前展示的 3 个商品
+    private List<int> currentOfferLayers = new List<int>();          // 每个 offer 对应的层数（1-based）
     private List<GameObject> shopCards = new List<GameObject>();     // 对应的 3 张卡 GameObject
+    private HashSet<int> purchasedThisVisit = new HashSet<int>();    // 本次进店已购买的卡序号（买过就灰禁）
     private bool refreshedThisVisit = false;                         // 本间商店是否已刷新过（限一次）
     private int refreshCost = 20;                                    // 刷新花费的金币
     [Header("Buff 图标")]
@@ -803,6 +805,7 @@ public class UIManager : MonoBehaviour
         }
         shopPool = pool;
         refreshedThisVisit = false;
+        purchasedThisVisit.Clear();
         if (player == null) player = FindObjectOfType<PlayerController>();
 
         PickOffers();
@@ -830,20 +833,31 @@ public class UIManager : MonoBehaviour
         if (AudioManager.Instance != null) AudioManager.Instance.PlayShopBGM();
     }
 
-    // 从池里随机抽取 3 个不重复的商品
+    // 从池里随机抽取 3 个不重复的商品（按 shopProgress 决定每张卡出第几层）
     private void PickOffers()
     {
         currentOffers.Clear();
+        currentOfferLayers.Clear();
         if (shopPool == null) return;
         BuffHandler bh = FindObjectOfType<BuffHandler>();
-        List<BuffDataSO> pool = new List<BuffDataSO>(shopPool);
-        // 已满级的非治疗 Buff 不再出现（治疗为即时购买，可重复出现）
-        pool.RemoveAll(b => !b.isInstantEffect && bh != null && bh.GetStack(b.buffType) >= b.maxStack);
-        for (int i = 0; i < 3 && pool.Count > 0; i++)
+
+        // 构建候选池：每种 buff 只投"下一层可买"的卡，满层不出现
+        var candidates = new List<(BuffDataSO buff, int layer)>();
+        foreach (var b in shopPool)
         {
-            int idx = Random.Range(0, pool.Count);
-            currentOffers.Add(pool[idx]);
-            pool.RemoveAt(idx);
+            if (b.isInstantEffect) continue; // 治疗类走即时逻辑，不参与叠层
+            int progress = bh != null ? bh.GetShopProgress(b.buffType) : 0;
+            int nextLayer = progress + 1;
+            if (nextLayer > b.maxStack) continue; // 满层，不出
+            candidates.Add((b, nextLayer));
+        }
+
+        for (int i = 0; i < 3 && candidates.Count > 0; i++)
+        {
+            int idx = Random.Range(0, candidates.Count);
+            currentOffers.Add(candidates[idx].buff);
+            currentOfferLayers.Add(candidates[idx].layer);
+            candidates.RemoveAt(idx);
         }
     }
 
@@ -873,43 +887,75 @@ public class UIManager : MonoBehaviour
                     btn.onClick.AddListener(() => BuyBuff(idx));
                 }
             }
-            if (i < currentOffers.Count) UpdateCardContent(shopCards[i], currentOffers[i], i);
+            if (i < currentOffers.Count) UpdateCardContent(shopCards[i], currentOffers[i], i, currentOfferLayers[i]);
             else shopCards[i].SetActive(false); // 满级导致可选少于 3 个时，多余卡片收起
         }
     }
 
     // 刷新单卡的名称/图标/描述/价格/可购买状态
-    private void UpdateCardContent(GameObject card, BuffDataSO buff, int index)
+    private void UpdateCardContent(GameObject card, BuffDataSO buff, int index, int layer)
     {
         if (card == null || buff == null) return;
         var icon = card.transform.Find("Icon");
         if (icon != null) { var im = icon.GetComponent<Image>(); if (im != null && buff.icon != null) im.sprite = buff.icon; }
         var nameT = card.transform.Find("Name");
-        if (nameT != null) { var t = nameT.GetComponent<TextMeshProUGUI>(); if (t != null) t.text = buff.buffName; }
+        if (nameT != null)
+        {
+            var t = nameT.GetComponent<TextMeshProUGUI>();
+            if (t != null)
+            {
+                string displayName = buff.buffName;
+                if (!buff.isInstantEffect) displayName += " Lv." + layer;
+                t.text = displayName;
+            }
+        }
         var descT = card.transform.Find("Desc");
-        if (descT != null) { var t = descT.GetComponent<TextMeshProUGUI>(); if (t != null) t.text = string.IsNullOrEmpty(buff.description) ? buff.GetDefaultDescription() : buff.description; }
-        UpdateCardPrice(card, buff, index);
+        if (descT != null)
+        {
+            var t = descT.GetComponent<TextMeshProUGUI>();
+            if (t != null)
+            {
+                string desc = buff.isInstantEffect
+                    ? (string.IsNullOrEmpty(buff.description) ? buff.GetDefaultDescription() : buff.description)
+                    : buff.GetLayerDescription(layer);
+                t.text = desc;
+            }
+        }
+        UpdateCardPrice(card, buff, index, layer);
     }
 
-    private void UpdateCardPrice(GameObject card, BuffDataSO buff, int index)
+    private void UpdateCardPrice(GameObject card, BuffDataSO buff, int index, int layer)
     {
         var btn = card.transform.Find("PriceBtn");
         if (btn == null) return;
         var button = btn.GetComponent<Button>();
         var txt = btn.GetComponentInChildren<TextMeshProUGUI>();
         bool isHeal = buff.isInstantEffect;
-        BuffHandler bh = FindObjectOfType<BuffHandler>();
-        int stack = isHeal ? 0 : (bh != null ? bh.GetStack(buff.buffType) : 0);
-        int price = isHeal ? buff.shopCost : CostForLayer(stack + 1);
+        int price = isHeal ? buff.shopCost : CostForLayer(layer);
 
-        string label = (isHeal || stack < buff.maxStack) ? (price + " 金币") : "已满级";
-        if (txt != null) txt.text = label;
-
+        string label = price + " 金币";
         int coins = player != null ? player.GetCoins() : 0;
         bool afford = coins >= price;
-        bool maxed = !isHeal && stack >= buff.maxStack;
-        bool canBuy = afford && !maxed;
+        bool bought = purchasedThisVisit.Contains(index);
+        bool canBuy = afford && !bought;
+        var img = btn.GetComponent<Image>();
+
+        if (bought)
+        {
+            if (txt != null) txt.text = "已购买";
+            if (button != null) button.interactable = false;
+            if (img != null) img.color = new Color(0.4f, 0.4f, 0.45f);
+            return;
+        }
+
+        if (txt != null)
+        {
+            txt.text = label;
+            txt.color = afford ? Color.white : Color.red;
+        }
         if (button != null) button.interactable = canBuy;
+        if (img != null) img.color = canBuy ? new Color(0.2f, 0.6f, 0.9f) : new Color(0.4f, 0.4f, 0.45f);
+    }
 
         // 字体颜色：金币不够→红色；已满级→灰白；可买→白
         if (txt != null)
@@ -919,7 +965,6 @@ public class UIManager : MonoBehaviour
             else txt.color = Color.white;
         }
 
-        var img = btn.GetComponent<Image>();
         if (img != null) img.color = canBuy ? new Color(0.2f, 0.6f, 0.9f) : new Color(0.4f, 0.4f, 0.45f);
     }
 
@@ -964,6 +1009,7 @@ public class UIManager : MonoBehaviour
 
         player.AddCoin(-refreshCost);
         refreshedThisVisit = true;
+        purchasedThisVisit.Clear();
 
         PickOffers();
         for (int i = 0; i < shopCards.Count; i++)
@@ -971,8 +1017,9 @@ public class UIManager : MonoBehaviour
             if (i >= currentOffers.Count) break;
             int idx = i;
             BuffDataSO buff = currentOffers[idx];
+            int layer = idx < currentOfferLayers.Count ? currentOfferLayers[idx] : 1;
             var rt = shopCards[idx].GetComponent<RectTransform>();
-            StartCoroutine(AnimateCardRefresh(rt, () => UpdateCardContent(shopCards[idx], buff, idx)));
+            StartCoroutine(AnimateCardRefresh(rt, () => UpdateCardContent(shopCards[idx], buff, idx, layer)));
         }
 
         UpdateCoinUI();
@@ -1006,16 +1053,16 @@ public class UIManager : MonoBehaviour
     {
         if (index < 0 || index >= currentOffers.Count) return;
         BuffDataSO buff = currentOffers[index];
+        int layer = index < currentOfferLayers.Count ? currentOfferLayers[index] : 1;
         PlayerController pc = FindObjectOfType<PlayerController>();
         if (pc == null) return;
         BuffHandler bh = pc.GetComponent<BuffHandler>();
         if (bh == null) return;
 
         bool isHeal = buff.isInstantEffect;
-        int stack = isHeal ? 0 : bh.GetStack(buff.buffType);
-        int price = isHeal ? buff.shopCost : CostForLayer(stack + 1);
+        int price = isHeal ? buff.shopCost : CostForLayer(layer);
 
-        if (!isHeal && stack >= buff.maxStack)
+        if (!isHeal && layer > buff.maxStack)
         {
             ShowBuffToast("已满级");
             return;
@@ -1028,10 +1075,29 @@ public class UIManager : MonoBehaviour
 
         pc.AddCoin(-price);
         if (isHeal) bh.ApplyBuff(buff);        // 即时恢复
-        else bh.ApplyBuff(buff, true);         // 永久叠加一层
+        else
+        {
+            bh.ApplyBuff(buff, true);          // 永久叠加一层
+            bh.AdvanceShopProgress(buff.buffType); // 推进商店进度（下次出下一层）
+        }
 
-        // 只刷新被购买的那张卡（价格/层数/可购买状态），并更新金币与侧边 Buff 面板
-        if (index < shopCards.Count) UpdateCardContent(shopCards[index], buff, index);
+        // 标记已购买，灰禁该卡
+        purchasedThisVisit.Add(index);
+        if (index < shopCards.Count)
+        {
+            var card = shopCards[index];
+            var priceBtn = card.transform.Find("PriceBtn");
+            if (priceBtn != null)
+            {
+                var btn = priceBtn.GetComponent<Button>();
+                if (btn != null) btn.interactable = false;
+                var txt = btn.GetComponentInChildren<TextMeshProUGUI>();
+                if (txt != null) txt.text = "已购买";
+                var img = priceBtn.GetComponent<Image>();
+                if (img != null) img.color = new Color(0.4f, 0.4f, 0.45f);
+            }
+        }
+
         UpdateCoinUI();
         RefreshBuffIcons();
     }

@@ -492,9 +492,8 @@ public class DungeonManager : MonoBehaviour
                 visitedRoomNumber++;
                 int vn = visitedRoomNumber;
 
-                // 提前判定：玩家处在第 4/9/14… 间时，把其四周邻居（含已存在的暗房与尚未生成的）
-                // 全部标为商店，确保"下一步进入的第 5/10/15… 间"必为商店，且以商店主题正确生成。
-                if (vn % 5 == 4)
+                // vn % 5 == 0 时，提前把四周邻居标为商店
+                if (vn % 5 == 0)
                 {
                     for (int d = 0; d < 4; d++)
                     {
@@ -511,9 +510,11 @@ public class DungeonManager : MonoBehaviour
                     }
                 }
 
-                if (vn % 5 == 0) room.type = DungeonRoomType.Shop;
+                // vn % 5 == 1 且 vn >= 6 时（即第6/11/16…间），本间强制为商店
+                if (vn % 5 == 1 && vn >= 6)
+                    room.type = DungeonRoomType.Shop;
 
-                // 战斗关号仅在战斗房递增，商店不计入，UI 显示连续关号
+                // 战斗关号仅在战斗房递增，商店不计入
                 if (room.type != DungeonRoomType.Shop)
                 {
                     battleLevel++;

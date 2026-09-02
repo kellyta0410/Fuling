@@ -97,4 +97,44 @@ public class BuffDataSO : ScriptableObject
 
         return baseText + "(最高" + maxStack + "层，" + perLayer + total + ")。";
     }
+
+    // 返回指定层数的描述（商店卡片用），显示"第X层"及该层对应数值
+    public string GetLayerDescription(int layer)
+    {
+        if (layer < 1) layer = 1;
+        if (layer > maxStack) layer = maxStack;
+
+        bool isAdditive = buffType == BuffType.PowerUp
+                       || buffType == BuffType.SkillPowerUp
+                       || buffType == BuffType.AttackRangeUp
+                       || buffType == BuffType.SkillRangeUp
+                       || buffType == BuffType.SkillCooldownUp
+                       || buffType == BuffType.MaxHealthUp;
+        string unit = buffType == BuffType.SkillCooldownUp ? "秒" : "点";
+
+        string baseText;
+        switch (buffType)
+        {
+            case BuffType.Heal:
+                return GetDefaultDescription();
+            case BuffType.SpeedUp: baseText = "提升移动速度"; break;
+            case BuffType.PowerUp: baseText = "提升普通攻击伤害"; break;
+            case BuffType.AttackRangeUp: baseText = "扩大普通攻击范围"; break;
+            case BuffType.SkillPowerUp: baseText = "提升技能攻击伤害"; break;
+            case BuffType.SkillRangeUp: baseText = "扩大技能攻击范围"; break;
+            case BuffType.SkillCooldownUp: baseText = "加快技能冷却恢复速度"; break;
+            case BuffType.CoinMultUp: baseText = "提高金币掉落倍率"; break;
+            case BuffType.MaxHealthUp: baseText = "提高生命值上限"; break;
+            default: baseText = "未知增益"; break;
+        }
+
+        float totalValue = layer * effectValue;
+        string valueStr;
+        if (isAdditive)
+            valueStr = "Lv." + layer + " → +" + totalValue.ToString("G") + unit;
+        else
+            valueStr = "Lv." + layer + " → +" + (totalValue * 100f).ToString("F0") + "%";
+
+        return baseText + "（" + valueStr + "）";
+    }
 }

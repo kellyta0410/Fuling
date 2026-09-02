@@ -66,6 +66,8 @@ public class BuffHandler : MonoBehaviour
     // ---------- 永久叠加 Buff（每种最多 maxStack 层，除 Heal 外） ----------
     private Dictionary<BuffType, int> permanentStacks = new Dictionary<BuffType, int>();
     private Dictionary<BuffType, BuffDataSO> permanentData = new Dictionary<BuffType, BuffDataSO>();
+    // 商店购买进度：记录每个 buff 下次可购买的层数（1-based），0 表示还没买过第一层
+    private Dictionary<BuffType, int> shopProgress = new Dictionary<BuffType, int>();
 
     void ApplyPermanent(BuffDataSO data)
     {
@@ -116,6 +118,19 @@ public class BuffHandler : MonoBehaviour
     public int GetStack(BuffType type)
     {
         return permanentStacks.ContainsKey(type) ? permanentStacks[type] : 0;
+    }
+
+    // 商店购买进度：返回下次可购买的层数（1-based），0=未买过
+    public int GetShopProgress(BuffType type)
+    {
+        return shopProgress.ContainsKey(type) ? shopProgress[type] : 0;
+    }
+
+    // 购买后推进商店进度（调用时机：BuyBuff 扣币成功后）
+    public void AdvanceShopProgress(BuffType type)
+    {
+        if (!shopProgress.ContainsKey(type)) shopProgress[type] = 0;
+        shopProgress[type]++;
     }
 
     // 供 UI 显示已购买 Buff 图标
