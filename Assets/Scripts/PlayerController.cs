@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using Cinemachine;
@@ -36,7 +37,7 @@ public class PlayerController : MonoBehaviour
     public float attackFacingAngle = 150f;
     [Tooltip("技能造成伤害的延迟（秒），独立调整以对齐技能动画命中那一刻")]
     public float skillDamageDelay = 0.5f;        // 兜底：找不到“Skill Attack”动画时长时使用
-    public float skillHitFraction = 0.5f;          // 伤害落在“Skill Attack”动画归一化时间的位置（0~1），跟动画对齐用
+    public float skillHitFraction = 0.3f;          // 伤害落在“Skill Attack”动画归一化时间的位置（0~1），跟动画对齐用
     [Header("攻击音效（Clip 放这里，音量读 SettingsManager）")]
     [Tooltip("普通攻击音效，每次攻击随机取一个播放")]
     public AudioClip attackSFX;
@@ -146,6 +147,9 @@ public class PlayerController : MonoBehaviour
     private float runFootstepTimer = 0f;
     // ⭐ 闪避特效延时隐藏协程（闪避太快，让残影多留一会儿更明显）
     private Coroutine dashEffectHideCoroutine;
+    private int enemyLayerMask;
+    private static readonly Collider[] skillHitBuffer = new Collider[64];
+    private Coroutine attackCoroutine;
 
     // ==================== 攻击相关 ====================
     private static readonly string[] attackStateNames = { "Attack", "Attack2", "Attack3" };
@@ -238,6 +242,8 @@ public class PlayerController : MonoBehaviour
         // Apply Root Motion 是否生效由 Inspector 决定，脚本不参与。
         uiManager = FindObjectOfType<UIManager>();
         dataManager = GameDataManager.Instance;
+        enemyLayerMask = LayerMask.GetMask("Enemy");
+        if (enemyLayerMask == 0) enemyLayerMask = ~0;
 
         // ⭐ 闪避特效默认隐藏，只在闪避期间激活（即使场景里某处设置成了激活，也强制关掉）
         // 同时兜底解析：字段没拖或 prefab 引用失效时，按名字自动找玩家身上的 DashEffect 子物体
@@ -334,6 +340,7 @@ public class PlayerController : MonoBehaviour
             baseSpeed = speed;
             baseAttack = attackDamage;
             baseRange = attackRange;
+            skillRange = Mathf.Max(attackRange * 2f, 4f);
             baseSkillDamage = skillDamage;
             baseSkillRange = skillRange;
             baseSkillCooldown = skillCooldown;
@@ -349,7 +356,8 @@ public class PlayerController : MonoBehaviour
         attackCooldown = currentCharacterData.baseCooldown;
         // ⭐ 技能范围先按基础值给个初值；真正的技能范围在"普攻升级加成"应用后（见下方）按
         // 升级后的 attackRange 重新计算，保证 360° AoE 半径始终 ≥ 普攻触及距离。
-        skillRange = currentCharacterData.baseRange * 2f;   // 初始技能范围 = 4（普攻2 × 2）
+        skillRange = currentCharacterData.baseRange * 2f;   // 初始技能范围
+        skillRange = Mathf.Max(skillRange, 4f);
 
         baseSpeed = speed;
         baseAttack = attackDamage;
@@ -376,8 +384,8 @@ public class PlayerController : MonoBehaviour
         // ⭐ 技能范围随（含升级后的）普攻距离放大：skillRange = 升级后 attackRange × 2。
         // 这样 360° AoE 半径始终 ≥ 普攻触及距离，背后敌人也能稳定覆盖，
         // 避免"普攻打得到、技能打不到 / 技能能打到的反而更少"的问题。
-        // ⚠ 兜底：用绝对下限 8m，防止 attackRange 在某些角色/加成下异常偏小导致技能只打到 1 个敌人。
-        skillRange = Mathf.Max(attackRange * 2f, 8f);
+        // ⚠ 兜底：用绝对下限 10m，防止 attackRange 在某些角色/加成下异常偏小导致技能只打到 1 个敌人。
+        skillRange = Mathf.Max(attackRange * 2f, 4f);
 
         // ===== 应用技能攻击升级加成 =====
         var skillConfig = currentCharacterData.skillAttackConfig;
@@ -787,7 +795,7 @@ public class PlayerController : MonoBehaviour
         comboIndex = (comboIndex + 1) % attackStateNames.Length;
 
         PlayAttackSFX();
-        StartCoroutine(DelayedDamage());
+        attackCoroutine = StartCoroutine(DelayedDamage());
     }
 
     // ==================== 技能攻击 ====================
@@ -795,6 +803,8 @@ public class PlayerController : MonoBehaviour
     IEnumerator DelayedDamage()
     {
         yield return new WaitForSeconds(attackDamageDelay);
+
+        if (isDead || isDying) yield break;
 
         bool hitAny = false;
         // ⭐ 用敌人根节点(贴地)的水平距离收集候选，而非贴地的 3D 球形：
@@ -870,20 +880,14 @@ public class PlayerController : MonoBehaviour
         skillCooldownTimer = 0f;
         isUsingSkill = true;
         skillTimer = 0f;
-        // 技能旋转完全交给动画本身：360° 旋转烘焙在 Hips 骨骼上。
-        // 只用 CrossFade 强制切到技能动画：不再 SetTrigger。
-        // SetTrigger 的 SkillAction 会被状态机 Idle→Skill Attack 过渡消费（或残留），
-        // 导致播完回 Idle 时 trigger 残留再次触发 → 技能播放两次/中间被切。
         animator.ResetTrigger("SkillAction");
         animator.CrossFade("Skill Attack", 0.08f, 0);
 
         int finalDamage = skillDamage > 0 ? skillDamage : attackDamage * 2;
         PlaySkillSFX();
-        // 在技能起手瞬间、以当时玩家位置为球心锁定范围内的敌人，
-        // 避免延迟期间玩家移动 / 敌人被击退导致"有时只打到部分"。
-        // 伤害延迟自动跟随“Skill Attack”动画时长（skillHitFraction 控制落在动画的哪一帧），不再与动画“对不上”。
         float hitDelay = GetSkillHitDelay();
-        StartCoroutine(DelayedSkillDamage(finalDamage, Physics.OverlapSphere(transform.position, skillRange), hitDelay));
+        Debug.Log($"[Skill] range={skillRange:F1} hitDelay={hitDelay:F2}s damage={finalDamage} queued={queuedSkill} isAttacking={isAttacking}");
+        StartCoroutine(DelayedSkillDamage(finalDamage, hitDelay));
     }
 
     // 读取“Skill Attack”动画片段时长，按 skillHitFraction 算出伤害应延迟的秒数；拿不到片段则用 skillDamageDelay 兜底
@@ -905,21 +909,37 @@ public class PlayerController : MonoBehaviour
         return len * Mathf.Clamp01(skillHitFraction);
     }
 
-    IEnumerator DelayedSkillDamage(int damage, Collider[] hitColliders, float delay)
+    IEnumerator DelayedSkillDamage(int damage, float delay)
     {
         yield return new WaitForSeconds(delay);
 
-        // 命中所捕获（技能起手瞬间、以当时位置为球心）半径内的所有敌人，
-        // 实现稳定的 360° 范围技：不再因延迟期间的移动/击退而漏掉部分敌人。
-        foreach (Collider hit in hitColliders)
+        if (isDead || isDying) yield break;
+
+        Vector3 hitPos = transform.position;
+        int hitCount = Physics.OverlapSphereNonAlloc(hitPos, skillRange, skillHitBuffer, enemyLayerMask);
+
+        HashSet<EnemyAI> hitEnemies = new HashSet<EnemyAI>();
+        for (int i = 0; i < hitCount; i++)
         {
-            if (hit == null) continue;
-            EnemyAI enemy = hit.GetComponentInParent<EnemyAI>();
+            if (skillHitBuffer[i] == null) continue;
+            EnemyAI enemy = skillHitBuffer[i].GetComponentInParent<EnemyAI>();
             if (enemy != null && !enemy.isDead)
-            {
-                enemy.TakeDamageImmediate(damage);
-                enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 3f);
-            }
+                hitEnemies.Add(enemy);
+        }
+
+        for (int i = 0; i < EnemyAI.AllAliveEnemies.Count; i++)
+        {
+            EnemyAI e = EnemyAI.AllAliveEnemies[i];
+            if (e == null || e.isDead) continue;
+            if (hitEnemies.Contains(e)) continue;
+            if (Vector3.Distance(e.transform.position, hitPos) <= skillRange)
+                hitEnemies.Add(e);
+        }
+
+        foreach (EnemyAI enemy in hitEnemies)
+        {
+            enemy.TakeDamageImmediate(damage);
+            enemy.AddKnockback(transform.forward, enemyKnockbackDistance * 3f);
         }
     }
 
@@ -992,7 +1012,7 @@ public class PlayerController : MonoBehaviour
     {
         if (dodgeDirection.sqrMagnitude < 0.0001f) return;
 
-        Collider[] hits = Physics.OverlapSphere(transform.position, dodgePushRadius);
+        Collider[] hits = Physics.OverlapSphere(transform.position, dodgePushRadius, enemyLayerMask);
         foreach (Collider hit in hits)
         {
             if (hit == null) continue;
@@ -1478,6 +1498,19 @@ public class PlayerController : MonoBehaviour
         animator.SetBool("IsMoving", false);
         animator.SetBool("IsAttacking", false);
         animator.SetTrigger("Die");
+
+        // 停止正在执行的攻击/技能协程，防止死亡后继续造成伤害
+        isAttacking = false;
+        attackTimer = 0f;
+        isUsingSkill = false;
+        skillTimer = 0f;
+        queuedSkill = false;
+        queuedAttack = false;
+        if (attackCoroutine != null)
+        {
+            StopCoroutine(attackCoroutine);
+            attackCoroutine = null;
+        }
 
         Debug.Log($"玩家死亡");
 
