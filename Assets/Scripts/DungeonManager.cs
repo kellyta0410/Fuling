@@ -70,6 +70,8 @@ public class DungeonManager : MonoBehaviour
     private HashSet<Light> decoLights = new HashSet<Light>();   // 墙饰自带的灯：只开关、亮度/范围/颜色保留预制体设定
     private List<Bounds> placedBounds = new List<Bounds>();    // 已摆放装饰的世界包围盒，墙壁装饰与地面装饰共用，防穿模
     private Material blackPillarMat = null;                    // 墙角柱共用的纯黑无贴图材质
+    // ⭐ 墙角柱位置索引：避免每根柱子都 FindObjectsOfType<GameObject> 全场景扫描
+    private static readonly Dictionary<Vector3Int, GameObject> pillarByPos = new Dictionary<Vector3Int, GameObject>();
 
     [Tooltip("周围暗房（邻居）放到的 Layer 索引；该层会被房间灯光排除，使邻居保持黑暗。请确保该 Layer 在 Layer 设置里存在（如 Layer 8）。当前活动房间仍用原层，不影响碰撞。")]
     public int darkLayer = 8;                 // 邻居暗房专用层：灯光不照这一层，故保持黑暗
@@ -137,6 +139,8 @@ public class DungeonManager : MonoBehaviour
     private Vector2Int prevCoord = Vector2Int.zero;       // 上一帧玩家所在网格坐标，用于检测跨房
     private Vector2Int pendingFromCoord;                   // 玩家离开的房间坐标，等待穿墙后触发 EnterRoom
     private bool hasPending = false;                       // 是否有待处理的跨房事件
+    private float pendingTimer = 0f;                       // ⭐ 跨房事件超时计时器，防止卡死
+    private const float pendingTimeout = 3f;               // 超过该秒数仍未进入目标房间则强制清除
     private Room currentRoom = null;
     private Dictionary<Vector2Int, Room> rooms = new Dictionary<Vector2Int, Room>();
     private bool advancing = false;
@@ -431,23 +435,19 @@ public class DungeonManager : MonoBehaviour
         };
         foreach (var c in corners)
         {
-            // 共享墙角处相邻房间会在同一世界坐标各放一根柱，多根重合会互相 z-fighting 疯狂闪烁。
-            // 放置前先清掉该位置已有的 CornerPillar（邻居已放 / 本房重建都覆盖），保证每个角只有一根。
+            // ⭐ 用字典索引替代 FindObjectsOfType：O(1) 查找 + 替换，不再全场景遍历
             Vector3 worldXZ = new Vector3(room.root.transform.position.x + c.x, 0f, room.root.transform.position.z + c.z);
-            foreach (var go in GameObject.FindObjectsOfType<GameObject>())
+            Vector3Int posKey = Vector3Int.RoundToInt(worldXZ);
+            if (pillarByPos.TryGetValue(posKey, out GameObject existing) && existing != null)
             {
-                if (go.name == "CornerPillar" &&
-                    Mathf.Abs(go.transform.position.x - worldXZ.x) < wt * 0.5f &&
-                    Mathf.Abs(go.transform.position.z - worldXZ.z) < wt * 0.5f)
-                {
-                    Destroy(go);
-                }
+                Destroy(existing);
             }
 
             GameObject pil = GameObject.CreatePrimitive(PrimitiveType.Cube);
             pil.name = "CornerPillar";
             pil.transform.SetParent(room.root.transform);
             pil.transform.localPosition = new Vector3(c.x, h * 0.5f, c.z);
+            pillarByPos[posKey] = pil;
             // 比墙角缺口(wt)略大，把四面墙的端面“包”进柱体内部，
             // 彻底消除柱面与墙端面共面 z-fighting，且不留裂缝（避免邻居墙从缝里穿出）。
             pil.transform.localScale = new Vector3(wt * 1.06f, h, wt * 1.06f);
@@ -988,8 +988,7 @@ public class DungeonManager : MonoBehaviour
             if (Mathf.Abs(s - 1f) > 0.01f)
             {
                 mesh.transform.localScale = new Vector3(s, s, s);
-                wallHeight *= s;
-                wallThickness *= s;
+                // ⭐ 不修改 wallHeight/wallThickness 成员变量，否则多建几面墙后值会指数膨胀
                 if (showDebugLogs) Debug.LogWarning("[Dungeon] 实心墙预制体长度(" + wallWidth.ToString("F2") + ")与房间尺寸(" + roomSize.ToString("F2") + ")不一致，已整体缩放对齐");
             }
         }
@@ -1070,13 +1069,16 @@ public class DungeonManager : MonoBehaviour
             Renderer[] wrs = wall.GetComponentsInChildren<Renderer>();
             float wallWidth = 0f;
             float wt = 0f;
+            float localWallHeight = wallHeight;
+            float localWallThickness = wallThickness;
+            float localDoorWidth = doorWidth;
             if (wrs.Length > 0)
             {
                 Bounds rb = wrs[0].bounds;
                 for (int i = 1; i < wrs.Length; i++) rb.Encapsulate(wrs[i].bounds);
-                if (rb.size.y > 0.1f) wallHeight = rb.size.y;
+                if (rb.size.y > 0.1f) localWallHeight = rb.size.y;
                 wt = Mathf.Min(rb.size.x, rb.size.z);
-                if (wt > 0.01f) wallThickness = wt;
+                if (wt > 0.01f) localWallThickness = wt;
                 wallWidth = Mathf.Max(rb.size.x, rb.size.z);
             }
             // 墙体/门若缺 NavMeshObstacle 则按各自网格自动补（防止敌人穿墙/穿门寻路）
@@ -1138,9 +1140,10 @@ public class DungeonManager : MonoBehaviour
                 }
                 if (!firstBounds)
                 {
-                    float measured = Mathf.Max(db.size.x, db.size.z); // 墙旋转0/90/180/270，取世界X或Z较大者
+                    float measured = Mathf.Max(db.size.x, db.size.z);
                     if (measured > 0.1f) doorWidth = measured;
                 }
+                localDoorWidth = doorWidth;
                 if (forcedSolid && showDebugLogs) Debug.LogWarning("[Dungeon] 门的碰撞体已是实心(Is Trigger=false)以挡玩家；若需要触发检测请另加碰撞体");
             }
 
@@ -1151,15 +1154,13 @@ public class DungeonManager : MonoBehaviour
             // 若预制体长度与中心已正确，s≈1 且偏移≈0，无副作用。
             if (wallWidth > 0.001f)
             {
-                // 墙长 = 整条边 roomSize：不管用哪种墙预制体，四面墙都精确抵达墙角，
-                // 避免不同预制体缩放后长度不一（有的对齐柱子、有的超出柱子）。墙角上交叠的端部由墙角柱(略大于墙厚)整体包住。
                 float s = Mathf.Clamp(roomSize / wallWidth, 0.1f, 10f);
                 if (Mathf.Abs(s - 1f) > 0.01f)
                 {
                     wall.transform.localScale = new Vector3(s, s, s);
-                    wallHeight *= s;
-                    wallThickness *= s;
-                    doorWidth *= s;
+                    localWallHeight *= s;
+                    localWallThickness *= s;
+                    localDoorWidth *= s;
                     if (showDebugLogs) Debug.LogWarning("[Dungeon] 带门墙预制体长度(" + wallWidth.ToString("F2") + ")与房间尺寸(" + roomSize.ToString("F2") + ")不一致，已整体缩放对齐（建议把墙预制体长度直接做成房间尺寸）");
                 }
             }
@@ -1169,7 +1170,7 @@ public class DungeonManager : MonoBehaviour
             {
                 Vector3 outDir = localPos.normalized;
                 if (outDir != Vector3.zero)
-                    wallParent.transform.localPosition = localPos - outDir * (wallThickness * 0.5f);
+                    wallParent.transform.localPosition = localPos - outDir * (localWallThickness * 0.5f);
             }
             // 重新对齐（pivot 无关）：水平把墙几何中心对到边线中点，垂直把墙“底面”落到地面高度
             // （prefab pivot 在几何中心时，几何中心会被放在地面高度导致半截埋进地板，这里纠正为底面贴地）
@@ -1209,13 +1210,13 @@ public class DungeonManager : MonoBehaviour
                 // 兜底：预制体里没挂 DoorMarker 时，才补一个方块碰撞体挡住（正常不应走到这）
                 GameObject doorObj = new GameObject("DoorColliderFallback");
                 doorObj.transform.SetParent(wallParent.transform);
-                doorObj.transform.localPosition = new Vector3(0, wallHeight * 0.5f, 0);
+                doorObj.transform.localPosition = new Vector3(0, localWallHeight * 0.5f, 0);
                 var bcFallback = doorObj.AddComponent<BoxCollider>();
-                bcFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                bcFallback.size = new Vector3(localDoorWidth, localWallHeight, localWallThickness);
                 bcFallback.isTrigger = false;
                 var noFallback = doorObj.AddComponent<NavMeshObstacle>();
                 noFallback.carving = true;
-                noFallback.size = new Vector3(doorWidth, wallHeight, wallThickness);
+                noFallback.size = new Vector3(localDoorWidth, localWallHeight, localWallThickness);
                 noFallback.center = Vector3.zero;
                 leaves.Add(doorObj);
                 doorClosedRot[doorObj] = doorObj.transform.localRotation;
@@ -1870,6 +1871,7 @@ public class DungeonManager : MonoBehaviour
             {
                 hasPending = true;
                 pendingFromCoord = currentCoord;
+                pendingTimer = 0f;
             }
 
             if (hasPending && rooms.ContainsKey(pc))
@@ -1911,6 +1913,19 @@ public class DungeonManager : MonoBehaviour
             if (hasPending && pc == currentCoord)
             {
                 hasPending = false;
+            }
+        }
+
+        // ⭐ 跨房事件超时兜底：闪避/击退导致坐标跳到不存在的房间时，hasPending 会永远卡住
+        // 超过 pendingTimeout 秒仍未进入目标房间 → 强制清除，让玩家恢复正常
+        if (hasPending)
+        {
+            pendingTimer += Time.deltaTime;
+            if (pendingTimer >= pendingTimeout)
+            {
+                Debug.LogWarning($"[Dungeon] 跨房事件超时({pendingTimeout}s)，强制清除 hasPending，玩家位置={playerTarget.position}");
+                hasPending = false;
+                pendingTimer = 0f;
             }
         }
 
@@ -2004,6 +2019,7 @@ public class DungeonManager : MonoBehaviour
         }
         rooms.Clear();
         decoLights.Clear();
+        pillarByPos.Clear();
     }
 
     void OnDrawGizmosSelected()

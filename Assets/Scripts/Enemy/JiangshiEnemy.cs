@@ -89,9 +89,8 @@ public class JiangshiEnemy : EnemyAI
     [Header("手动跳跃补偿")]
     [Tooltip("动画 root motion Y 不足时，手动叠加的跳跃高度（米）")]
     public float manualJumpHeight = 0.5f;
-    [Tooltip("手动跳跃频率（次/秒）")]
-    public float manualJumpSpeed = 3f;
     private float jumpTimer = 0f;
+    private float walkClipLength = 0f;
 
     [Header("落地音效")]
     [Tooltip("视觉模型离地超过此高度视为'在空中'(米)")]
@@ -365,16 +364,9 @@ public class JiangshiEnemy : EnemyAI
                 UpdateGroundIndicator();
             }
 
-            // ⭐ 蓄力过程中玩家躲到墙后：取消蓄力，回到追击（瞬移不能穿墙）
-            if (!HasClearLineToPlayer())
-            {
-                HideGroundIndicator();
-                SetSeparationSuspended(false);
-                LeaveChargeState();
-                blinkState = BlinkState.Chasing;
-                stateTimer = 0f;
-                return;
-            }
+            // ⭐ 蓄力期间不再每帧检测视线：一旦开始蓄力就锁定方向/终点，
+            // 只在蓄力填满瞬间做最后一次校验（防止穿墙冲撞）。
+            // 避免玩家轻微移动导致射线扫到墙角而频繁取消蓄力。
 
             // ⭐ 蓄力填满：进入冲撞（锁定方向不变，红条已越过玩家）
             if (stateTimer >= effectivePrepareDuration && !hasPrepared)
@@ -659,23 +651,47 @@ public class JiangshiEnemy : EnemyAI
         // 动画 root motion 的 Y
         float animY = animator.rootPosition.y - jumpBaseRootY;
 
-        // 手动跳跃补偿：追击/蓄力/冲撞时叠加正弦波跳跃，频率与移动速度成正比
-        // 非追击时重置 Y=0，避免 idle 状态视觉模型漂浮
-        if (isChasing && !isDead)
+        // 手动跳跃补偿：只在"真正移动中"叠加正弦波跳跃；攻击/蓄力站桩时不跳，避免漂浮
+        bool actuallyMoving = isChasing && !isDead && !isAttacking
+            && agent != null && agent.velocity.sqrMagnitude > 0.01f;
+        if (actuallyMoving)
         {
-            float speedRatio = (agent != null && agent.speed > 0.1f) ? (agent.velocity.magnitude / agent.speed) : 1f;
-            jumpTimer += Time.deltaTime * manualJumpSpeed * Mathf.Max(speedRatio, 0.3f);
+            // 首次读取行走动画 clip 时长，用它驱动跳跃频率：一个动画周期 = 一次完整弹跳
+            if (walkClipLength <= 0.01f)
+                walkClipLength = GetWalkClipLength();
+
+            // Abs(Sin) 周期 = π，所以每帧推进 π / clipLength，保证一个动画周期刚好弹一次
+            jumpTimer += Time.deltaTime * Mathf.PI / Mathf.Max(walkClipLength, 0.01f);
             float manualY = Mathf.Abs(Mathf.Sin(jumpTimer)) * manualJumpHeight;
             animY += manualY;
         }
         else
         {
+            jumpTimer = 0f;
             animY = 0f;
         }
 
         Vector3 lp = visualModel.localPosition;
         lp.y = animY;
         visualModel.localPosition = lp;
+    }
+
+    float GetWalkClipLength()
+    {
+        if (animator == null) return 0.533f;
+        var clips = animator.GetCurrentAnimatorClipInfo(0);
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i].clip != null && clips[i].clip.name.ToLower().Contains("walk"))
+                return clips[i].clip.length;
+        }
+        clips = animator.GetNextAnimatorClipInfo(0);
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i].clip != null && clips[i].clip.name.ToLower().Contains("walk"))
+                return clips[i].clip.length;
+        }
+        return 0.533f;
     }
 
     protected override void OnDrawGizmosSelected()

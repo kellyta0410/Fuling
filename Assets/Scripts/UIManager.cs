@@ -186,8 +186,6 @@ public class UIManager : MonoBehaviour
 
     void Update()
     {
-        UpdateKillUI();
-
         // 无限模式：手动更新计时器
         if (isTimerMode && timerText != null && timerText.gameObject.activeSelf)
         {

@@ -231,9 +231,13 @@ public abstract class EnemyAI : MonoBehaviour
     private Quaternion targetIdleRotation;
 
     protected bool isAgentValid = false;
+    private Camera cachedMainCam;
 
     // 无限模式标志
     protected bool useDirectChase = false;
+
+    // ⭐ 全局活跃敌人列表：避免 PlayerController 每次攻击都 FindObjectsOfType
+    public static readonly System.Collections.Generic.List<EnemyAI> AllAliveEnemies = new System.Collections.Generic.List<EnemyAI>();
 
     // 地牢模式调用：强制整间房追击（无视普通 detect range），并可按房间尺寸覆盖检测范围
     public void ForceDirectChase(bool on) { useDirectChase = on; }
@@ -264,6 +268,7 @@ public abstract class EnemyAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         myCollider = GetComponent<Collider>();
         if (myCollider == null) myCollider = GetComponentInChildren<Collider>();
+        cachedMainCam = Camera.main;
 
         isAgentValid = agent != null && agent.isOnNavMesh;
         enemyLayerMask = LayerMask.GetMask("Enemy");
@@ -348,6 +353,7 @@ public abstract class EnemyAI : MonoBehaviour
         idleRotationInterval = Random.Range(2f, 5f);
         idleRotationTimer = 0f;
 
+        AllAliveEnemies.Add(this);
         OnStart();
     }
 
@@ -1427,9 +1433,10 @@ Vector3 center = player.transform.position;
         if (healthBarInstance != null)
         {
             healthBarInstance.transform.localPosition = healthBarOffset;
-            if (Camera.main != null)
+            Camera cam = cachedMainCam != null ? cachedMainCam : Camera.main;
+            if (cam != null)
             {
-                healthBarInstance.transform.LookAt(Camera.main.transform);
+                healthBarInstance.transform.LookAt(cam.transform);
                 healthBarInstance.transform.Rotate(0, 180, 0);
             }
         }
@@ -1728,6 +1735,7 @@ Vector3 center = player.transform.position;
 
     protected virtual void OnDestroy()
     {
+        AllAliveEnemies.Remove(this);
     }
 
     protected virtual void OnDrawGizmosSelected()

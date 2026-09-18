@@ -437,7 +437,7 @@ public class GameManager : MonoBehaviour
             updated = true;
         }
 
-        if (time > bestTime)
+        if (bestTime <= 0f || time < bestTime)
         {
             PlayerPrefs.SetFloat(timeKey, time);
             updated = true;
